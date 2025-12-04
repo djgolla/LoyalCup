@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 export default function Home() {
   return (
     <div>
@@ -8,12 +10,12 @@ export default function Home() {
         <p className="text-xl text-gray-600 dark:text-gray-400 mb-8">
           Discover amazing local coffee shops near you
         </p>
-        <a
-          href="/shops"
+        <Link
+          to="/shops"
           className="inline-block px-8 py-3 bg-amber-700 text-white rounded-lg hover:bg-amber-800 transition"
         >
           Find Coffee Shops
-        </a>
+        </Link>
       </div>
 
       <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8">
