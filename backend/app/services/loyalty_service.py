@@ -22,13 +22,13 @@ class LoyaltyService:
         if not shop:
             return 0, 0
         
-        # shop-specific points
-        shop_points = int(order_total * shop.get('loyalty_points_per_dollar', 0))
+        # shop-specific points (rounded to nearest integer)
+        shop_points = round(order_total * shop.get('loyalty_points_per_dollar', 0))
         
         # global points (if shop participates)
         global_points = 0
         if shop.get('participates_in_global_loyalty', False):
-            global_points = int(order_total * GLOBAL_POINTS_PER_DOLLAR)
+            global_points = round(order_total * GLOBAL_POINTS_PER_DOLLAR)
         
         return shop_points, global_points
     

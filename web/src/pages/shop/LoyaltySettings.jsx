@@ -103,7 +103,8 @@ export default function LoyaltySettings() {
   };
 
   const deleteReward = async (rewardId) => {
-    if (!confirm('Delete this reward?')) return;
+    // in production, use a custom modal
+    if (!window.confirm('Delete this reward?')) return;
     
     try {
       await fetch(`/api/shops/${shopId}/loyalty/rewards/${rewardId}`, {
@@ -332,7 +333,7 @@ function RewardFormModal({ reward, onSave, onClose }) {
             <input
               type="number"
               value={formData.points_required}
-              onChange={(e) => setFormData({ ...formData, points_required: parseInt(e.target.value) })}
+              onChange={(e) => setFormData({ ...formData, points_required: parseInt(e.target.value, 10) || 0 })}
               className="w-full px-3 py-2 border border-gray-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-800 text-gray-900 dark:text-white"
               min="1"
               required
