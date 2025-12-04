@@ -9,6 +9,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Default role for new users
+DEFAULT_USER_ROLE = "customer"
+
 
 def get_supabase_client() -> Client:
     """Get Supabase client instance."""
@@ -47,7 +50,7 @@ class AuthService:
                 "options": {
                     "data": {
                         "full_name": full_name,
-                        "role": "customer"  # Default role
+                        "role": DEFAULT_USER_ROLE
                     }
                 }
             })
@@ -62,7 +65,7 @@ class AuthService:
                 "id": user_id,
                 "email": email,
                 "full_name": full_name,
-                "role": "customer"
+                "role": DEFAULT_USER_ROLE
             }
             
             self.supabase.table("profiles").insert(profile_data).execute()
@@ -181,14 +184,31 @@ class AuthService:
         except Exception as e:
             raise ValueError(f"Failed to reset password: {str(e)}")
 
-    async def get_google_oauth_url(self) -> str:
+    async def list_users(self, page: int = 1, per_page: int = 10) -> Dict:
         """
-        Get Google OAuth URL for authentication.
+        List all users with pagination.
+        Returns users from the profiles table.
         """
         try:
-            SUPABASE_URL = os.getenv("SUPABASE_URL")
-            # This is handled by Supabase client-side typically
-            # For server-side, you would use the sign_in_with_oauth method
-            return f"{SUPABASE_URL}/auth/v1/authorize?provider=google"
+            # Calculate offset for pagination
+            offset = (page - 1) * per_page
+            
+            # Get total count
+            count_response = self.supabase.table("profiles").select("*", count="exact").execute()
+            total = count_response.count if hasattr(count_response, 'count') else 0
+            
+            # Get paginated users
+            profiles = self.supabase.table("profiles") \
+                .select("*") \
+                .range(offset, offset + per_page - 1) \
+                .execute()
+            
+            return {
+                "users": profiles.data if profiles.data else [],
+                "total": total,
+                "page": page,
+                "per_page": per_page,
+                "total_pages": (total + per_page - 1) // per_page if total > 0 else 0
+            }
         except Exception as e:
-            raise ValueError(f"Failed to get OAuth URL: {str(e)}")
+            raise ValueError(f"Failed to list users: {str(e)}")

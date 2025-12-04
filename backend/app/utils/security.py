@@ -25,6 +25,10 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) 
     """
     Verify JWT token from Supabase Auth.
     Returns the decoded token payload.
+    
+    Note: Audience verification is disabled because Supabase uses role-based
+    authentication where the audience field may vary. Role verification is
+    handled separately through the role-based access control functions.
     """
     try:
         token = credentials.credentials
@@ -33,7 +37,7 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) 
             token,
             jwt_secret,
             algorithms=["HS256"],
-            options={"verify_aud": False}
+            options={"verify_aud": False}  # Disabled for Supabase compatibility
         )
         return payload
     except JWTError as e:

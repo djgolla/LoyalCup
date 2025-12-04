@@ -85,13 +85,11 @@ async def list_users(
     """
     List all users with pagination (admin only).
     """
-    # This would require implementing pagination in the auth service
-    # For now, returning a simple response
-    return {
-        "message": "User listing not fully implemented",
-        "page": page,
-        "per_page": per_page
-    }
+    try:
+        result = await auth_service.list_users(page, per_page)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.put("/{user_id}/role")

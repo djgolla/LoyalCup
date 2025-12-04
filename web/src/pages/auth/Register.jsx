@@ -52,7 +52,7 @@ export default function Register() {
 
         <div className="mb-4">
           <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-            Full Name
+            Full Name <span className="text-gray-400 text-xs">(optional)</span>
           </label>
           <input
             type="text"
