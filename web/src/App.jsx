@@ -9,6 +9,8 @@ import OrderDetails from "./pages/OrderDetails";
 import Menu from "./pages/Menu";
 import Account from "./pages/Account";
 import Login from "./pages/Login";
+import Rewards from "./pages/customer/Rewards";
+import LoyaltySettings from "./pages/shop/LoyaltySettings";
 
 // contexts
 import { ThemeProvider } from "./context/ThemeContext";
@@ -40,6 +42,8 @@ export default function App() {
               <Route path="/orders/:id" element={<OrderDetails />} />
               <Route path="/menu" element={<Menu />} />
               <Route path="/account" element={<Account />} />
+              <Route path="/rewards" element={<Rewards />} />
+              <Route path="/loyalty-settings" element={<LoyaltySettings />} />
             </Route>
 
           </Routes>
