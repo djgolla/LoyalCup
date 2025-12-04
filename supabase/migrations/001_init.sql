@@ -1,5 +1,5 @@
 -- Initial LoyalCup schema (PostgreSQL)
--- Run this in Supabase SQL editor or via migration tools.
+-- Run this in Supabase SQL editor later or via migration - I wanted to start with this for now
 
 -- Users are primarily stored in Supabase Auth; this is profile data.
 CREATE TABLE IF NOT EXISTS profiles (
@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS menu_items (
   created_at timestamptz DEFAULT now()
 );
 
--- Shop-wide customization templates (JSON-friendly)
+-- Shop-wide customization templates (JSON-based for simiplicity for now )
 CREATE TABLE IF NOT EXISTS customization_templates (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   shop_id uuid REFERENCES shops(id) ON DELETE CASCADE,
