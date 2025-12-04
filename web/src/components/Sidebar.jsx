@@ -72,6 +72,32 @@ export default function Sidebar() {
         >
           Account
         </NavLink>
+
+        <NavLink
+          to="/rewards"
+          className={({ isActive }) =>
+            `${linkClasses} ${
+              isActive
+                ? "bg-amber-100 text-amber-700"
+                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
+            }`
+          }
+        >
+          Rewards
+        </NavLink>
+
+        <NavLink
+          to="/loyalty-settings"
+          className={({ isActive }) =>
+            `${linkClasses} ${
+              isActive
+                ? "bg-amber-100 text-amber-700"
+                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
+            }`
+          }
+        >
+          Loyalty Settings
+        </NavLink>
       </nav>
 
       <div className="mt-auto flex flex-col gap-4">

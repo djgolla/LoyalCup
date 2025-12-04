@@ -83,4 +83,115 @@ export default {
       ],
     },
   ],
+
+  // loyalty balances
+  loyaltyBalances: [
+    { id: 1, user_id: 'user_1', shop_id: null, shop_name: 'Global', points: 230 },
+    { id: 2, user_id: 'user_1', shop_id: 'shop_1', shop_name: 'Corner Coffee Co', points: 145 },
+    { id: 3, user_id: 'user_1', shop_id: 'shop_2', shop_name: 'The Daily Grind', points: 52 },
+    { id: 4, user_id: 'user_1', shop_id: 'shop_3', shop_name: 'Brewed Awakening', points: 12 },
+  ],
+
+  // loyalty rewards
+  loyaltyRewards: [
+    {
+      id: 'reward_1',
+      shop_id: 'shop_1',
+      name: 'Free Size Upgrade',
+      description: 'Upgrade any drink to a larger size',
+      points_required: 150,
+      is_active: true
+    },
+    {
+      id: 'reward_2',
+      shop_id: 'shop_1',
+      name: 'Free Pastry',
+      description: 'Any pastry on the menu',
+      points_required: 100,
+      is_active: true
+    },
+    {
+      id: 'reward_3',
+      shop_id: 'shop_1',
+      name: 'Free Any Drink',
+      description: 'Any drink on the menu',
+      points_required: 250,
+      is_active: true
+    },
+    {
+      id: 'reward_4',
+      shop_id: 'shop_2',
+      name: '$2 Off',
+      description: '$2 off any purchase',
+      points_required: 100,
+      is_active: true
+    },
+    {
+      id: 'reward_5',
+      shop_id: 'shop_2',
+      name: 'Free Cookie',
+      description: 'Any cookie',
+      points_required: 50,
+      is_active: true
+    },
+  ],
+
+  // loyalty transactions
+  loyaltyTransactions: [
+    {
+      id: 'trans_1',
+      user_id: 'user_1',
+      shop_id: 'shop_1',
+      order_id: 101,
+      points_change: 50,
+      type: 'earned',
+      created_at: '2025-12-01T10:00:00'
+    },
+    {
+      id: 'trans_2',
+      user_id: 'user_1',
+      shop_id: null,
+      order_id: 101,
+      points_change: 12,
+      type: 'earned',
+      created_at: '2025-12-01T10:00:00'
+    },
+    {
+      id: 'trans_3',
+      user_id: 'user_1',
+      shop_id: 'shop_2',
+      order_id: null,
+      points_change: -50,
+      type: 'redeemed',
+      created_at: '2025-11-28T14:30:00'
+    },
+    {
+      id: 'trans_4',
+      user_id: 'user_1',
+      shop_id: 'shop_1',
+      order_id: 102,
+      points_change: 35,
+      type: 'earned',
+      created_at: '2025-11-25T09:15:00'
+    },
+  ],
+
+  // shop loyalty settings
+  shopLoyaltySettings: {
+    shop_123: {
+      shop_id: 'shop_123',
+      points_per_dollar: 10,
+      participates_in_global_loyalty: true
+    }
+  },
+
+  // shop loyalty stats
+  shopLoyaltyStats: {
+    shop_123: {
+      total_points_issued: 12450,
+      points_redeemed: 3200,
+      active_members: 89,
+      rewards_count: 3
+    }
+  }
 };
