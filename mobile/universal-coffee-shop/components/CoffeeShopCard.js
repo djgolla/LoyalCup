@@ -2,17 +2,26 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 export default function CoffeeShopCard({ shop }) {
+  const router = useRouter();
   const [isFavorited, setIsFavorited] = useState(false);
 
   return (
-    <TouchableOpacity style={[styles.card, { backgroundColor: shop.color }]}>
+    <TouchableOpacity 
+      style={[styles.card, { backgroundColor: shop.color }]}
+      onPress={() => router.push(`/shop/${shop.id}`)}>
       {/* image here later*/}
       <View style={styles.logo} />
       
       <Text style={styles.shopName}>{shop.name}</Text>
-      <TouchableOpacity style={styles.favoriteButton} onPress={() => setIsFavorited(!isFavorited)}>
+      <TouchableOpacity 
+        style={styles.favoriteButton} 
+        onPress={(e) => {
+          e.stopPropagation();
+          setIsFavorited(!isFavorited);
+        }}>
         <Feather name="heart" size={24} color={isFavorited ? '#FFFFFF' : '#000000'} />
       </TouchableOpacity>
     </TouchableOpacity>
