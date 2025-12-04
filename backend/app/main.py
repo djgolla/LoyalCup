@@ -4,6 +4,7 @@ LoyalCup API - Main application entry point.
 This is the FastAPI application that serves as the backend for LoyalCup,
 a loyalty-focused coffee shop ordering platform.
 """
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -14,6 +15,22 @@ from app.routes import auth, users, shops, menu, orders, loyalty
 from app.utils.exceptions import LoyalCupException
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Lifespan context manager for startup and shutdown events.
+    """
+    # Startup
+    print(f"Starting {settings.api_title} v{settings.api_version}")
+    print(f"Environment: {settings.environment}")
+    print(f"API Documentation: /api/docs")
+    
+    yield
+    
+    # Shutdown
+    print(f"Shutting down {settings.api_title}")
+
+
 # Create FastAPI application
 app = FastAPI(
     title=settings.api_title,
@@ -21,7 +38,8 @@ app = FastAPI(
     description=settings.api_description,
     docs_url="/api/docs",
     redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json"
+    openapi_url="/api/openapi.json",
+    lifespan=lifespan
 )
 
 
@@ -104,20 +122,4 @@ app.include_router(shops.router, prefix=API_V1_PREFIX)
 app.include_router(menu.router, prefix=API_V1_PREFIX)
 app.include_router(orders.router, prefix=API_V1_PREFIX)
 app.include_router(loyalty.router, prefix=API_V1_PREFIX)
-
-
-# Startup event
-@app.on_event("startup")
-async def startup_event():
-    """Execute tasks on application startup."""
-    print(f"Starting {settings.api_title} v{settings.api_version}")
-    print(f"Environment: {settings.environment}")
-    print(f"API Documentation: /api/docs")
-
-
-# Shutdown event
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Execute tasks on application shutdown."""
-    print(f"Shutting down {settings.api_title}")
 

@@ -2,7 +2,7 @@
 Menu routes.
 Handles menu items and categories endpoints.
 """
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.database import get_supabase, SupabaseClient
@@ -89,7 +89,7 @@ async def create_menu_item(
 @router.get("/items/{shop_id}", response_model=List[MenuItemResponse])
 async def list_menu_items(
     shop_id: str,
-    category_id: str = None,
+    category_id: Optional[str] = None,
     db: SupabaseClient = Depends(get_supabase)
 ):
     """
