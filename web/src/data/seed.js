@@ -83,4 +83,151 @@ export default {
       ],
     },
   ],
+
+  // Shop & Menu Management Data
+  shops: [
+    {
+      id: "shop-1",
+      name: "The Loyal Cup - Downtown",
+      description: "Artisan coffee in the heart of the city",
+      address: "123 Main St",
+      city: "Seattle",
+      state: "WA",
+      phone: "(555) 123-4567",
+      hours: {
+        monday: { open: "7:00", close: "19:00" },
+        tuesday: { open: "7:00", close: "19:00" },
+        wednesday: { open: "7:00", close: "19:00" },
+        thursday: { open: "7:00", close: "19:00" },
+        friday: { open: "7:00", close: "20:00" },
+        saturday: { open: "8:00", close: "20:00" },
+        sunday: { open: "8:00", close: "18:00" }
+      },
+      loyalty_points_per_dollar: 10,
+      participates_in_global_loyalty: true
+    }
+  ],
+
+  menuCategories: [
+    { id: "cat-1", shopId: "shop-1", name: "Hot Drinks", display_order: 1 },
+    { id: "cat-2", shopId: "shop-1", name: "Cold Drinks", display_order: 2 },
+    { id: "cat-3", shopId: "shop-1", name: "Bakery", display_order: 3 },
+    { id: "cat-4", shopId: "shop-1", name: "Food", display_order: 4 }
+  ],
+
+  menuItems: [
+    { 
+      id: "item-1", 
+      shopId: "shop-1", 
+      category_id: "cat-1",
+      name: "Hot Coffee", 
+      description: "Fresh brewed dark roast",
+      base_price: 4.50,
+      is_available: true,
+      display_order: 1
+    },
+    { 
+      id: "item-2", 
+      shopId: "shop-1", 
+      category_id: "cat-1",
+      name: "Cappuccino", 
+      description: "Espresso with steamed milk foam",
+      base_price: 4.00,
+      is_available: true,
+      display_order: 2
+    },
+    { 
+      id: "item-3", 
+      shopId: "shop-1", 
+      category_id: "cat-1",
+      name: "Vanilla Latte", 
+      description: "Espresso with vanilla and steamed milk",
+      base_price: 5.75,
+      is_available: true,
+      display_order: 3
+    },
+    { 
+      id: "item-4", 
+      shopId: "shop-1", 
+      category_id: "cat-2",
+      name: "Iced Latte", 
+      description: "Espresso with cold milk over ice",
+      base_price: 5.00,
+      is_available: true,
+      display_order: 1
+    },
+    { 
+      id: "item-5", 
+      shopId: "shop-1", 
+      category_id: "cat-2",
+      name: "Cold Brew", 
+      description: "Smooth cold-steeped coffee",
+      base_price: 5.25,
+      is_available: true,
+      display_order: 2
+    },
+    { 
+      id: "item-6", 
+      shopId: "shop-1", 
+      category_id: "cat-3",
+      name: "Blueberry Muffin", 
+      description: "Fresh baked daily",
+      base_price: 3.50,
+      is_available: true,
+      display_order: 1
+    },
+    { 
+      id: "item-7", 
+      shopId: "shop-1", 
+      category_id: "cat-3",
+      name: "Chocolate Croissant", 
+      description: "Buttery flaky pastry",
+      base_price: 4.00,
+      is_available: true,
+      display_order: 2
+    }
+  ],
+
+  customizationTemplates: [
+    {
+      id: "custom-1",
+      shopId: "shop-1",
+      name: "Size",
+      type: "single_select",
+      is_required: true,
+      applies_to: "all_items",
+      options: [
+        { name: "Small", price: 0 },
+        { name: "Medium", price: 0.50 },
+        { name: "Large", price: 1.00 }
+      ]
+    },
+    {
+      id: "custom-2",
+      shopId: "shop-1",
+      name: "Milk Options",
+      type: "single_select",
+      is_required: false,
+      applies_to: "all_items",
+      options: [
+        { name: "Whole Milk", price: 0 },
+        { name: "Oat Milk", price: 0.75 },
+        { name: "Almond Milk", price: 0.75 },
+        { name: "Soy Milk", price: 0.50 }
+      ]
+    },
+    {
+      id: "custom-3",
+      shopId: "shop-1",
+      name: "Add-ons",
+      type: "multi_select",
+      is_required: false,
+      applies_to: "all_items",
+      options: [
+        { name: "Extra Shot", price: 1.00 },
+        { name: "Whipped Cream", price: 0.50 },
+        { name: "Caramel Drizzle", price: 0.50 }
+      ]
+    }
+  ]
 };
