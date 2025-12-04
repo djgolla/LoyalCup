@@ -1,4 +1,5 @@
 import api from './api'
+import { userService } from './userService'
 
 export const authService = {
   // login with email/password
@@ -17,15 +18,7 @@ export const authService = {
     return response.data
   },
 
-  // get current user profile
-  getProfile: async () => {
-    const response = await api.get('/auth/profile')
-    return response.data
-  },
-
-  // update user profile
-  updateProfile: async (profileData) => {
-    const response = await api.put('/auth/profile', profileData)
-    return response.data
-  },
+  // delegate profile methods to userService
+  getProfile: userService.getProfile,
+  updateProfile: userService.updateProfile,
 }

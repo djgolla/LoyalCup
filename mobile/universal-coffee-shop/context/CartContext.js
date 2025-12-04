@@ -1,23 +1,39 @@
-import React, { createContext, useState, useEffect, useContext } from 'react'
+import React, { createContext, useState, useEffect, useContext, useRef } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 const CartContext = createContext({})
 
 const CART_STORAGE_KEY = '@cart_items'
+const SAVE_DEBOUNCE_MS = 500
 
 export const CartProvider = ({ children }) => {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
+  const saveTimeoutRef = useRef(null)
 
   // load cart from storage on mount
   useEffect(() => {
     loadCart()
   }, [])
 
-  // save cart to storage whenever it changes
+  // save cart to storage whenever it changes (debounced)
   useEffect(() => {
     if (!loading) {
-      saveCart()
+      // clear existing timeout
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+      
+      // set new timeout
+      saveTimeoutRef.current = setTimeout(() => {
+        saveCart()
+      }, SAVE_DEBOUNCE_MS)
+    }
+    
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
     }
   }, [items])
 

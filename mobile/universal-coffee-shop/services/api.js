@@ -12,10 +12,35 @@ const api = axios.create({
   },
 })
 
+// cache session to avoid repeated getSession calls
+let cachedSession = null
+let sessionFetchPromise = null
+
+const getSessionWithCache = async () => {
+  // if we already have a fresh session, use it
+  if (cachedSession && cachedSession.expires_at && cachedSession.expires_at > Date.now() / 1000) {
+    return cachedSession
+  }
+  
+  // if a fetch is already in progress, wait for it
+  if (sessionFetchPromise) {
+    return sessionFetchPromise
+  }
+  
+  // fetch fresh session
+  sessionFetchPromise = supabase.auth.getSession().then(({ data }) => {
+    cachedSession = data.session
+    sessionFetchPromise = null
+    return cachedSession
+  })
+  
+  return sessionFetchPromise
+}
+
 // request interceptor to add auth token
 api.interceptors.request.use(
   async (config) => {
-    const { data: { session } } = await supabase.auth.getSession()
+    const session = await getSessionWithCache()
     if (session?.access_token) {
       config.headers.Authorization = `Bearer ${session.access_token}`
     }

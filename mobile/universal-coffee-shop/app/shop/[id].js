@@ -39,7 +39,7 @@ export default function ShopDetailScreen() {
 
   const handleAddToCart = (item) => {
     addItem({
-      id: `${id}_${item.id}`,
+      id: `${id}:${item.id}`,
       name: item.name,
       price: item.price,
       shopId: id,

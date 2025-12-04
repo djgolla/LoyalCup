@@ -7,6 +7,7 @@ import CoffeeShopCard from '../components/CoffeeShopCard';
 import { shopService } from '../services/shopService';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { DUMMY_SHOPS } from '../constants/dummyData';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -28,12 +29,7 @@ export default function HomeScreen() {
     } catch (error) {
       console.error('Failed to load shops:', error);
       // fallback to dummy data if API fails
-      setShops([
-        { id: '1', name: 'LAB COFFEE', logoUrl: 'https://placeholder.com/100', color: '#B0C4DE' },
-        { id: '2', name: 'THE COFFEEHOUSE', logoUrl: 'https://placeholder.com/100', color: '#D3D3D3' },
-        { id: '3', name: 'CRAFTED', logoUrl: 'https://placeholder.com/100', color: '#FFFFFF' },
-        { id: '4', name: 'LVL UP COFFEE BAR', logoUrl: 'https://placeholder.com/100', color: '#F08080' },
-      ]);
+      setShops(DUMMY_SHOPS);
     } finally {
       setLoading(false);
     }
