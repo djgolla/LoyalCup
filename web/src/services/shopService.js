@@ -34,6 +34,8 @@ export const shopService = {
 
   /**
    * Fetch nearby shops based on coordinates
+   * NOTE: This implementation uses client-side filtering which is not ideal for production.
+   * For production, implement server-side filtering using PostGIS or Supabase's geospatial functions.
    */
   async getNearbyShops(lat, lng, radius = 10) {
     try {

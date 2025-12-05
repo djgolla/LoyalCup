@@ -33,10 +33,11 @@ export default function ShopDetail() {
   };
 
   const handleAddToCart = (item) => {
+    const price = parseFloat(item.base_price) || 0;
     addItem({
       id: item.id,
       name: item.name,
-      price: parseFloat(item.base_price),
+      price: price,
       shopId: id,
       shopName: shop?.name
     });
@@ -178,7 +179,7 @@ export default function ShopDetail() {
                       </div>
                       <div className="flex justify-between items-center mt-3">
                         <span className="text-lg font-bold text-amber-700">
-                          ${parseFloat(item.base_price).toFixed(2)}
+                          ${(parseFloat(item.base_price) || 0).toFixed(2)}
                         </span>
                         {item.is_available ? (
                           <button
