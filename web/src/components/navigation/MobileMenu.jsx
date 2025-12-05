@@ -19,22 +19,8 @@ export default function MobileMenu() {
       {isOpen && (
         <div className="absolute top-16 left-0 right-0 bg-white dark:bg-[#1b1b1b] border-b border-gray-200 dark:border-neutral-800 shadow-lg">
           <nav className="flex flex-col p-4 gap-2">
-            <Link
-              to="/shops"
-              className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-lg transition"
-              onClick={() => setIsOpen(false)}
-            >
-              Shops
-            </Link>
             {user && (
               <>
-                <Link
-                  to="/orders"
-                  className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-lg transition"
-                  onClick={() => setIsOpen(false)}
-                >
-                  Orders
-                </Link>
                 <Link
                   to="/rewards"
                   className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-lg transition"
@@ -48,6 +34,13 @@ export default function MobileMenu() {
                   onClick={() => setIsOpen(false)}
                 >
                   Profile
+                </Link>
+                <Link
+                  to="/orders"
+                  className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-lg transition"
+                  onClick={() => setIsOpen(false)}
+                >
+                  Order History
                 </Link>
               </>
             )}
