@@ -12,6 +12,7 @@
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.86.2",
     "chart.js": "^4.5.1",
     "lucide-react": "^0.555.0",
     "miragejs": "^0.1.48",

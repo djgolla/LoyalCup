@@ -1,105 +1,88 @@
-"""
-Order service layer.
-Handles order-related business logic.
-"""
-from typing import List, Optional
-from app.database import SupabaseClient
-from app.models.order import OrderCreate, OrderUpdate, OrderResponse, OrderStatus
-from app.schemas.base import TABLE_ORDERS, TABLE_ORDER_ITEMS
-from app.utils.exceptions import NotFoundException
-
+from datetime import datetime
+from typing import Dict, List, Optional
+import uuid
 
 class OrderService:
-    """Service for handling order operations."""
+    # business logic for order management
     
-    def __init__(self, db: SupabaseClient):
-        """
-        Initialize the order service.
-        
-        Args:
-            db: Supabase client instance
-        """
-        self.db = db
+    TAX_RATE = 0.08  # 8% tax rate
     
-    async def create_order(self, order_data: OrderCreate) -> OrderResponse:
-        """
-        Create a new order.
-        
-        Args:
-            order_data: Order creation data
-            
-        Returns:
-            Created order data
-        """
-        # TODO: Implement order creation
-        raise NotImplementedError("Order creation to be implemented")
+    # valid status transitions
+    VALID_TRANSITIONS = {
+        'pending': ['accepted', 'cancelled'],
+        'accepted': ['preparing', 'cancelled'],
+        'preparing': ['ready', 'cancelled'],
+        'ready': ['picked_up'],
+        'picked_up': ['completed'],
+        'completed': [],
+        'cancelled': []
+    }
     
-    async def get_order(self, order_id: str) -> Optional[OrderResponse]:
-        """
-        Get an order by ID.
+    def calculate_item_price(self, base_price: float, customizations: List[Dict]) -> float:
+        # calculate total price for item including customizations
+        total = base_price
         
-        Args:
-            order_id: Order ID
-            
-        Returns:
-            Order data or None if not found
-        """
-        # TODO: Implement order retrieval
-        raise NotImplementedError("Order retrieval to be implemented")
+        for custom in customizations:
+            if 'price' in custom:
+                total += custom['price']
+        
+        return round(total, 2)
     
-    async def list_orders(
-        self,
-        customer_id: Optional[str] = None,
-        shop_id: Optional[str] = None,
-        status: Optional[OrderStatus] = None,
-        skip: int = 0,
-        limit: int = 100
-    ) -> List[OrderResponse]:
-        """
-        List orders with optional filters.
+    def calculate_order_totals(self, items: List[Dict]) -> Dict:
+        # calculate subtotal, tax, and total for order
+        subtotal = 0.0
         
-        Args:
-            customer_id: Filter by customer ID
-            shop_id: Filter by shop ID
-            status: Filter by order status
-            skip: Number of records to skip
-            limit: Maximum number of records to return
+        for item in items:
+            quantity = item.get('quantity', 1)
+            base_price = item.get('base_price', 0.0)
+            customizations = item.get('customizations', [])
             
-        Returns:
-            List of orders
-        """
-        # TODO: Implement order listing
-        raise NotImplementedError("Order listing to be implemented")
+            item_price = self.calculate_item_price(base_price, customizations)
+            subtotal += item_price * quantity
+        
+        subtotal = round(subtotal, 2)
+        tax = round(subtotal * self.TAX_RATE, 2)
+        total = round(subtotal + tax, 2)
+        
+        return {
+            'subtotal': subtotal,
+            'tax': tax,
+            'total': total
+        }
     
-    async def update_order(self, order_id: str, order_data: OrderUpdate) -> OrderResponse:
-        """
-        Update an order.
+    def validate_status_transition(self, current_status: str, new_status: str) -> bool:
+        # check if status transition is valid
+        if current_status not in self.VALID_TRANSITIONS:
+            return False
         
-        Args:
-            order_id: Order ID
-            order_data: Order update data
-            
-        Returns:
-            Updated order data
-            
-        Raises:
-            NotFoundException: If order not found
-        """
-        # TODO: Implement order update
-        raise NotImplementedError("Order update to be implemented")
+        return new_status in self.VALID_TRANSITIONS[current_status]
     
-    async def cancel_order(self, order_id: str) -> OrderResponse:
-        """
-        Cancel an order.
+    def calculate_loyalty_points(self, total: float, points_per_dollar: int) -> int:
+        # calculate loyalty points earned from order
+        if points_per_dollar <= 0:
+            return 0
         
-        Args:
-            order_id: Order ID
-            
-        Returns:
-            Cancelled order data
-            
-        Raises:
-            NotFoundException: If order not found
-        """
-        # TODO: Implement order cancellation
-        raise NotImplementedError("Order cancellation to be implemented")
+        return int(total * points_per_dollar)
+    
+    def can_cancel_order(self, status: str) -> bool:
+        # only pending orders can be cancelled by customer
+        return status == 'pending'
+    
+    def create_order_data(self, shop_id: str, customer_id: str, items: List[Dict], 
+                         points_per_dollar: int = 0) -> Dict:
+        # prepare order data for creation
+        totals = self.calculate_order_totals(items)
+        loyalty_points = self.calculate_loyalty_points(totals['total'], points_per_dollar)
+        
+        return {
+            'id': str(uuid.uuid4()),
+            'shop_id': shop_id,
+            'customer_id': customer_id,
+            'status': 'pending',
+            'subtotal': totals['subtotal'],
+            'tax': totals['tax'],
+            'total': totals['total'],
+            'loyalty_points_earned': loyalty_points,
+            'created_at': datetime.now().isoformat(),
+            'updated_at': datetime.now().isoformat()
+        }

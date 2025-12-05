@@ -1,13 +1,24 @@
-# Welcome to your Expo app 👋
+# Universal Coffee Shop Mobile App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Coffee shop app allowing users to view menus, place orders, and earn loyalty points.
+Mobile front-end + Supabase backend for LoyalCup project.
 
-# universal-coffee-shop
-Coffee shop app allowing users to view menus and current offers.  
-Mobile front-end + Python back-end project for IT 426 Fall 2025
+## Tech Stack
 
+- **Framework**: React Native with Expo
+- **Authentication**: Supabase Auth
+- **Backend**: Supabase + FastAPI
+- **Navigation**: Expo Router (file-based routing)
+- **State Management**: React Context API
 
-## Get started
+## Prerequisites
+
+- Node.js 18+ and npm
+- Expo CLI (`npm install -g expo-cli`)
+- iOS Simulator (Mac only) or Android Studio (for Android emulator)
+- Expo Go app on physical device (optional)
+
+## Setup Instructions
 
 1. Install dependencies
 
@@ -15,41 +26,180 @@ Mobile front-end + Python back-end project for IT 426 Fall 2025
    npm install
    ```
 
-2. Start the app
+2. Configure environment variables
+
+   Copy the example environment file and fill in your Supabase credentials:
 
    ```bash
-   npx expo start
+   cp .env.example .env
    ```
 
-In the output, you'll find options to open the app in a
+   Update `.env` with your values:
+   ```
+   EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
+   EXPO_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+   EXPO_PUBLIC_API_URL=http://localhost:8000/api/v1
+   ```
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+3. Start the development server
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+   ```bash
+   npm start
+   ```
 
-## Get a fresh project
+   Or use specific platforms:
+   ```bash
+   npm run ios       # iOS simulator
+   npm run android   # Android emulator
+   npm run web       # Web browser
+   ```
 
-When you're ready, run:
+## Project Structure
 
-```bash
-npm run reset-project
+```
+mobile/universal-coffee-shop/
+├── app/                    # Screens (file-based routing)
+│   ├── _layout.js         # Root layout with providers
+│   ├── index.js           # Entry point
+│   ├── launch.js          # Launch screen
+│   ├── login.js           # Login screen
+│   ├── signup.js          # Signup screen
+│   ├── home.js            # Home/Shop list screen
+│   ├── profile.js         # User profile
+│   ├── cart.js            # Shopping cart
+│   ├── checkout.js        # Checkout flow
+│   ├── order-history.js   # Order history
+│   ├── shop/[id].js       # Shop detail & menu
+│   └── order/[id].js      # Order tracking
+├── components/            # Reusable UI components
+│   ├── CoffeeShopCard.js
+│   ├── MenuItemCard.js
+│   ├── LoadingSkeleton.js
+│   └── ErrorMessage.js
+├── context/              # React Context providers
+│   ├── AuthContext.js    # Authentication state
+│   └── CartContext.js    # Shopping cart state
+├── services/             # API service layer
+│   ├── api.js           # Base API config
+│   ├── authService.js
+│   ├── shopService.js
+│   ├── orderService.js
+│   ├── loyaltyService.js
+│   └── userService.js
+└── lib/
+    └── supabase.js       # Supabase client config
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Features
 
-## Learn more
+### Authentication
+- Email/password signup and login
+- Google OAuth (configured in Supabase)
+- Persistent sessions with AsyncStorage
+- Auto token refresh
 
-To learn more about developing your project with Expo, look at the following resources:
+### Shop Discovery
+- Browse nearby coffee shops
+- Search functionality
+- View shop details and menus
+- Favorite shops
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### Ordering
+- Add items to cart
+- Customize orders
+- Checkout flow
+- Real-time order tracking
+- Order history
 
-## Join the community
+### Loyalty Program
+- Earn points on orders
+- View points balance
+- Redeem rewards
 
-Join our community of developers creating universal apps.
+## Navigation Flow
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```
+Launch Screen
+  ↓
+Login/Signup → Home (Shop List)
+                ↓
+              Shop Detail → Add to Cart
+                            ↓
+                          Cart → Checkout → Order Confirmation
+                                               ↓
+                                           Order Tracking
+
+Profile:
+  - Account Info
+  - Order History
+  - Loyalty Points
+  - Settings
+```
+
+## API Integration
+
+The app connects to:
+- **Supabase**: Authentication and real-time features
+- **FastAPI Backend**: Shop data, orders, and loyalty
+
+API calls are handled through service modules in `services/` with automatic authentication token injection.
+
+## Development
+
+### Running on Physical Device
+
+1. Install Expo Go app on your device
+2. Make sure your device is on the same network as your dev machine
+3. Run `npm start` and scan the QR code with Expo Go
+
+### Debugging
+
+- Use React Native Debugger or Chrome DevTools
+- Check console logs for API errors
+- View network requests in browser dev tools
+
+## Testing
+
+Currently no automated tests. Manual testing recommended:
+1. Test auth flow (signup, login, logout)
+2. Test shop browsing and search
+3. Test cart operations
+4. Test order placement and tracking
+5. Test on both iOS and Android
+
+## Deployment
+
+### iOS (via Expo)
+```bash
+expo build:ios
+```
+
+### Android (via Expo)
+```bash
+expo build:android
+```
+
+For production builds, see [Expo's deployment guide](https://docs.expo.dev/distribution/introduction/).
+
+## Troubleshooting
+
+**App won't start:**
+- Clear Expo cache: `expo start -c`
+- Delete node_modules and reinstall: `rm -rf node_modules && npm install`
+
+**Auth not working:**
+- Check Supabase credentials in .env
+- Verify Supabase project is configured correctly
+- Check network connectivity
+
+**API calls failing:**
+- Ensure backend is running
+- Check API_URL in .env
+- Verify CORS settings on backend
+
+## Learn More
+
+- [Expo documentation](https://docs.expo.dev/)
+- [Expo Router](https://docs.expo.dev/router/introduction/)
+- [Supabase React Native guide](https://supabase.com/docs/guides/getting-started/quickstarts/react-native)
+- [React Native docs](https://reactnative.dev/)

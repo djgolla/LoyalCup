@@ -1,89 +1,113 @@
 """
-User profile routes.
-Handles user profile management endpoints.
+User management routes.
 """
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
-
-from app.database import get_supabase, SupabaseClient
-from app.models.user import UserResponse, UserUpdate
-from app.utils.security import get_current_user, require_admin
-
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from pydantic import BaseModel
+from typing import Optional, List
+from app.services.auth_service import AuthService
+from app.utils.security import require_auth, require_admin
 
 router = APIRouter(
-    prefix="/users",
-    tags=["Users"],
-    responses={404: {"description": "Not found"}},
+    prefix="/api/v1/users",
+    tags=["users"],
 )
 
+auth_service = AuthService()
 
-@router.get("/me", response_model=UserResponse)
-async def get_current_user_profile(
-    current_user: dict = Depends(get_current_user),
-    db: SupabaseClient = Depends(get_supabase)
+
+# Request/Response Models
+class UpdateProfileRequest(BaseModel):
+    full_name: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+
+class UpdateRoleRequest(BaseModel):
+    role: str
+
+
+# Routes
+@router.get("/me")
+async def get_my_profile(token_payload: dict = Depends(require_auth())):
+    """
+    Get own profile.
+    """
+    try:
+        user_id = token_payload.get("sub")
+        profile = await auth_service.get_user_profile(user_id)
+        if not profile:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+        return profile
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.put("/me")
+async def update_my_profile(
+    data: UpdateProfileRequest,
+    token_payload: dict = Depends(require_auth())
 ):
     """
-    Get the current user's profile.
-    
-    Returns the authenticated user's profile information.
+    Update own profile.
     """
-    # TODO: Implement getting current user profile
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Get current user profile to be implemented"
-    )
+    try:
+        user_id = token_payload.get("sub")
+        profile = await auth_service.update_user_profile(user_id, data.dict(exclude_unset=True))
+        if not profile:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+        return profile
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.put("/me", response_model=UserResponse)
-async def update_current_user_profile(
-    user_update: UserUpdate,
-    current_user: dict = Depends(get_current_user),
-    db: SupabaseClient = Depends(get_supabase)
-):
-    """
-    Update the current user's profile.
-    
-    Allows the authenticated user to update their profile information.
-    """
-    # TODO: Implement updating current user profile
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Update current user profile to be implemented"
-    )
-
-
-@router.get("/{user_id}", response_model=UserResponse)
+@router.get("/{user_id}")
 async def get_user_by_id(
     user_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: SupabaseClient = Depends(get_supabase)
+    token_payload: dict = Depends(require_admin())
 ):
     """
-    Get a user by ID.
-    
-    Returns public profile information for the specified user.
+    Get user by ID (admin only).
     """
-    # TODO: Implement getting user by ID
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Get user by ID to be implemented"
-    )
+    try:
+        profile = await auth_service.get_user_profile(user_id)
+        if not profile:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        return profile
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.get("/", response_model=List[UserResponse])
+@router.get("/")
 async def list_users(
-    skip: int = 0,
-    limit: int = 100,
-    current_user: dict = Depends(require_admin),
-    db: SupabaseClient = Depends(get_supabase)
+    token_payload: dict = Depends(require_admin()),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(10, ge=1, le=100)
 ):
     """
-    List all users (admin only).
-    
-    Returns a paginated list of all users.
+    List all users with pagination (admin only).
     """
-    # TODO: Implement listing users
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="List users to be implemented"
-    )
+    try:
+        result = await auth_service.list_users(page, per_page)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.put("/{user_id}/role")
+async def change_user_role(
+    user_id: str,
+    data: UpdateRoleRequest,
+    token_payload: dict = Depends(require_admin())
+):
+    """
+    Change user role (admin only).
+    """
+    try:
+        profile = await auth_service.change_user_role(user_id, data.role)
+        if not profile:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        return {
+            "message": "Role updated successfully",
+            "profile": profile
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

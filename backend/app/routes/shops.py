@@ -1,118 +1,241 @@
 """
-Shop routes.
-Handles shop management endpoints.
+Shop Routes - API endpoints for shop management
+Includes public, shop owner, and admin endpoints
 """
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.database import get_supabase, SupabaseClient
-from app.models.shop import ShopCreate, ShopUpdate, ShopResponse
-from app.services.shop_service import ShopService
-from app.utils.security import get_current_user, require_shop_owner
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Query
+from typing import List, Optional, Dict, Any
+from pydantic import BaseModel
+
+from app.services.shop_service import shop_service
 
 
 router = APIRouter(
-    prefix="/shops",
-    tags=["Shops"],
-    responses={404: {"description": "Not found"}},
+    prefix="/api/v1/shops",
+    tags=["shops"]
 )
 
 
-@router.post("/", response_model=ShopResponse, status_code=status.HTTP_201_CREATED)
-async def create_shop(
-    shop: ShopCreate,
-    current_user: dict = Depends(require_shop_owner),
-    db: SupabaseClient = Depends(get_supabase)
-):
-    """
-    Create a new shop.
-    
-    Creates a new shop with the provided information.
-    Requires shop_owner or admin role.
-    """
-    shop_service = ShopService(db)
-    # TODO: Implement shop creation
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Shop creation to be implemented"
-    )
+# ============================================================================
+# PYDANTIC MODELS
+# ============================================================================
+
+class ShopCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    phone: Optional[str] = None
+    hours: Optional[Dict[str, Any]] = None
+    loyalty_points_per_dollar: int = 0
+    participates_in_global_loyalty: bool = False
 
 
-@router.get("/", response_model=List[ShopResponse])
+class ShopUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    phone: Optional[str] = None
+    hours: Optional[Dict[str, Any]] = None
+    loyalty_points_per_dollar: Optional[int] = None
+    participates_in_global_loyalty: Optional[bool] = None
+
+
+# ============================================================================
+# PUBLIC ENDPOINTS
+# ============================================================================
+
+@router.get("")
 async def list_shops(
-    skip: int = 0,
-    limit: int = 100,
-    db: SupabaseClient = Depends(get_supabase)
+    city: Optional[str] = Query(None, description="Filter by city"),
+    search: Optional[str] = Query(None, description="Search query"),
 ):
-    """
-    List all shops.
-    
-    Returns a paginated list of all shops.
-    """
-    shop_service = ShopService(db)
-    # TODO: Implement shop listing
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Shop listing to be implemented"
-    )
+    """List all active shops with optional filters"""
+    shops = await shop_service.list_shops(city=city, search=search, active_only=True)
+    return {"shops": shops}
 
 
-@router.get("/{shop_id}", response_model=ShopResponse)
-async def get_shop(
-    shop_id: str,
-    db: SupabaseClient = Depends(get_supabase)
+@router.get("/nearby")
+async def find_nearby_shops(
+    lat: float = Query(..., description="Latitude"),
+    lng: float = Query(..., description="Longitude"),
+    radius: float = Query(10, description="Radius in kilometers")
 ):
-    """
-    Get a shop by ID.
+    """Find nearby shops"""
+    shops = await shop_service.find_nearby_shops(lat=lat, lng=lng, radius_km=radius)
+    return {"shops": shops}
+
+
+@router.get("/{shop_id}")
+async def get_shop(shop_id: str):
+    """Get shop details with full menu"""
+    shop = await shop_service.get_shop_by_id(shop_id)
+    if not shop:
+        raise HTTPException(status_code=404, detail="Shop not found")
     
-    Returns detailed information about a specific shop.
-    """
-    shop_service = ShopService(db)
-    # TODO: Implement shop retrieval
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Shop retrieval to be implemented"
-    )
-
-
-@router.put("/{shop_id}", response_model=ShopResponse)
-async def update_shop(
-    shop_id: str,
-    shop_update: ShopUpdate,
-    current_user: dict = Depends(require_shop_owner),
-    db: SupabaseClient = Depends(get_supabase)
-):
-    """
-    Update a shop.
+    # Get menu items
+    items = await shop_service.list_menu_items(shop_id)
+    categories = await shop_service.list_categories(shop_id)
     
-    Updates shop information.
-    Requires shop_owner or admin role.
-    """
-    shop_service = ShopService(db)
-    # TODO: Implement shop update
-    # TODO: Verify user owns this shop or is admin
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Shop update to be implemented"
-    )
+    return {
+        "shop": shop,
+        "menu": {
+            "categories": categories,
+            "items": items
+        }
+    }
 
 
-@router.delete("/{shop_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_shop(
-    shop_id: str,
-    current_user: dict = Depends(require_shop_owner),
-    db: SupabaseClient = Depends(get_supabase)
-):
-    """
-    Delete a shop.
+@router.get("/{shop_id}/menu")
+async def get_shop_menu(shop_id: str):
+    """Get shop menu organized by category"""
+    categories = await shop_service.list_categories(shop_id)
+    items = await shop_service.list_menu_items(shop_id)
     
-    Deletes a shop and all associated data.
-    Requires shop_owner or admin role.
-    """
-    shop_service = ShopService(db)
-    # TODO: Implement shop deletion
-    # TODO: Verify user owns this shop or is admin
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Shop deletion to be implemented"
-    )
+    # Organize items by category
+    menu_by_category = {}
+    for category in categories:
+        category_items = [
+            item for item in items 
+            if item.get('category_id') == category['id']
+        ]
+        menu_by_category[category['name']] = {
+            "category": category,
+            "items": category_items
+        }
+    
+    return {"menu": menu_by_category}
+
+
+# ============================================================================
+# SHOP OWNER ENDPOINTS (require shop ownership)
+# ============================================================================
+
+# TODO: Add authentication/authorization middleware
+def get_current_user_id():
+    """Mock function - replace with actual auth"""
+    return "mock-user-id"
+
+
+@router.post("")
+async def create_shop(shop_data: ShopCreate):
+    """Create new shop"""
+    user_id = get_current_user_id()
+    shop = await shop_service.create_shop(shop_data.dict(), user_id)
+    return {"shop": shop}
+
+
+@router.put("/{shop_id}")
+async def update_shop(shop_id: str, shop_data: ShopUpdate):
+    """Update shop details"""
+    user_id = get_current_user_id()
+    
+    # Verify ownership
+    if not shop_service.verify_shop_ownership(shop_id, user_id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Filter out None values
+    update_data = {k: v for k, v in shop_data.dict().items() if v is not None}
+    shop = await shop_service.update_shop(shop_id, update_data)
+    return {"shop": shop}
+
+
+@router.delete("/{shop_id}")
+async def delete_shop(shop_id: str):
+    """Deactivate shop"""
+    user_id = get_current_user_id()
+    
+    # Verify ownership
+    if not shop_service.verify_shop_ownership(shop_id, user_id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    success = await shop_service.delete_shop(shop_id)
+    return {"success": success}
+
+
+@router.post("/{shop_id}/logo")
+async def upload_shop_logo(shop_id: str, file: UploadFile = File(...)):
+    """Upload shop logo"""
+    user_id = get_current_user_id()
+    
+    # Verify ownership
+    if not shop_service.verify_shop_ownership(shop_id, user_id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    file_data = await file.read()
+    logo_url = await shop_service.upload_shop_image(shop_id, file_data, "logo")
+    return {"logo_url": logo_url}
+
+
+@router.post("/{shop_id}/banner")
+async def upload_shop_banner(shop_id: str, file: UploadFile = File(...)):
+    """Upload shop banner"""
+    user_id = get_current_user_id()
+    
+    # Verify ownership
+    if not shop_service.verify_shop_ownership(shop_id, user_id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    file_data = await file.read()
+    banner_url = await shop_service.upload_shop_image(shop_id, file_data, "banner")
+    return {"banner_url": banner_url}
+
+
+@router.get("/{shop_id}/analytics")
+async def get_shop_analytics(shop_id: str):
+    """Get shop analytics"""
+    user_id = get_current_user_id()
+    
+    # Verify ownership
+    if not shop_service.verify_shop_ownership(shop_id, user_id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    analytics = await shop_service.get_shop_analytics(shop_id)
+    return {"analytics": analytics}
+
+
+# ============================================================================
+# ADMIN ENDPOINTS
+# ============================================================================
+
+@router.get("/admin/shops")
+async def list_all_shops():
+    """List all shops including inactive (admin only)"""
+    user_id = get_current_user_id()
+    
+    if not shop_service.is_admin(user_id):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    shops = await shop_service.list_shops(active_only=False)
+    return {"shops": shops}
+
+
+@router.put("/admin/shops/{shop_id}/approve")
+async def approve_shop(shop_id: str):
+    """Approve new shop (admin only)"""
+    user_id = get_current_user_id()
+    
+    if not shop_service.is_admin(user_id):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    shop = await shop_service.update_shop(shop_id, {"approved": True})
+    return {"shop": shop}
+
+
+@router.put("/admin/shops/{shop_id}/feature")
+async def feature_shop(shop_id: str):
+    """Feature shop on homepage (admin only)"""
+    user_id = get_current_user_id()
+    
+    if not shop_service.is_admin(user_id):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    shop = await shop_service.update_shop(shop_id, {"featured": True})
+    return {"shop": shop}
