@@ -1,106 +1,177 @@
 """
-Authentication routes.
-Handles user authentication endpoints.
+Authentication routes using Supabase Auth.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
-
-from app.database import get_supabase, SupabaseClient
+from typing import Optional
 from app.services.auth_service import AuthService
-from app.models.user import UserCreate, UserResponse
-from app.utils.security import get_current_user
-
+from app.utils.security import require_auth, verify_token
 
 router = APIRouter(
-    prefix="/auth",
-    tags=["Authentication"],
-    responses={404: {"description": "Not found"}},
+    prefix="/api/v1/auth",
+    tags=["auth"],
 )
 
+auth_service = AuthService()
 
-class SignUpRequest(BaseModel):
-    """Sign up request model."""
+
+# Request/Response Models
+class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
-    full_name: str = None
+    full_name: Optional[str] = None
 
 
-class SignInRequest(BaseModel):
-    """Sign in request model."""
+class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
 
-class TokenResponse(BaseModel):
-    """Token response model."""
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
     access_token: str
-    token_type: str = "bearer"
-    user: UserResponse
+    new_password: str
 
 
-@router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def sign_up(
-    request: SignUpRequest,
-    db: SupabaseClient = Depends(get_supabase)
-):
+# Routes
+@router.post("/register")
+async def register(data: RegisterRequest):
     """
-    Sign up a new user.
-    
-    Creates a new user account with the provided credentials.
+    Register a new user with email and password.
+    Creates user in Supabase Auth and profile in profiles table with default role 'customer'.
     """
-    auth_service = AuthService(db)
-    user_data = UserCreate(
-        email=request.email,
-        full_name=request.full_name
-    )
-    # TODO: Implement sign up with Supabase Auth
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Sign up functionality to be implemented with Supabase Auth"
-    )
+    try:
+        result = await auth_service.register_user(
+            email=data.email,
+            password=data.password,
+            full_name=data.full_name
+        )
+        return {
+            "message": "User registered successfully",
+            "user": {
+                "id": result["user"].id,
+                "email": result["user"].email
+            },
+            "session": {
+                "access_token": result["session"].access_token,
+                "refresh_token": result["session"].refresh_token
+            } if result["session"] else None
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.post("/signin", response_model=TokenResponse)
-async def sign_in(
-    request: SignInRequest,
-    db: SupabaseClient = Depends(get_supabase)
-):
+@router.post("/login")
+async def login(data: LoginRequest):
     """
-    Sign in an existing user.
-    
-    Authenticates a user with email and password.
+    Login with email and password.
+    Returns JWT tokens and user profile.
     """
-    auth_service = AuthService(db)
-    # TODO: Implement sign in with Supabase Auth
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Sign in functionality to be implemented with Supabase Auth"
-    )
+    try:
+        result = await auth_service.login_user(
+            email=data.email,
+            password=data.password
+        )
+        return {
+            "message": "Login successful",
+            "user": {
+                "id": result["user"].id,
+                "email": result["user"].email
+            },
+            "profile": result["profile"],
+            "session": {
+                "access_token": result["session"].access_token,
+                "refresh_token": result["session"].refresh_token
+            } if result["session"] else None
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
 
 
-@router.get("/me", response_model=UserResponse)
-async def get_me(current_user: dict = Depends(get_current_user)):
+@router.post("/logout")
+async def logout(token_payload: dict = Depends(require_auth())):
     """
-    Get current user information.
-    
-    Returns the authenticated user's profile data.
+    Logout current user by invalidating the session.
     """
-    # TODO: Fetch user profile from database
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Get current user to be implemented"
-    )
+    try:
+        await auth_service.logout_user(token_payload.get("sub"))
+        return {"message": "Logout successful"}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/refresh")
-async def refresh_token(refresh_token: str):
+async def refresh(data: RefreshTokenRequest):
     """
-    Refresh access token.
-    
-    Gets a new access token using a refresh token.
+    Refresh access token using refresh token.
     """
-    # TODO: Implement token refresh with Supabase Auth
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Token refresh to be implemented with Supabase Auth"
-    )
+    try:
+        result = await auth_service.refresh_token(data.refresh_token)
+        return {
+            "message": "Token refreshed successfully",
+            "session": {
+                "access_token": result["session"].access_token,
+                "refresh_token": result["session"].refresh_token
+            } if result["session"] else None
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+
+
+@router.get("/me")
+async def get_current_user(token_payload: dict = Depends(require_auth())):
+    """
+    Get current authenticated user's profile.
+    """
+    try:
+        user_id = token_payload.get("sub")
+        profile = await auth_service.get_user_profile(user_id)
+        if not profile:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+        return profile
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/google")
+async def google_oauth():
+    """
+    Get Google OAuth URL.
+    Note: Actual OAuth flow is typically handled client-side with Supabase.
+    """
+    try:
+        oauth_url = await auth_service.get_google_oauth_url()
+        return {"oauth_url": oauth_url}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/forgot-password")
+async def forgot_password(data: ForgotPasswordRequest):
+    """
+    Send password reset email via Supabase.
+    """
+    try:
+        await auth_service.send_password_reset_email(data.email)
+        return {"message": "Password reset email sent"}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/reset-password")
+async def reset_password(data: ResetPasswordRequest):
+    """
+    Reset password using reset token.
+    """
+    try:
+        await auth_service.reset_password(data.access_token, data.new_password)
+        return {"message": "Password reset successful"}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

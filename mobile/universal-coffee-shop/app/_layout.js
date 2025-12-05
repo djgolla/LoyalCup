@@ -5,35 +5,37 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { AuthProvider, useAuth } from '../context/AuthContext';
+import { CartProvider } from '../context/CartContext';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
-// TODO NEED TO FIX THIS - AUTH NOT SET UP YET, using mock auth for now to test
-const useAuth = () => ({ user: null }); // Mock auth hook
-
 function RootLayoutNav() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
+    if (loading) return;
+
     const inAuthGroup = segments[0] === '(auth)';
     
-    // uncomment this / change this once we have auth from back end
-    // if (user && !inAuthGroup) {
-    //   router.replace('/home');
-    // } else if (!user) {
-    //   router.replace('/launch');
-    // }
-  }, [user, segments]);
+    // redirect based on auth state
+    if (!user && segments[0] !== 'launch' && segments[0] !== 'login') {
+      router.replace('/launch');
+    }
+  }, [user, loading, segments]);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="launch" />
       <Stack.Screen name="login" />
+      <Stack.Screen name="signup" />
       <Stack.Screen name="home" />
+      <Stack.Screen name="profile" />
+      <Stack.Screen name="cart" />
     </Stack>
   );
 }
@@ -56,10 +58,14 @@ export default function RootLayout() {
     return null;
   }
 
-  // Render the layout wrapped in the Gesture Handler
+  // Render the layout wrapped in providers
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <RootLayoutNav />
+      <AuthProvider>
+        <CartProvider>
+          <RootLayoutNav />
+        </CartProvider>
+      </AuthProvider>
     </GestureHandlerRootView>
   );
 }

@@ -1,143 +1,174 @@
-"""
-Order routes.
-Handles order management endpoints.
-"""
+from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime, timedelta
+from pydantic import BaseModel
 
-from app.database import get_supabase, SupabaseClient
-from app.models.order import OrderCreate, OrderUpdate, OrderResponse, OrderStatus
-from app.services.order_service import OrderService
-from app.utils.security import get_current_user, require_shop_owner
-
+from services.order_service import OrderService
 
 router = APIRouter(
-    prefix="/orders",
-    tags=["Orders"],
-    responses={404: {"description": "Not found"}},
+    prefix="/api/v1",
+    tags=["orders"]
 )
 
+order_service = OrderService()
 
-@router.post("/", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
-async def create_order(
-    order: OrderCreate,
-    current_user: dict = Depends(get_current_user),
-    db: SupabaseClient = Depends(get_supabase)
-):
-    """
-    Create a new order.
+# pydantic models for request validation
+class OrderItem(BaseModel):
+    menu_item_id: str
+    quantity: int
+    base_price: float
+    customizations: List[dict] = []
+
+class CreateOrderRequest(BaseModel):
+    shop_id: str
+    items: List[OrderItem]
+
+class UpdateStatusRequest(BaseModel):
+    status: str
+
+# customer endpoints
+@router.post("/orders")
+async def create_order(request: CreateOrderRequest):
+    # create new order from cart
+    # TODO: get customer_id from auth token
+    customer_id = "temp-customer-id"
     
-    Places a new order at a shop.
-    """
-    order_service = OrderService(db)
-    # TODO: Implement order creation
-    # TODO: Calculate totals, tax, loyalty points
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Order creation to be implemented"
+    items_data = [item.dict() for item in request.items]
+    order_data = order_service.create_order_data(
+        shop_id=request.shop_id,
+        customer_id=customer_id,
+        items=items_data,
+        points_per_dollar=10  # TODO: get from shop settings
     )
-
-
-@router.get("/", response_model=List[OrderResponse])
-async def list_orders(
-    status: Optional[OrderStatus] = None,
-    skip: int = 0,
-    limit: int = 100,
-    current_user: dict = Depends(get_current_user),
-    db: SupabaseClient = Depends(get_supabase)
-):
-    """
-    List orders for the current user.
     
-    Returns a paginated list of the user's orders.
-    """
-    order_service = OrderService(db)
-    # TODO: Implement order listing for current user
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Order listing to be implemented"
-    )
+    # TODO: save to database
+    # for now just return the created order
+    return {"order": order_data}
 
+@router.get("/orders")
+async def get_customer_orders(
+    status: Optional[str] = None,
+    limit: int = Query(50, le=100)
+):
+    # get customer's order history
+    # TODO: get customer_id from auth and fetch from database
+    return {"orders": []}
 
-@router.get("/shop/{shop_id}", response_model=List[OrderResponse])
-async def list_shop_orders(
+@router.get("/orders/{order_id}")
+async def get_order_details(order_id: str):
+    # get specific order details
+    # TODO: fetch from database and verify customer access
+    return {"order": {"id": order_id}}
+
+@router.get("/orders/{order_id}/status")
+async def get_order_status(order_id: str):
+    # get order status for polling/realtime
+    # TODO: fetch from database
+    return {"status": "pending", "updated_at": datetime.now().isoformat()}
+
+@router.post("/orders/{order_id}/cancel")
+async def cancel_order(order_id: str):
+    # cancel order if pending
+    # TODO: fetch order, verify customer owns it, check if can cancel, update status
+    current_status = "pending"  # placeholder
+    
+    if not order_service.can_cancel_order(current_status):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel order with status: {current_status}"
+        )
+    
+    return {"message": "Order cancelled", "order_id": order_id}
+
+# shop worker endpoints
+@router.get("/shops/{shop_id}/orders")
+async def get_shop_orders(
     shop_id: str,
-    status: Optional[OrderStatus] = None,
-    skip: int = 0,
-    limit: int = 100,
-    current_user: dict = Depends(require_shop_owner),
-    db: SupabaseClient = Depends(get_supabase)
+    status: Optional[str] = None,
+    date: Optional[str] = None,
+    limit: int = Query(50, le=100)
 ):
-    """
-    List orders for a shop (shop owners only).
-    
-    Returns a paginated list of orders for the specified shop.
-    """
-    order_service = OrderService(db)
-    # TODO: Implement shop order listing
-    # TODO: Verify user owns the shop
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Shop order listing to be implemented"
-    )
+    # get shop's orders with filters
+    # TODO: verify worker has access to shop, fetch from database
+    return {"orders": []}
 
+@router.get("/shops/{shop_id}/orders/queue")
+async def get_order_queue(shop_id: str):
+    # get active order queue (pending, accepted, preparing, ready)
+    # TODO: verify worker access, fetch active orders
+    return {
+        "pending": [],
+        "accepted": [],
+        "preparing": [],
+        "ready": []
+    }
 
-@router.get("/{order_id}", response_model=OrderResponse)
-async def get_order(
+@router.put("/shops/{shop_id}/orders/{order_id}/status")
+async def update_order_status(
+    shop_id: str,
     order_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: SupabaseClient = Depends(get_supabase)
+    request: UpdateStatusRequest
 ):
-    """
-    Get an order by ID.
+    # update order status
+    # TODO: verify worker access, fetch order, validate transition, update
+    current_status = "pending"  # placeholder
     
-    Returns detailed information about a specific order.
-    """
-    order_service = OrderService(db)
-    # TODO: Implement order retrieval
-    # TODO: Verify user owns the order or owns the shop
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Order retrieval to be implemented"
-    )
+    if not order_service.validate_status_transition(current_status, request.status):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status transition from {current_status} to {request.status}"
+        )
+    
+    return {"message": "Status updated", "status": request.status}
 
+@router.get("/shops/{shop_id}/orders/stats")
+async def get_order_stats(shop_id: str):
+    # get today's order statistics
+    # TODO: verify worker access, calculate stats from today's orders
+    return {
+        "today": {
+            "total_orders": 0,
+            "revenue": 0.0,
+            "avg_order_value": 0.0,
+            "by_status": {
+                "pending": 0,
+                "accepted": 0,
+                "preparing": 0,
+                "ready": 0,
+                "completed": 0,
+                "cancelled": 0
+            }
+        }
+    }
 
-@router.put("/{order_id}", response_model=OrderResponse)
-async def update_order(
-    order_id: str,
-    order_update: OrderUpdate,
-    current_user: dict = Depends(get_current_user),
-    db: SupabaseClient = Depends(get_supabase)
+# shop owner endpoints
+@router.get("/shops/{shop_id}/orders/history")
+async def get_order_history(
+    shop_id: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    status: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, le=100)
 ):
-    """
-    Update an order.
-    
-    Updates order status and other information.
-    """
-    order_service = OrderService(db)
-    # TODO: Implement order update
-    # TODO: Verify user owns the order or owns the shop
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Order update to be implemented"
-    )
+    # full order history with filters
+    # TODO: verify owner access, fetch with pagination
+    return {
+        "orders": [],
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": 0
+        }
+    }
 
-
-@router.post("/{order_id}/cancel", response_model=OrderResponse)
-async def cancel_order(
-    order_id: str,
-    current_user: dict = Depends(get_current_user),
-    db: SupabaseClient = Depends(get_supabase)
+@router.get("/shops/{shop_id}/orders/export")
+async def export_orders(
+    shop_id: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    format: str = Query("csv", regex="^(csv|json)$")
 ):
-    """
-    Cancel an order.
-    
-    Cancels an order if it hasn't been completed yet.
-    """
-    order_service = OrderService(db)
-    # TODO: Implement order cancellation
-    # TODO: Verify user owns the order
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Order cancellation to be implemented"
-    )
+    # export orders as CSV or JSON
+    # TODO: verify owner access, generate export file
+    return {"message": "Export functionality not yet implemented"}
