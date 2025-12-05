@@ -4,7 +4,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List
-from services.loyalty_service import LoyaltyService
+from app.services.loyalty_service import LoyaltyService
 
 router = APIRouter(
     prefix="/api/v1",

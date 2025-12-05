@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Query
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
-from services.shop_service import shop_service
+from app.services.shop_service import shop_service
 
 
 router = APIRouter(
