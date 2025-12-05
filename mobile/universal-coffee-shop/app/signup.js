@@ -32,12 +32,21 @@ export default function SignupScreen() {
 
     setLoading(true);
     try {
-      await signUp(email, password, { name });
-      Alert.alert(
-        'Success', 
-        'Account created! Please check your email to verify your account.',
-        [{ text: 'OK', onPress: () => router.replace('/login') }]
-      );
+      const result = await signUp(email, password, { name });
+      
+      // Check if email confirmation is required
+      if (result.user && !result.session) {
+        // Email confirmation required
+        Alert.alert(
+          'Success', 
+          'Account created! Please check your email to verify your account.',
+          [{ text: 'OK', onPress: () => router.replace('/login') }]
+        );
+      } else if (result.session) {
+        // User was automatically signed in (no email confirmation required)
+        // The auth context will update and _layout.js will redirect to home
+        Alert.alert('Success', 'Account created successfully!');
+      }
     } catch (error) {
       Alert.alert('Signup Failed', error.message || 'Could not create account');
     } finally {
