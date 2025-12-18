@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { User, Settings, LogOut, ChevronDown } from "lucide-react";
+import { User, Settings, LogOut, ChevronDown, ShoppingBag } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 
 export default function UserMenu() {
@@ -41,6 +41,14 @@ export default function UserMenu() {
             >
               <User size={16} />
               Profile
+            </Link>
+            <Link
+              to="/orders"
+              className="flex items-center gap-2 px-4 py-2 hover:bg-gray-100 dark:hover:bg-neutral-800 transition"
+              onClick={() => setIsOpen(false)}
+            >
+              <ShoppingBag size={16} />
+              Orders
             </Link>
             <Link
               to="/profile/edit"

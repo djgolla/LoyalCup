@@ -20,10 +20,15 @@ function RootLayoutNav() {
     if (loading) return;
 
     const inAuthGroup = segments[0] === '(auth)';
+    const currentScreen = segments[0];
     
     // redirect based on auth state
-    if (!user && segments[0] !== 'launch' && segments[0] !== 'login') {
+    if (!user && currentScreen !== 'launch' && currentScreen !== 'login' && currentScreen !== 'signup') {
+      // User not authenticated - send to launch
       router.replace('/launch');
+    } else if (user && (currentScreen === 'launch' || currentScreen === 'login' || currentScreen === 'signup' || !currentScreen)) {
+      // User authenticated but on auth screens or index - send to home
+      router.replace('/home');
     }
   }, [user, loading, segments]);
 
@@ -36,6 +41,10 @@ function RootLayoutNav() {
       <Stack.Screen name="home" />
       <Stack.Screen name="profile" />
       <Stack.Screen name="cart" />
+      <Stack.Screen name="checkout" />
+      <Stack.Screen name="order-history" />
+      <Stack.Screen name="shop/[id]" />
+      <Stack.Screen name="order/[id]" />
     </Stack>
   );
 }

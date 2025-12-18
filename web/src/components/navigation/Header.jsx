@@ -19,14 +19,8 @@ export default function Header() {
 
           {/* desktop navigation */}
           <nav className="hidden md:flex items-center gap-6">
-            <Link to="/shops" className="text-gray-700 dark:text-gray-300 hover:text-amber-700 transition">
-              Shops
-            </Link>
             {user && (
               <>
-                <Link to="/orders" className="text-gray-700 dark:text-gray-300 hover:text-amber-700 transition">
-                  Orders
-                </Link>
                 <Link to="/rewards" className="text-gray-700 dark:text-gray-300 hover:text-amber-700 transition">
                   Rewards
                 </Link>
