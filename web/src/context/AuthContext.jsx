@@ -1,58 +1,77 @@
 import { createContext, useState, useEffect, useContext } from "react";
+import supabase from "../lib/supabase";
 
 export const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // check for existing session
-    const initAuth = () => {
-      const storedUser = localStorage.getItem("loyalcup_user");
-      if (storedUser) {
-        try {
-          const parsedUser = JSON.parse(storedUser);
-          setUser(parsedUser);
-        } catch {
-          localStorage.removeItem("loyalcup_user");
-        }
-      }
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
       setLoading(false);
-    };
+    });
 
-    initAuth();
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser(session?.user ??  null);
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const login = async (email, password, role = "customer") => {
-    // simulate login - in real app would call Supabase
-    const mockUser = {
-      id: "mock-id-" + Date.now(),
+  const login = async (email, password) => {
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
-      role,
-      full_name: email.split("@")[0],
-    };
-    
-    setUser(mockUser);
-    localStorage.setItem("loyalcup_user", JSON.stringify(mockUser));
-    return mockUser;
+      password,
+    });
+    if (error) throw error;
+    return data;
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem("loyalcup_user");
+  const signup = async (email, password, metadata = {}) => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data:  metadata,
+      },
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  const logout = async () => {
+    const { error } = await supabase.auth. signOut();
+    if (error) throw error;
+  };
+
+  const signInWithGoogle = async () => {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+    });
+    if (error) throw error;
+    return data;
   };
 
   const hasRole = (roles) => {
     if (!user) return false;
+    const userRole = user.user_metadata?.role || 'customer';
     if (Array.isArray(roles)) {
-      return roles.includes(user.role);
+      return roles.includes(userRole);
     }
-    return user.role === roles;
+    return userRole === roles;
   };
 
   const getRedirectPath = (role) => {
-    switch (role) {
+    const userRole = role || user?.user_metadata?.role || 'customer';
+    switch (userRole) {
       case "admin":
         return "/admin/dashboard";
       case "shop_owner":
@@ -68,12 +87,15 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider
       value={{
         user,
+        session,
         loading,
         login,
+        signup,
         logout,
+        signInWithGoogle,
         hasRole,
         getRedirectPath,
-        isAuthenticated: !!user,
+        isAuthenticated: !! user,
       }}
     >
       {children}

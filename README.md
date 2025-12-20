@@ -12,6 +12,7 @@ npm run dev
 
 # mobile
 cd mobile
+cd universal-coffee-shop
 npm install
 npm start
 
