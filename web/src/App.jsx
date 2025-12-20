@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 // layouts
@@ -46,14 +45,7 @@ import { AccentProvider } from "./context/AccentContext";
 import { AuthProvider } from "./context/AuthContext";
 import { CartProvider } from "./context/CartContext";
 
-// fake backend
-import makeServer from "./api/server";
-
 export default function App() {
-  useEffect(() => {
-    // init fake backend
-    makeServer({ environment: "development" });
-  }, []);
 
   return (
     <ThemeProvider>
