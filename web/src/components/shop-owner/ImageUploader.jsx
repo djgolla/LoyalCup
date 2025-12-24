@@ -34,8 +34,14 @@ export default function ImageUploader({ onUpload, currentImage, label = "Upload 
     // Upload to Supabase Storage
     setUploading(true);
     try {
+      if (!shopId) {
+        toast.error("Shop ID is required for image upload");
+        setPreview(null);
+        return;
+      }
+
       const fileExt = file.name.split('.').pop();
-      const fileName = `${shopId || 'temp'}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const fileName = `${shopId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
       const { data, error } = await supabase.storage
         .from('shop-images')

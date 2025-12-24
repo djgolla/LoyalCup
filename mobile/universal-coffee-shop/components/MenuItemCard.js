@@ -21,7 +21,7 @@ export default function MenuItemCard({ item, onAddToCart }) {
       
       <View style={styles.itemInfo}>
         <Text style={styles.itemName}>{item.name}</Text>
-        {item.description && (
+        {item.description && item.description.trim() && (
           <Text style={styles.itemDescription} numberOfLines={2}>
             {item.description}
           </Text>
