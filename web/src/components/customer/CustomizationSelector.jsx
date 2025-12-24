@@ -29,7 +29,7 @@ export default function CustomizationSelector({ customizations, onChange }) {
     }
   };
 
-  const selectOption = (option, type) => {
+  const selectOption = (option) => {
     // remove any existing option of this type
     const filtered = customizations.filter(c => 
       !sizeOptions.concat(milkOptions).find(o => o.name === c.name)

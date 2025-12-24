@@ -2,13 +2,10 @@
 // left sidebar navigation — simple + clean + latte accent
 
 import { NavLink } from "react-router-dom";
-import { useContext } from "react";
-import { AccentContext } from "../context/AccentContext";
 import ThemeToggle from "./ThemeToggle";
 import AccentPicker from "./AccentPicker";
 
 export default function Sidebar() {
-  const { accent } = useContext(AccentContext);
 
   const linkClasses =
     "flex items-center gap-3 px-4 py-2 rounded-lg transition-colors duration-200";

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import DashboardCard from "../components/DashboardCard";
-import { toast } from "sonner";
 
 import {
   Chart as ChartJS,

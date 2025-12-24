@@ -10,7 +10,8 @@ export default function ShopGuard({ children }) {
     return <Navigate to="/login" replace />;
   }
 
-  const hasAccess = user.role === "shop_owner" || user.role === "shop_worker" || user.role === "admin";
+  const userRole = user.user_metadata?.role || 'customer';
+  const hasAccess = userRole === "shop_owner" || userRole === "shop_worker" || userRole === "admin";
 
   if (!hasAccess) {
     return <Navigate to="/" replace />;

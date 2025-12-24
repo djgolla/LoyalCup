@@ -1,4 +1,3 @@
-import { useState } from "react";
 import MenuItemCard from "./MenuItemCard";
 
 export default function MenuSection({ category, items, shopId, shopName }) {

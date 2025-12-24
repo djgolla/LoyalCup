@@ -10,9 +10,10 @@ export default function RoleGuard({ children, roles }) {
 
   if (!hasRole(roles)) {
     // redirect based on user's actual role
-    const redirectPath = user.role === "admin" ? "/admin/dashboard" :
-                        user.role === "shop_owner" ? "/shop-owner" :
-                        user.role === "shop_worker" ? "/worker" :
+    const userRole = user.user_metadata?.role || 'customer';
+    const redirectPath = userRole === "admin" ? "/admin/dashboard" :
+                        userRole === "shop_owner" ? "/shop-owner" :
+                        userRole === "shop_worker" ? "/worker" :
                         "/";
     return <Navigate to={redirectPath} replace />;
   }
