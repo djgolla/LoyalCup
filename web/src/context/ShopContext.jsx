@@ -8,11 +8,13 @@ export function ShopProvider({ children }) {
   const { user } = useAuth();
   const [shop, setShop] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!user) {
       setShop(null);
       setLoading(false);
+      setError(null);
       return;
     }
 
@@ -24,11 +26,13 @@ export function ShopProvider({ children }) {
     } else {
       setShop(null);
       setLoading(false);
+      setError(null);
     }
   }, [user]);
 
   const loadUserShop = async () => {
     try {
+      setError(null);
       const userRole = user.user_metadata?.role || 'customer';
       
       if (userRole === 'shop_owner') {
@@ -39,8 +43,17 @@ export function ShopProvider({ children }) {
           .eq('owner_id', user.id)
           .single();
 
-        if (error) throw error;
-        setShop(data);
+        if (error) {
+          if (error.code === 'PGRST116') {
+            // No shop found
+            setError('No shop assigned to your account');
+            setShop(null);
+          } else {
+            throw error;
+          }
+        } else {
+          setShop(data);
+        }
       } else if (userRole === 'shop_worker') {
         // For workers, we'd need a shop_workers junction table
         // For now, get from user_metadata if available
@@ -54,10 +67,14 @@ export function ShopProvider({ children }) {
 
           if (error) throw error;
           setShop(data);
+        } else {
+          setError('No shop assigned to your account');
+          setShop(null);
         }
       }
     } catch (error) {
       console.error("Failed to load shop:", error);
+      setError(error.message || 'Failed to load shop');
     } finally {
       setLoading(false);
     }
@@ -69,6 +86,7 @@ export function ShopProvider({ children }) {
         shop,
         shopId: shop?.id,
         loading,
+        error,
         refreshShop: loadUserShop,
       }}
     >

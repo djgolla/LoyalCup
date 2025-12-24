@@ -70,17 +70,22 @@ export default function MenuBuilder() {
   };
 
   const handleSave = async (itemData) => {
+    if (!shopId) {
+      toast.error("Shop not found");
+      return;
+    }
+
     try {
       if (editingItem) {
         // Update existing item
-        const response = await updateMenuItem(SHOP_ID, editingItem.id, itemData);
+        const response = await updateMenuItem(shopId, editingItem.id, itemData);
         setMenuItems(menuItems.map(item => 
           item.id === editingItem.id ? { ...item, ...response.item } : item
         ));
         toast.success("Item updated successfully");
       } else {
         // Create new item
-        const response = await createMenuItem(SHOP_ID, itemData);
+        const response = await createMenuItem(shopId, itemData);
         setMenuItems([...menuItems, response.item]);
         toast.success("Item added successfully");
       }
@@ -94,8 +99,13 @@ export default function MenuBuilder() {
   const handleDelete = async (item) => {
     if (!confirm(`Delete "${item.name}"?`)) return;
     
+    if (!shopId) {
+      toast.error("Shop not found");
+      return;
+    }
+
     try {
-      await deleteMenuItem(SHOP_ID, item.id);
+      await deleteMenuItem(shopId, item.id);
       setMenuItems(menuItems.filter(i => i.id !== item.id));
       toast.success("Item deleted");
     } catch (error) {
@@ -105,9 +115,14 @@ export default function MenuBuilder() {
   };
 
   const handleToggleAvailability = async (item) => {
+    if (!shopId) {
+      toast.error("Shop not found");
+      return;
+    }
+
     try {
       const newAvailability = !item.is_available;
-      await toggleItemAvailability(SHOP_ID, item.id, newAvailability);
+      await toggleItemAvailability(shopId, item.id, newAvailability);
       setMenuItems(menuItems.map(i => 
         i.id === item.id ? { ...i, is_available: newAvailability } : i
       ));
@@ -134,7 +149,19 @@ export default function MenuBuilder() {
     };
   });
 
-  if (loading) return <Loading />;
+  if (shopLoading || loading) return <Loading />;
+
+  if (!shopId) {
+    return (
+      <div className="text-center py-12">
+        <div className="text-6xl mb-4">🏪</div>
+        <h3 className="text-xl font-semibold mb-2">No Shop Found</h3>
+        <p className="text-gray-600 dark:text-gray-400">
+          You don't have a shop assigned yet.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

@@ -75,7 +75,7 @@ export function AuthProvider({ children }) {
       case "admin":
         return "/admin/dashboard";
       case "shop_owner":
-        return "/shop-owner";
+        return "/shop-owner/dashboard";
       case "shop_worker":
         return "/worker";
       default:

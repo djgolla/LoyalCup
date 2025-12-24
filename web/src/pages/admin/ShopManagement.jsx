@@ -102,9 +102,29 @@ export default function ShopManagement() {
   };
 
   const filteredShops = shops.filter((shop) =>
-    shop.name.toLowerCase().includes(searchQuery. toLowerCase()) ||
-    shop.profiles?. email?.toLowerCase().includes(searchQuery. toLowerCase())
+    shop.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    shop.profiles?.email?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const pendingShops = shops.filter((shop) => shop.status === "pending");
+
+  const handleReject = async (shopId) => {
+    if (!confirm("Are you sure you want to reject this application?")) return;
+
+    try {
+      const { error } = await supabase
+        .from("shops")
+        .update({ status: "rejected" })
+        .eq("id", shopId);
+
+      if (error) throw error;
+      toast.success("Application rejected");
+      loadShops();
+    } catch (error) {
+      console.error("Failed to reject shop:", error);
+      toast.error("Failed to reject shop");
+    }
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
