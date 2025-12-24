@@ -1,16 +1,30 @@
 // menu item card component
 // universal-coffee-shop/components/MenuItemCard.js
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Image } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
 export default function MenuItemCard({ item, onAddToCart }) {
   return (
     <View style={styles.card}>
+      {item.image_url ? (
+        <Image 
+          source={{ uri: item.image_url }} 
+          style={styles.itemImage}
+          resizeMode="cover"
+        />
+      ) : (
+        <View style={styles.placeholderImage}>
+          <Feather name="coffee" size={32} color="#666" />
+        </View>
+      )}
+      
       <View style={styles.itemInfo}>
         <Text style={styles.itemName}>{item.name}</Text>
-        {item.description && (
-          <Text style={styles.itemDescription}>{item.description}</Text>
+        {item.description && item.description.trim() && (
+          <Text style={styles.itemDescription} numberOfLines={2}>
+            {item.description}
+          </Text>
         )}
         <Text style={styles.itemPrice}>${item.price?.toFixed(2) || '0.00'}</Text>
       </View>
@@ -34,6 +48,25 @@ const styles = StyleSheet.create({
     borderColor: '#000',
     borderRadius: 15,
     backgroundColor: '#FFF',
+  },
+  itemImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#000',
+    marginRight: 15,
+  },
+  placeholderImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#000',
+    backgroundColor: '#F0F0F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
   },
   itemInfo: {
     flex: 1,

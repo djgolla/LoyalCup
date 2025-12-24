@@ -24,6 +24,8 @@ import Profile from "./pages/customer/Profile";
 import CustomerLogin from "./pages/auth/CustomerLogin";
 import Register from "./pages/auth/Register";
 import AdminLogin from "./pages/auth/AdminLogin";
+import ShopApplication from "./pages/auth/ShopApplication";
+import ApplicationPending from "./pages/auth/ApplicationPending";
 
 // shop owner pages
 import ShopOwnerDashboard from "./pages/shop-owner/ShopOwnerDashboard";
@@ -72,6 +74,8 @@ export default function App() {
                 <Route element={<AuthLayout />}>
                   <Route path="/login" element={<CustomerLogin />} />
                   <Route path="/register" element={<Register />} />
+                  <Route path="/shop-application" element={<ShopApplication />} />
+                  <Route path="/application-pending" element={<ApplicationPending />} />
                 </Route>
 
                 {/* admin login (separate, hidden) */}
