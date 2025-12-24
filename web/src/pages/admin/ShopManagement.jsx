@@ -121,6 +121,72 @@ export default function ShopManagement() {
 
   return (
     <div className="space-y-6">
+      {/* Pending Applications Section */}
+      {pendingShops.length > 0 && (
+        <div className="bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/10 dark:to-yellow-900/10 border-2 border-amber-300 dark:border-amber-700 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-amber-600 text-white rounded-full p-2">
+                <Store size={24} />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                  Pending Applications
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {pendingShops.length} shop{pendingShops.length !== 1 ? 's' : ''} awaiting approval
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {pendingShops.slice(0, 5).map((shop) => (
+              <div
+                key={shop.id}
+                className="bg-white dark:bg-neutral-900 rounded-lg p-4 border border-amber-200 dark:border-amber-800"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-gray-900 dark:text-white text-lg">
+                      {shop.name}
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      Owner: {shop.profiles?.email || 'No email'} •{' '}
+                      {shop.city ? `${shop.city}, ${shop.state}` : 'Location not provided'}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                      Applied: {new Date(shop.created_at).toLocaleDateString()}
+                    </p>
+                    {shop.description && (
+                      <p className="text-sm text-gray-700 dark:text-gray-300 mt-2">
+                        {shop.description}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-2 ml-4">
+                    <button
+                      onClick={() => handleApprove(shop.id)}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                    >
+                      <Check size={18} />
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => handleReject(shop.id)}
+                      className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+                    >
+                      <X size={18} />
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -157,7 +223,7 @@ export default function ShopManagement() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white dark: bg-neutral-900 p-4 rounded-lg border border-gray-200 dark:border-neutral-800">
+        <div className="bg-white dark:bg-neutral-900 p-4 rounded-lg border border-gray-200 dark:border-neutral-800">
           <p className="text-sm text-gray-500 dark:text-neutral-400">Total Shops</p>
           <p className="text-2xl font-semibold text-gray-900 dark:text-white">{shops.length}</p>
         </div>
@@ -167,13 +233,13 @@ export default function ShopManagement() {
             {shops.filter((s) => s.status === "active").length}
           </p>
         </div>
-        <div className="bg-white dark: bg-neutral-900 p-4 rounded-lg border border-gray-200 dark:border-neutral-800">
+        <div className="bg-white dark:bg-neutral-900 p-4 rounded-lg border border-gray-200 dark:border-neutral-800">
           <p className="text-sm text-gray-500 dark:text-neutral-400">Pending</p>
           <p className="text-2xl font-semibold text-yellow-600">
             {shops.filter((s) => s.status === "pending").length}
           </p>
         </div>
-        <div className="bg-white dark: bg-neutral-900 p-4 rounded-lg border border-gray-200 dark:border-neutral-800">
+        <div className="bg-white dark:bg-neutral-900 p-4 rounded-lg border border-gray-200 dark:border-neutral-800">
           <p className="text-sm text-gray-500 dark:text-neutral-400">Featured</p>
           <p className="text-2xl font-semibold text-purple-600">
             {shops.filter((s) => s.featured).length}
@@ -182,11 +248,11 @@ export default function ShopManagement() {
       </div>
 
       {/* Table */}
-      <div className="bg-white dark: bg-neutral-900 rounded-lg border border-gray-200 dark:border-neutral-800 overflow-hidden">
+      <div className="bg-white dark:bg-neutral-900 rounded-lg border border-gray-200 dark:border-neutral-800 overflow-hidden">
         {loading ? (
           <div className="p-12 text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-600 mx-auto"></div>
-            <p className="text-gray-500 dark: text-neutral-400 mt-4">Loading shops...</p>
+            <p className="text-gray-500 dark:text-neutral-400 mt-4">Loading shops...</p>
           </div>
         ) : filteredShops.length === 0 ? (
           <div className="p-12 text-center">
@@ -201,7 +267,7 @@ export default function ShopManagement() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 dark: bg-neutral-800 border-b border-gray-200 dark:border-neutral-700">
+              <thead className="bg-gray-50 dark:bg-neutral-800 border-b border-gray-200 dark:border-neutral-700">
                 <tr>
                   <th className="px-6 py-3 text-left text-sm font-medium text-gray-600 dark:text-neutral-400">
                     Shop
@@ -222,7 +288,7 @@ export default function ShopManagement() {
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-neutral-800">
                 {filteredShops.map((shop) => (
-                  <tr key={shop. id} className="hover:bg-gray-50 dark:hover: bg-neutral-800/50">
+                  <tr key={shop.id} className="hover:bg-gray-50 dark:hover:bg-neutral-800/50">
                     <td className="px-6 py-4">
                       <div>
                         <p className="font-medium text-gray-900 dark:text-white">{shop.name}</p>
@@ -232,7 +298,7 @@ export default function ShopManagement() {
                     <td className="px-6 py-4">
                       <div>
                         <p className="text-gray-900 dark:text-white">
-                          {shop.profiles?. full_name || "N/A"}
+                          {shop.profiles?.full_name || "N/A"}
                         </p>
                         <p className="text-sm text-gray-500 dark:text-neutral-400">
                           {shop.profiles?.email}
@@ -257,7 +323,7 @@ export default function ShopManagement() {
                             : "bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-400"
                         }`}
                       >
-                        {shop. featured ? "★ Featured" : "☆ Feature"}
+                        {shop.featured ? "★ Featured" : "☆ Feature"}
                       </button>
                     </td>
                     <td className="px-6 py-4">
@@ -274,7 +340,7 @@ export default function ShopManagement() {
                         {shop.status === "active" && (
                           <button
                             onClick={() => handleSuspend(shop.id)}
-                            className="p-2 text-yellow-600 hover:bg-yellow-50 dark:hover: bg-yellow-900/20 rounded-lg"
+                            className="p-2 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-lg"
                             title="Suspend"
                           >
                             <X size={18} />
@@ -389,14 +455,14 @@ function ShopModal({ shop, onClose, onSave }) {
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark: text-neutral-300 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-2">
                 Shop Name *
               </label>
               <input
                 type="text"
                 required
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e. target.value })}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
               />
             </div>
@@ -409,8 +475,8 @@ function ShopModal({ shop, onClose, onSave }) {
                 type="text"
                 required
                 value={formData.city}
-                onChange={(e) => setFormData({ ... formData, city: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-gray-900 dark: text-white outline-none focus: ring-2 focus:ring-amber-500"
+                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
               />
             </div>
           </div>
@@ -428,13 +494,13 @@ function ShopModal({ shop, onClose, onSave }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark: text-neutral-300 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-2">
               Address
             </label>
             <input
               type="text"
               value={formData.address}
-              onChange={(e) => setFormData({ ...formData, address: e. target.value })}
+              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
               className="w-full px-4 py-2 border border-gray-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
             />
           </div>
@@ -460,7 +526,7 @@ function ShopModal({ shop, onClose, onSave }) {
                 type="tel"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus: ring-amber-500"
+                className="w-full px-4 py-2 border border-gray-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
               />
             </div>
           </div>
@@ -474,7 +540,7 @@ function ShopModal({ shop, onClose, onSave }) {
                 type="color"
                 value={formData.color}
                 onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                className="w-full h-10 border border-gray-200 dark: border-neutral-700 rounded-lg bg-white dark:bg-neutral-800"
+                className="w-full h-10 border border-gray-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800"
               />
             </div>
 
@@ -487,7 +553,7 @@ function ShopModal({ shop, onClose, onSave }) {
                 min="0"
                 value={formData.loyalty_points_per_dollar}
                 onChange={(e) =>
-                  setFormData({ ... formData, loyalty_points_per_dollar: parseInt(e.target.value) })
+                  setFormData({ ...formData, loyalty_points_per_dollar: parseInt(e.target.value) })
                 }
                 className="w-full px-4 py-2 border border-gray-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-800 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
               />
@@ -513,7 +579,7 @@ function ShopModal({ shop, onClose, onSave }) {
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-200 dark: border-neutral-700 text-gray-700 dark:text-neutral-300 rounded-lg hover: bg-gray-50 dark: hover:bg-neutral-800"
+              className="flex-1 px-4 py-2 border border-gray-200 dark:border-neutral-700 text-gray-700 dark:text-neutral-300 rounded-lg hover:bg-gray-50 dark:hover:bg-neutral-800"
             >
               Cancel
             </button>
