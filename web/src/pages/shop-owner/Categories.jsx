@@ -83,7 +83,7 @@ export default function Categories() {
     if (!confirm(`Delete category "${category.name}"?`)) return;
     
     try {
-      await deleteCategory(SHOP_ID, category.id);
+      await deleteCategory(shopId, category.id);
       toast.success("Category deleted");
       loadCategories();
     } catch (error) {

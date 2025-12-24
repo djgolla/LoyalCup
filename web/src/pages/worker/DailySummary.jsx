@@ -88,10 +88,12 @@ export default function DailySummary() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-1 text-sm text-green-600 dark:text-green-400">
-            <TrendingUp size={16} />
-            <span>+12% from yesterday</span>
-          </div>
+          {stats?.revenue_change && (
+            <div className="flex items-center gap-1 text-sm text-green-600 dark:text-green-400">
+              <TrendingUp size={16} />
+              <span>{stats.revenue_change > 0 ? '+' : ''}{stats.revenue_change}% from yesterday</span>
+            </div>
+          )}
         </div>
 
         <div className="bg-white dark:bg-neutral-900 rounded-lg border border-gray-200 dark:border-neutral-800 p-6">
@@ -106,10 +108,12 @@ export default function DailySummary() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400">
-            <TrendingUp size={16} />
-            <span>+5 from yesterday</span>
-          </div>
+          {stats?.orders_change && (
+            <div className="flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400">
+              <TrendingUp size={16} />
+              <span>{stats.orders_change > 0 ? '+' : ''}{stats.orders_change} from yesterday</span>
+            </div>
+          )}
         </div>
 
         <div className="bg-white dark:bg-neutral-900 rounded-lg border border-gray-200 dark:border-neutral-800 p-6">
@@ -141,10 +145,12 @@ export default function DailySummary() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-1 text-sm text-purple-600 dark:text-purple-400">
-            <TrendingUp size={16} />
-            <span>+15 from yesterday</span>
-          </div>
+          {stats?.items_change && (
+            <div className="flex items-center gap-1 text-sm text-purple-600 dark:text-purple-400">
+              <TrendingUp size={16} />
+              <span>{stats.items_change > 0 ? '+' : ''}{stats.items_change} from yesterday</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -155,51 +161,63 @@ export default function DailySummary() {
         </h2>
         
         <div className="space-y-4">
-          {/* Orders by Status */}
-          <div>
-            <div className="flex justify-between text-sm mb-2">
-              <span className="text-gray-600 dark:text-neutral-400">Orders Completed</span>
-              <span className="font-semibold text-gray-900 dark:text-white">
-                {stats?.orders_completed || 0}
-              </span>
-            </div>
-            <div className="w-full bg-gray-200 dark:bg-neutral-800 rounded-full h-2">
-              <div
-                className="bg-green-500 h-2 rounded-full"
-                style={{ width: '75%' }}
-              />
-            </div>
-          </div>
+          {/* Calculate total orders for percentages */}
+          {(() => {
+            const completed = stats?.orders_completed || 0;
+            const inProgress = stats?.orders_in_progress || 0;
+            const pending = stats?.orders_pending || 0;
+            const total = completed + inProgress + pending || 1; // Avoid division by zero
+            
+            return (
+              <>
+                {/* Orders by Status */}
+                <div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-gray-600 dark:text-neutral-400">Orders Completed</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      {completed}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-neutral-800 rounded-full h-2">
+                    <div
+                      className="bg-green-500 h-2 rounded-full"
+                      style={{ width: `${(completed / total * 100).toFixed(1)}%` }}
+                    />
+                  </div>
+                </div>
 
-          <div>
-            <div className="flex justify-between text-sm mb-2">
-              <span className="text-gray-600 dark:text-neutral-400">Orders in Progress</span>
-              <span className="font-semibold text-gray-900 dark:text-white">
-                {stats?.orders_in_progress || 0}
-              </span>
-            </div>
-            <div className="w-full bg-gray-200 dark:bg-neutral-800 rounded-full h-2">
-              <div
-                className="bg-yellow-500 h-2 rounded-full"
-                style={{ width: '20%' }}
-              />
-            </div>
-          </div>
+                <div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-gray-600 dark:text-neutral-400">Orders in Progress</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      {inProgress}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-neutral-800 rounded-full h-2">
+                    <div
+                      className="bg-yellow-500 h-2 rounded-full"
+                      style={{ width: `${(inProgress / total * 100).toFixed(1)}%` }}
+                    />
+                  </div>
+                </div>
 
-          <div>
-            <div className="flex justify-between text-sm mb-2">
-              <span className="text-gray-600 dark:text-neutral-400">Orders Pending</span>
-              <span className="font-semibold text-gray-900 dark:text-white">
-                {stats?.orders_pending || 0}
-              </span>
-            </div>
-            <div className="w-full bg-gray-200 dark:bg-neutral-800 rounded-full h-2">
-              <div
-                className="bg-blue-500 h-2 rounded-full"
-                style={{ width: '5%' }}
-              />
-            </div>
-          </div>
+                <div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-gray-600 dark:text-neutral-400">Orders Pending</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      {pending}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-neutral-800 rounded-full h-2">
+                    <div
+                      className="bg-blue-500 h-2 rounded-full"
+                      style={{ width: `${(pending / total * 100).toFixed(1)}%` }}
+                    />
+                  </div>
+                </div>
+              </>
+            );
+          })()}
         </div>
       </div>
 
