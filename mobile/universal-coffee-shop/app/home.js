@@ -7,7 +7,6 @@ import CoffeeShopCard from '../components/CoffeeShopCard';
 import { shopService } from '../services/shopService';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
-import { DUMMY_SHOPS } from '../constants/dummyData';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -17,6 +16,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     loadShops();
@@ -24,12 +24,13 @@ export default function HomeScreen() {
 
   const loadShops = async () => {
     try {
+      setError(null);
       const data = await shopService.getShops();
       setShops(data);
     } catch (error) {
       console.error('Failed to load shops:', error);
-      // fallback to dummy data if API fails
-      setShops(DUMMY_SHOPS);
+      setError('Failed to load shops. Please try again.');
+      setShops([]);
     } finally {
       setLoading(false);
     }
@@ -53,6 +54,7 @@ export default function HomeScreen() {
       setShops(data);
     } catch (error) {
       console.error('Search failed:', error);
+      setError('Search failed. Please try again.');
     }
   };
 
@@ -99,6 +101,7 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#000" />
+          <Text style={styles.loadingText}>Loading shops...</Text>
         </View>
       </SafeAreaView>
     );
@@ -111,6 +114,22 @@ export default function HomeScreen() {
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <CoffeeShopCard shop={item} />}
         ListHeaderComponent={renderHeader}
+        ListEmptyComponent={() => (
+          <View style={styles.emptyContainer}>
+            <Feather name="coffee" size={64} color="#CCC" />
+            <Text style={styles.emptyTitle}>No shops found</Text>
+            <Text style={styles.emptyText}>
+              {error || (searchQuery ? 'Try adjusting your search' : 'Check back later for new coffee shops')}
+            </Text>
+            {error && (
+              <TouchableOpacity 
+                style={styles.retryButton}
+                onPress={loadShops}>
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
         refreshControl={
@@ -157,6 +176,41 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 40,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontFamily: 'Anton-Regular',
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 20,
+    paddingHorizontal: 30,
+    paddingVertical: 12,
+    backgroundColor: '#000',
+    borderRadius: 25,
+  },
+  retryButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontFamily: 'Anton-Regular',
   },
   badge: {
     position: 'absolute',
