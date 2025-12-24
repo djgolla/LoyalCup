@@ -16,10 +16,10 @@ import {
   toggleItemAvailability,
 } from "../../api/menu";
 import { getCustomizationTemplates } from "../../api/menu";
-
-const SHOP_ID = "shop-1"; // Mock shop ID
+import { useShop } from "../../context/ShopContext";
 
 export default function MenuBuilder() {
+  const { shopId, loading: shopLoading } = useShop();
   const [menuItems, setMenuItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [customizations, setCustomizations] = useState([]);
@@ -32,16 +32,20 @@ export default function MenuBuilder() {
   const [editingItem, setEditingItem] = useState(null);
 
   useEffect(() => {
-    loadMenuData();
-  }, []);
+    if (shopId) {
+      loadMenuData();
+    }
+  }, [shopId]);
 
   const loadMenuData = async () => {
+    if (!shopId) return;
+    
     setLoading(true);
     try {
       const [itemsRes, categoriesRes, customizationsRes] = await Promise.all([
-        getMenuItems(SHOP_ID),
-        getCategories(SHOP_ID),
-        getCustomizationTemplates(SHOP_ID),
+        getMenuItems(shopId),
+        getCategories(shopId),
+        getCustomizationTemplates(shopId),
       ]);
       
       setMenuItems(itemsRes.items || []);

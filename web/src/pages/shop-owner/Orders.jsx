@@ -7,24 +7,28 @@ import { toast } from "sonner";
 import OrderCard from "../../components/worker/OrderCard";
 import Loading from "../../components/Loading";
 import { getShopOrders, updateOrderStatus } from "../../api/orders";
-
-const SHOP_ID = "shop-1"; // TODO: Get from auth context
+import { useShop } from "../../context/ShopContext";
 
 export default function Orders() {
+  const { shopId, loading: shopLoading } = useShop();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    loadOrders();
-  }, [filterStatus]);
+    if (shopId) {
+      loadOrders();
+    }
+  }, [shopId, filterStatus]);
 
   const loadOrders = async () => {
+    if (!shopId) return;
+    
     setLoading(true);
     try {
       const filters = filterStatus !== "all" ? { status: filterStatus } : {};
-      const response = await getShopOrders(SHOP_ID, filters);
+      const response = await getShopOrders(shopId, filters);
       setOrders(response.orders || []);
     } catch (error) {
       console.error("Failed to load orders:", error);
@@ -35,8 +39,10 @@ export default function Orders() {
   };
 
   const handleUpdateStatus = async (orderId, newStatus) => {
+    if (!shopId) return;
+    
     try {
-      await updateOrderStatus(SHOP_ID, orderId, newStatus);
+      await updateOrderStatus(shopId, orderId, newStatus);
       toast.success("Order status updated");
       loadOrders();
     } catch (error) {
@@ -63,8 +69,24 @@ export default function Orders() {
     { value: "cancelled", label: "Cancelled" },
   ];
 
-  if (loading) {
+  if (shopLoading || loading) {
     return <Loading />;
+  }
+
+  if (!shopId) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <Package size={48} className="mx-auto text-gray-400 mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            No Shop Found
+          </h3>
+          <p className="text-gray-500 dark:text-neutral-400">
+            You need to be associated with a shop to view orders
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -56,6 +56,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { AccentProvider } from "./context/AccentContext";
 import { AuthProvider } from "./context/AuthContext";
 import { CartProvider } from "./context/CartContext";
+import { ShopProvider } from "./context/ShopContext";
 
 export default function App() {
 
@@ -63,8 +64,9 @@ export default function App() {
     <ThemeProvider>
       <AccentProvider>
         <AuthProvider>
-          <CartProvider>
-            <BrowserRouter>
+          <ShopProvider>
+            <CartProvider>
+              <BrowserRouter>
               <Routes>
                 {/* auth pages */}
                 <Route element={<AuthLayout />}>
@@ -148,8 +150,9 @@ export default function App() {
               </Routes>
             </BrowserRouter>
           </CartProvider>
-        </AuthProvider>
-      </AccentProvider>
-    </ThemeProvider>
+        </ShopProvider>
+      </AuthProvider>
+    </AccentProvider>
+  </ThemeProvider>
   );
 }

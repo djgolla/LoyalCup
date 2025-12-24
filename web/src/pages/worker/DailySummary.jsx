@@ -6,22 +6,26 @@ import { DollarSign, Package, Clock, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import Loading from "../../components/Loading";
 import { getShopOrderStats } from "../../api/orders";
-
-const SHOP_ID = "shop-1"; // TODO: Get from auth context
+import { useShop } from "../../context/ShopContext";
 
 export default function DailySummary() {
+  const { shopId, loading: shopLoading } = useShop();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState("today");
 
   useEffect(() => {
-    loadStats();
-  }, [period]);
+    if (shopId) {
+      loadStats();
+    }
+  }, [shopId, period]);
 
   const loadStats = async () => {
+    if (!shopId) return;
+    
     setLoading(true);
     try {
-      const response = await getShopOrderStats(SHOP_ID, period);
+      const response = await getShopOrderStats(shopId, period);
       setStats(response);
     } catch (error) {
       console.error("Failed to load stats:", error);
@@ -31,8 +35,18 @@ export default function DailySummary() {
     }
   };
 
-  if (loading) {
+  if (shopLoading || loading) {
     return <Loading />;
+  }
+
+  if (!shopId) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <p className="text-gray-500 dark:text-neutral-400">
+          You need to be associated with a shop to view daily summary
+        </p>
+      </div>
+    );
   }
 
   return (
