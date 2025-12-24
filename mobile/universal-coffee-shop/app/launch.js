@@ -49,13 +49,10 @@ export default function LaunchScreen() {
       
       <View style={styles.textContainer}>
         <View style={styles.titleWrapper}>
-          <Text style={styles.title}>THE</Text>
-          <Text style={styles.title}>WORLD</Text>
-          <Text style={styles.title}>RUNS ON</Text>
-          <View style={styles.stylizedTitleContainer}>
-            <Text style={styles.stylizedTitle}>COFFEE</Text>
-            <Text style={styles.stylizedTitle}>SHOPS</Text>
-          </View>
+          <Text style={styles.title}>DISCOVER</Text>
+          <Text style={[styles.title, styles.localTitle]}>LOCAL</Text>
+          <Text style={styles.title}>STAY</Text>
+          <Text style={styles.title}>LOYAL</Text>
         </View>
         
         <Text style={styles.subtitle}>Your favorite coffee, one tap away</Text>
@@ -104,17 +101,14 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 2,
   },
-  stylizedTitleContainer: {
-    marginTop: 10,
-    alignItems: "center",
-  },
-  stylizedTitle: {
-    fontSize: 76,
-    fontFamily: "Canopee",
+  localTitle: {
+    fontSize: 88,
     color: "#2C1810",
-    textShadowColor: 'rgba(0, 0, 0, 0.1)',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
+    fontFamily: "Canopee",
+    textShadowColor: 'rgba(139, 69, 19, 0.3)',
+    textShadowOffset: { width: 3, height: 3 },
+    textShadowRadius: 6,
+    lineHeight: 92,
   },
   subtitle: {
     fontSize: 16,
