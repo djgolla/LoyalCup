@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import Modal from "../Modal";
 import ImageUploader from "./ImageUploader";
 
-export default function MenuItemEditor({ item, categories, customizations, open, onClose, onSave }) {
+export default function MenuItemEditor({ item, categories, customizations, open, onClose, onSave, shopId }) {
   const getInitialFormData = () => {
     if (item) {
       return {
@@ -76,6 +76,7 @@ export default function MenuItemEditor({ item, categories, customizations, open,
           onUpload={handleImageUpload}
           currentImage={formData.image_url}
           label="Item Image"
+          shopId={shopId}
         />
 
         {/* Name */}

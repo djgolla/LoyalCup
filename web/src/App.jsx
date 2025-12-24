@@ -111,6 +111,7 @@ export default function App() {
                   }
                 >
                   <Route path="/shop-owner" element={<ShopOwnerDashboard />} />
+                  <Route path="/shop-owner/dashboard" element={<ShopOwnerDashboard />} />
                   <Route path="/shop-owner/menu" element={<MenuBuilder />} />
                   <Route path="/shop-owner/categories" element={<Categories />} />
                   <Route path="/shop-owner/customizations" element={<Customizations />} />

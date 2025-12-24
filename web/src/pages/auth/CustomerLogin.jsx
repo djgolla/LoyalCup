@@ -14,14 +14,25 @@ export default function CustomerLogin() {
     e.preventDefault();
 
     try {
-      await login(email, password); // REMOVED 3rd param
+      const { user } = await login(email, password);
       toast.success("Welcome back!");
       
-      const from = location.state?.from?. pathname || "/";
-      navigate(from, { replace: true });
+      // Route based on user role
+      const userRole = user?.user_metadata?.role || 'customer';
+      
+      if (userRole === 'admin') {
+        navigate('/admin/dashboard');
+      } else if (userRole === 'shop_owner') {
+        navigate('/shop-owner/dashboard');
+      } else if (userRole === 'shop_worker') {
+        navigate('/worker');
+      } else {
+        const from = location.state?.from?.pathname || "/";
+        navigate(from, { replace: true });
+      }
     } catch (error) {
       console.error('Login error:', error);
-      toast.error(error.message || "Login failed.  Please try again.");
+      toast.error(error.message || "Login failed. Please try again.");
     }
   };
 
