@@ -14,13 +14,14 @@ export default function CustomerLogin() {
     e.preventDefault();
 
     try {
-      await login(email, password, "customer");
+      await login(email, password); // REMOVED 3rd param
       toast.success("Welcome back!");
       
-      const from = location.state?.from?.pathname || "/";
+      const from = location.state?.from?. pathname || "/";
       navigate(from, { replace: true });
-    } catch {
-      toast.error("Login failed. Please try again.");
+    } catch (error) {
+      console.error('Login error:', error);
+      toast.error(error.message || "Login failed.  Please try again.");
     }
   };
 
@@ -28,9 +29,9 @@ export default function CustomerLogin() {
     <div className="w-full max-w-md">
       <form
         onSubmit={handleSubmit}
-        className="bg-white dark:bg-neutral-900 p-8 rounded-xl shadow-lg border border-gray-200 dark:border-neutral-800"
+        className="bg-white dark:bg-neutral-900 p-8 rounded-xl shadow-lg border border-gray-200 dark: border-neutral-800"
       >
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 text-center">
+        <h1 className="text-2xl font-bold text-gray-900 dark: text-white mb-6 text-center">
           Sign In to LoyalCup
         </h1>
 
@@ -56,7 +57,7 @@ export default function CustomerLogin() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-2 bg-gray-100 dark:bg-neutral-800 rounded-lg outline-none focus:ring-2 focus:ring-amber-700"
+            className="w-full px-4 py-2 bg-gray-100 dark:bg-neutral-800 rounded-lg outline-none focus: ring-2 focus:ring-amber-700"
             placeholder="••••••••"
             required
           />

@@ -7,18 +7,19 @@ export default function Register() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const { login } = useAuth();
+  const { signup } = useAuth(); // FIXED
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     try {
-      await login(email, password, "customer");
-      toast.success("Account created successfully!");
+      await signup(email, password, { full_name: fullName, role: 'customer' }); // FIXED
+      toast. success("Account created successfully!");
       navigate("/");
-    } catch {
-      toast.error("Registration failed. Please try again.");
+    } catch (error) {
+      console.error('Signup error:', error);
+      toast.error(error.message || "Registration failed.  Please try again.");
     }
   };
 
@@ -81,7 +82,7 @@ export default function Register() {
           Create Account
         </button>
 
-        <div className="mt-4 text-center text-sm text-gray-600 dark:text-gray-400">
+        <div className="mt-4 text-center text-sm text-gray-600 dark: text-gray-400">
           Already have an account?{" "}
           <Link to="/login" className="text-amber-700 hover:underline">
             Sign in

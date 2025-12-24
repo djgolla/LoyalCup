@@ -13,11 +13,19 @@ export default function AdminLogin() {
     e.preventDefault();
 
     try {
-      await login(email, password, "admin");
-      toast.success("Admin access granted");
+      const { user } = await login(email, password); // REMOVED 3rd param
+      
+      // Check if user has admin role
+      if (user?. user_metadata?.role !== 'admin') {
+        toast.error("Access denied. Admin privileges required.");
+        return;
+      }
+      
+      toast. success("Admin access granted");
       navigate("/admin/dashboard");
-    } catch {
-      toast.error("Login failed. Please try again.");
+    } catch (error) {
+      console.error('Admin login error:', error);
+      toast.error(error.message || "Login failed. Please try again.");
     }
   };
 
@@ -56,8 +64,8 @@ export default function AdminLogin() {
             <input
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 bg-slate-900 text-white rounded-lg outline-none focus:ring-2 focus:ring-amber-500 border border-slate-700"
+              onChange={(e) => setPassword(e.target. value)}
+              className="w-full px-4 py-2 bg-slate-900 text-white rounded-lg outline-none focus:ring-2 focus: ring-amber-500 border border-slate-700"
               placeholder="••••••••"
               required
             />
