@@ -12,10 +12,10 @@ import {
   updateCategory,
   deleteCategory,
 } from "../../api/menu";
-
-const SHOP_ID = "shop-1";
+import { useShop } from "../../context/ShopContext";
 
 export default function Categories() {
+  const { shopId, loading: shopLoading } = useShop();
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -23,13 +23,17 @@ export default function Categories() {
   const [formData, setFormData] = useState({ name: "", display_order: 0 });
 
   useEffect(() => {
-    loadCategories();
-  }, []);
+    if (shopId) {
+      loadCategories();
+    }
+  }, [shopId]);
 
   const loadCategories = async () => {
+    if (!shopId) return;
+    
     setLoading(true);
     try {
-      const response = await getCategories(SHOP_ID);
+      const response = await getCategories(shopId);
       setCategories(response.categories || []);
     } catch (error) {
       console.error("Failed to load categories:", error);
@@ -56,12 +60,14 @@ export default function Categories() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (!shopId) return;
+    
     try {
       if (editingCategory) {
-        await updateCategory(SHOP_ID, editingCategory.id, formData);
+        await updateCategory(shopId, editingCategory.id, formData);
         toast.success("Category updated");
       } else {
-        await createCategory(SHOP_ID, formData);
+        await createCategory(shopId, formData);
         toast.success("Category created");
       }
       setEditorOpen(false);
@@ -73,10 +79,11 @@ export default function Categories() {
   };
 
   const handleDelete = async (category) => {
+    if (!shopId) return;
     if (!confirm(`Delete category "${category.name}"?`)) return;
     
     try {
-      await deleteCategory(SHOP_ID, category.id);
+      await deleteCategory(shopId, category.id);
       toast.success("Category deleted");
       loadCategories();
     } catch (error) {

@@ -28,13 +28,25 @@ import AdminLogin from "./pages/auth/AdminLogin";
 // shop owner pages
 import ShopOwnerDashboard from "./pages/shop-owner/ShopOwnerDashboard";
 import MenuBuilder from "./pages/shop-owner/MenuBuilder";
+import Categories from "./pages/shop-owner/Categories";
+import Customizations from "./pages/shop-owner/Customizations";
+import ShopOwnerOrders from "./pages/shop-owner/Orders";
+import ShopOwnerAnalytics from "./pages/shop-owner/Analytics";
+import LoyaltySettings from "./pages/shop-owner/LoyaltySettings";
+import Workers from "./pages/shop-owner/Workers";
+import ShopSettings from "./pages/shop-owner/ShopSettings";
 
 // worker pages
 import OrderQueue from "./pages/worker/OrderQueue";
+import DailySummary from "./pages/worker/DailySummary";
 
 // admin pages
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import ShopManagement from "./pages/admin/ShopManagement";
+import Users from "./pages/admin/Users";
+import AdminAnalytics from "./pages/admin/Analytics";
+import AdminSettings from "./pages/admin/Settings";
+import AuditLog from "./pages/admin/AuditLog";
 
 // error pages
 import NotFound from "./pages/NotFound";
@@ -44,6 +56,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { AccentProvider } from "./context/AccentContext";
 import { AuthProvider } from "./context/AuthContext";
 import { CartProvider } from "./context/CartContext";
+import { ShopProvider } from "./context/ShopContext";
 
 export default function App() {
 
@@ -51,8 +64,9 @@ export default function App() {
     <ThemeProvider>
       <AccentProvider>
         <AuthProvider>
-          <CartProvider>
-            <BrowserRouter>
+          <ShopProvider>
+            <CartProvider>
+              <BrowserRouter>
               <Routes>
                 {/* auth pages */}
                 <Route element={<AuthLayout />}>
@@ -94,13 +108,13 @@ export default function App() {
                 >
                   <Route path="/shop-owner" element={<ShopOwnerDashboard />} />
                   <Route path="/shop-owner/menu" element={<MenuBuilder />} />
-                  <Route path="/shop-owner/categories" element={<div>Categories</div>} />
-                  <Route path="/shop-owner/customizations" element={<div>Customizations</div>} />
-                  <Route path="/shop-owner/orders" element={<div>Orders</div>} />
-                  <Route path="/shop-owner/analytics" element={<div>Analytics</div>} />
-                  <Route path="/shop-owner/loyalty" element={<div>Loyalty</div>} />
-                  <Route path="/shop-owner/workers" element={<div>Workers</div>} />
-                  <Route path="/shop-owner/settings" element={<div>Settings</div>} />
+                  <Route path="/shop-owner/categories" element={<Categories />} />
+                  <Route path="/shop-owner/customizations" element={<Customizations />} />
+                  <Route path="/shop-owner/orders" element={<ShopOwnerOrders />} />
+                  <Route path="/shop-owner/analytics" element={<ShopOwnerAnalytics />} />
+                  <Route path="/shop-owner/loyalty" element={<LoyaltySettings />} />
+                  <Route path="/shop-owner/workers" element={<Workers />} />
+                  <Route path="/shop-owner/settings" element={<ShopSettings />} />
                 </Route>
 
                 {/* worker pages */}
@@ -112,7 +126,7 @@ export default function App() {
                   }
                 >
                   <Route path="/worker" element={<OrderQueue />} />
-                  <Route path="/worker/summary" element={<div>Daily Summary</div>} />
+                  <Route path="/worker/summary" element={<DailySummary />} />
                 </Route>
 
                 {/* admin pages */}
@@ -125,10 +139,10 @@ export default function App() {
                 >
                   <Route path="/admin/dashboard" element={<AdminDashboard />} />
                   <Route path="/admin/shops" element={<ShopManagement />} />
-                  <Route path="/admin/users" element={<div>User Management</div>} />
-                  <Route path="/admin/analytics" element={<div>Platform Analytics</div>} />
-                  <Route path="/admin/settings" element={<div>Platform Settings</div>} />
-                  <Route path="/admin/audit-log" element={<div>Audit Log</div>} />
+                  <Route path="/admin/users" element={<Users />} />
+                  <Route path="/admin/analytics" element={<AdminAnalytics />} />
+                  <Route path="/admin/settings" element={<AdminSettings />} />
+                  <Route path="/admin/audit-log" element={<AuditLog />} />
                 </Route>
 
                 {/* 404 */}
@@ -136,8 +150,9 @@ export default function App() {
               </Routes>
             </BrowserRouter>
           </CartProvider>
-        </AuthProvider>
-      </AccentProvider>
-    </ThemeProvider>
+        </ShopProvider>
+      </AuthProvider>
+    </AccentProvider>
+  </ThemeProvider>
   );
 }

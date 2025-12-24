@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import OrderStatusBadge from "../customer/OrderStatusBadge";
 import { Clock, User } from "lucide-react";
 
@@ -25,16 +25,16 @@ export default function OrderCard({ order, onUpdateStatus }) {
     return labels[currentStatus];
   };
 
-  // calculate time since order was placed
-  const getTimeSince = (createdAt) => {
-    if (!createdAt) return "Just now";
-    const minutes = Math.floor((Date.now() - new Date(createdAt)) / 60000);
+  // calculate time since order was placed - memoized to avoid impure function calls
+  const timeSince = useMemo(() => {
+    if (!order.created_at) return "Just now";
+    const minutes = Math.floor((Date.now() - new Date(order.created_at)) / 60000);
     if (minutes < 1) return "Just now";
     if (minutes === 1) return "1 min ago";
     if (minutes < 60) return `${minutes} min ago`;
     const hours = Math.floor(minutes / 60);
     return `${hours}h ${minutes % 60}m ago`;
-  };
+  }, [order.created_at]);
 
   return (
     <div className="bg-white dark:bg-neutral-900 rounded-xl border border-gray-200 dark:border-neutral-800 overflow-hidden">
@@ -65,7 +65,7 @@ export default function OrderCard({ order, onUpdateStatus }) {
 
         <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-neutral-500 mt-2">
           <Clock size={12} />
-          {getTimeSince(order.created_at)}
+          {timeSince}
         </div>
       </div>
 

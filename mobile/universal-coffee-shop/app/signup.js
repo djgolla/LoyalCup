@@ -1,9 +1,10 @@
-// signup screen
+// signup screen - Enhanced with better UX and validation
 // universal-coffee-shop/app/signup.js
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
+import { Feather } from '@expo/vector-icons';
 
 export default function SignupScreen() {
   const router = useRouter();
@@ -13,6 +14,8 @@ export default function SignupScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleSignup = async () => {
     if (!email || !password || !name) {
@@ -44,7 +47,6 @@ export default function SignupScreen() {
         );
       } else if (result.session) {
         // User was automatically signed in (no email confirmation required)
-        // The auth context will update and _layout.js will redirect to home
         Alert.alert('Success', 'Account created successfully!');
       }
     } catch (error) {
@@ -56,68 +58,122 @@ export default function SignupScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>CREATE</Text>
-        <Text style={styles.stylizedTitle}>ACCOUNT</Text>
-      </View>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}>
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
+          
+          <TouchableOpacity 
+            style={styles.backButtonTop}
+            onPress={() => router.back()}
+            disabled={loading}>
+            <Feather name="arrow-left" size={24} color="#000" />
+          </TouchableOpacity>
 
-      <View style={styles.formContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder="Full Name"
-          value={name}
-          onChangeText={setName}
-          autoCapitalize="words"
-          editable={!loading}
-        />
+          <View style={styles.header}>
+            <Text style={styles.title}>CREATE</Text>
+            <Text style={styles.title}>YOUR</Text>
+            <Text style={styles.stylizedTitle}>ACCOUNT</Text>
+            <Text style={styles.subtitle}>Join thousands of coffee lovers</Text>
+          </View>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          editable={!loading}
-        />
-        
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          editable={!loading}
-        />
+          <View style={styles.formContainer}>
+            <View style={styles.inputContainer}>
+              <Feather name="user" size={20} color="#666" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Full name"
+                placeholderTextColor="#999"
+                value={name}
+                onChangeText={setName}
+                autoCapitalize="words"
+                editable={!loading}
+              />
+            </View>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Confirm Password"
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          secureTextEntry
-          editable={!loading}
-        />
+            <View style={styles.inputContainer}>
+              <Feather name="mail" size={20} color="#666" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Email address"
+                placeholderTextColor="#999"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                editable={!loading}
+              />
+            </View>
+            
+            <View style={styles.inputContainer}>
+              <Feather name="lock" size={20} color="#666" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Password (min 6 characters)"
+                placeholderTextColor="#999"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                editable={!loading}
+              />
+              <TouchableOpacity 
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeIcon}>
+                <Feather name={showPassword ? "eye" : "eye-off"} size={20} color="#666" />
+              </TouchableOpacity>
+            </View>
 
-        <TouchableOpacity 
-          style={[styles.primaryButton, loading && styles.buttonDisabled]} 
-          onPress={handleSignup}
-          disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="#FFF" />
-          ) : (
-            <Text style={styles.primaryButtonText}>SIGN UP</Text>
-          )}
-        </TouchableOpacity>
+            <View style={styles.inputContainer}>
+              <Feather name="lock" size={20} color="#666" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Confirm password"
+                placeholderTextColor="#999"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry={!showConfirmPassword}
+                editable={!loading}
+              />
+              <TouchableOpacity 
+                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                style={styles.eyeIcon}>
+                <Feather name={showConfirmPassword ? "eye" : "eye-off"} size={20} color="#666" />
+              </TouchableOpacity>
+            </View>
 
-        <TouchableOpacity 
-          onPress={() => router.back()}
-          disabled={loading}>
-          <Text style={styles.secondaryButtonText}>
-            ALREADY HAVE AN ACCOUNT? LOG IN
-          </Text>
-        </TouchableOpacity>
-      </View>
+            <TouchableOpacity 
+              style={[styles.primaryButton, loading && styles.buttonDisabled]} 
+              onPress={handleSignup}
+              disabled={loading}>
+              {loading ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.primaryButtonText}>CREATE ACCOUNT</Text>
+              )}
+            </TouchableOpacity>
+
+            <View style={styles.termsContainer}>
+              <Text style={styles.termsText}>
+                By signing up, you agree to our{' '}
+                <Text style={styles.termsLink}>Terms of Service</Text> and{' '}
+                <Text style={styles.termsLink}>Privacy Policy</Text>
+              </Text>
+            </View>
+
+            <TouchableOpacity 
+              style={styles.loginLink}
+              onPress={() => router.back()}
+              disabled={loading}>
+              <Text style={styles.loginLinkText}>
+                Already have an account? <Text style={styles.boldText}>Sign in</Text>
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -125,63 +181,122 @@ export default function SignupScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
+    backgroundColor: '#FAFAFA',
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 40,
+  },
+  backButtonTop: {
+    width: 44,
+    height: 44,
     justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
   },
   header: {
-    flex: 1,
-    justifyContent: 'center',
+    paddingTop: 20,
+    paddingBottom: 30,
     alignItems: 'center',
   },
   title: {
-    fontSize: 48,
-    color: '#000',
+    fontSize: 52,
+    color: '#1A1A1A',
     fontFamily: 'Anton-Regular',
     textAlign: 'center',
-    lineHeight: 50,
+    lineHeight: 56,
+    letterSpacing: 1,
   },
   stylizedTitle: {
-    fontSize: 54,
+    fontSize: 58,
     fontFamily: 'Canopee',
+    textAlign: 'center',
+    color: '#2C1810',
+    marginTop: 5,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 16,
     textAlign: 'center',
   },
   formContainer: {
-    flex: 2,
     width: '100%',
-    paddingTop: 20,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    height: 56,
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: '#FFF',
+  },
+  inputIcon: {
+    marginRight: 12,
   },
   input: {
-    width: '100%',
-    height: 50,
-    borderWidth: 2,
-    borderColor: '#000',
-    borderRadius: 25,
-    paddingHorizontal: 20,
+    flex: 1,
     fontSize: 16,
-    marginBottom: 15,
-    backgroundColor: '#FFF',
+    color: '#000',
+  },
+  eyeIcon: {
+    padding: 8,
   },
   primaryButton: {
     width: '100%',
-    height: 50,
+    height: 56,
     backgroundColor: '#000',
-    borderRadius: 25,
+    borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 25,
-    marginTop: 10,
+    marginTop: 8,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   primaryButtonText: {
     color: '#FFF',
     fontSize: 16,
     fontFamily: 'Anton-Regular',
+    letterSpacing: 1,
   },
-  secondaryButtonText: {
-    color: '#000',
-    fontSize: 14,
-    fontFamily: 'Anton-Regular',
+  termsContainer: {
+    marginBottom: 20,
+  },
+  termsText: {
+    fontSize: 13,
+    color: '#666',
     textAlign: 'center',
+    lineHeight: 20,
+  },
+  termsLink: {
+    color: '#000',
+    textDecorationLine: 'underline',
+  },
+  loginLink: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  loginLinkText: {
+    fontSize: 15,
+    color: '#666',
+    textAlign: 'center',
+  },
+  boldText: {
+    fontFamily: 'Anton-Regular',
+    color: '#000',
   },
   buttonDisabled: {
     opacity: 0.6,
