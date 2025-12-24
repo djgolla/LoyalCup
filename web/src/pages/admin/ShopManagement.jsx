@@ -102,7 +102,7 @@ export default function ShopManagement() {
   };
 
   const filteredShops = shops.filter((shop) =>
-    shop.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    shop.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     shop.profiles?.email?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 

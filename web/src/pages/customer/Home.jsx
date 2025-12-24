@@ -21,8 +21,9 @@ export default function Home() {
       setLoading(true);
       const data = await shopService.getShops(filters);
       setShops(data);
-      // Get featured shops (if featured field exists)
-      setFeaturedShops(data.filter(shop => shop.featured).slice(0, 6));
+      // Get featured shops (if featured field exists, otherwise show first 6)
+      const featured = data.filter(shop => shop.featured === true);
+      setFeaturedShops(featured.length > 0 ? featured.slice(0, 6) : data.slice(0, 6));
     } catch (error) {
       console.error('Failed to load shops:', error);
     } finally {
