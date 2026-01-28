@@ -132,8 +132,50 @@ class ShopService:
         image_type: str  # 'logo' or 'banner'
     ) -> str:
         """Upload shop logo or banner to Supabase Storage"""
-        # TODO: Implement Supabase Storage upload
-        return f"https://storage.example.com/{shop_id}/{image_type}.jpg"
+        if not self.db:
+            return f"https://storage.example.com/{shop_id}/{image_type}.jpg"
+        
+        try:
+            # Upload to Supabase Storage
+            bucket = 'shop-images'
+            path = f"{shop_id}/{image_type}.jpg"
+            
+            storage = self.db.get_service_client().storage
+            
+            # Try to upload, if file exists, remove and re-upload
+            try:
+                storage.from_(bucket).upload(
+                    path, 
+                    file_data, 
+                    {'content-type': 'image/jpeg', 'upsert': 'true'}
+                )
+            except Exception as upload_error:
+                # If upload fails, try to remove and re-upload
+                try:
+                    storage.from_(bucket).remove([path])
+                except:
+                    pass
+                storage.from_(bucket).upload(
+                    path, 
+                    file_data, 
+                    {'content-type': 'image/jpeg'}
+                )
+            
+            # Get public URL
+            url = storage.from_(bucket).get_public_url(path)
+            
+            # Update database
+            field = 'logo_url' if image_type == 'logo' else 'banner_url'
+            self.db.get_service_client()\
+                .table('shops')\
+                .update({field: url})\
+                .eq('id', shop_id)\
+                .execute()
+            
+            return url
+        except Exception as e:
+            print(f"Error uploading shop image: {e}")
+            raise
     
     async def get_shop_analytics(self, shop_id: str) -> Dict[str, Any]:
         """Get shop analytics (orders, revenue, etc.)"""
@@ -426,11 +468,53 @@ class ShopService:
     async def upload_item_image(
         self, 
         item_id: str, 
-        file_data: bytes
+        file_data: bytes,
+        shop_id: str
     ) -> str:
         """Upload menu item image to Supabase Storage"""
-        # TODO: Implement Supabase Storage upload
-        return f"https://storage.example.com/items/{item_id}.jpg"
+        if not self.db:
+            return f"https://storage.example.com/items/{item_id}.jpg"
+        
+        try:
+            # Upload to Supabase Storage
+            bucket = 'shop-images'
+            path = f"{shop_id}/menu/{item_id}.jpg"
+            
+            storage = self.db.get_service_client().storage
+            
+            # Try to upload, if file exists, remove and re-upload
+            try:
+                storage.from_(bucket).upload(
+                    path, 
+                    file_data, 
+                    {'content-type': 'image/jpeg', 'upsert': 'true'}
+                )
+            except Exception as upload_error:
+                # If upload fails, try to remove and re-upload
+                try:
+                    storage.from_(bucket).remove([path])
+                except:
+                    pass
+                storage.from_(bucket).upload(
+                    path, 
+                    file_data, 
+                    {'content-type': 'image/jpeg'}
+                )
+            
+            # Get public URL
+            url = storage.from_(bucket).get_public_url(path)
+            
+            # Update database
+            self.db.get_service_client()\
+                .table('menu_items')\
+                .update({'image_url': url})\
+                .eq('id', item_id)\
+                .execute()
+            
+            return url
+        except Exception as e:
+            print(f"Error uploading item image: {e}")
+            raise
     
     # ============================================================================
     # CUSTOMIZATION TEMPLATE OPERATIONS
