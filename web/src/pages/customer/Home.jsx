@@ -171,7 +171,7 @@ export default function Home() {
               Grow Your Business with LoyalCup
             </h2>
             <p className="text-xl lg:text-2xl mb-8 opacity-90">
-              Join hundreds of local coffee shops already on our platform
+              Join other local coffee shops already on our platform
             </p>
           </div>
 

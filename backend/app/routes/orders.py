@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from app.services.order_service import order_service
 from app.utils.security import require_auth, require_shop_worker, verify_token
-from app.database import get_supabase_client
+from app.database import get_supabase
 
 router = APIRouter(
     prefix="/api/v1",

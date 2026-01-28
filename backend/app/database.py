@@ -18,14 +18,21 @@ class SupabaseClient:
     
     def __init__(self):
         """Initialize Supabase clients with service role and anon keys."""
-        self.service_client: Client = create_client(
-            settings.supabase_url,
-            settings.supabase_service_role_key
-        )
-        self.anon_client: Client = create_client(
-            settings.supabase_url,
-            settings.supabase_anon_key
-        )
+        try:
+            self.service_client: Client = create_client(
+                settings.supabase_url,
+                settings.supabase_service_role_key
+            )
+            self.anon_client: Client = create_client(
+                settings.supabase_url,
+                settings.supabase_anon_key
+            )
+        except Exception as e:
+            print(f"❌ SUPABASE CONNECTION ERROR: {e}")
+            print(f"URL: {settings.supabase_url}")
+            print(f"Service Key Length: {len(settings.supabase_service_role_key)}")
+            print(f"Service Key Preview: {settings.supabase_service_role_key[:30]}...")
+            raise
     
     def get_service_client(self) -> Client:
         """
@@ -158,16 +165,20 @@ class SupabaseClient:
         return result or []
 
 
-# Global Supabase client instance
-supabase_client = SupabaseClient()
+# Global Supabase client instance - LAZY LOADED
+_supabase_client: Optional[SupabaseClient] = None
 
 
 def get_supabase() -> SupabaseClient:
     """
     Dependency function to get the Supabase client.
     Use this in FastAPI route dependencies.
+    Lazy loads the client on first use.
     
     Returns:
         Global SupabaseClient instance
     """
-    return supabase_client
+    global _supabase_client
+    if _supabase_client is None:
+        _supabase_client = SupabaseClient()
+    return _supabase_client
