@@ -273,7 +273,7 @@ async def upload_item_image(
         raise HTTPException(status_code=403, detail="Not authorized")
     
     file_data = await file.read()
-    image_url = await shop_service.upload_item_image(item_id, file_data)
+    image_url = await shop_service.upload_item_image(item_id, file_data, shop_id)
     return {"image_url": image_url}
 
 
