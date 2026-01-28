@@ -42,34 +42,52 @@ export default function ShopApplication() {
     setLoading(true);
 
     try {
-      // Create shop record with pending status
-      const { data, error } = await supabase
-        .from("shops")
-        .insert({
+      // Get access token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("You must be logged in to apply");
+        navigate("/login?redirect=/shop-application");
+        return;
+      }
+
+      // Call the new apply endpoint
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/shops/apply`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
           name: formData.businessName,
           description: formData.description,
           address: formData.address,
           city: formData.city,
           state: formData.state,
+          zip: formData.zip,
           phone: formData.phone,
-          owner_id: user.id,
-          status: "pending",
+          business_license: formData.businessLicense,
+          website: formData.website,
+          why_join: formData.whyJoin
         })
-        .select()
-        .single();
+      });
 
-      if (error) throw error;
+      const result = await response.json();
 
-      // Update user role to shop_owner
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update({ role: "shop_owner" })
-        .eq("id", user.id);
+      if (!response.ok) {
+        throw new Error(result.detail || "Failed to submit application");
+      }
 
-      if (profileError) throw profileError;
+      // Update user metadata in Supabase auth
+      await supabase.auth.updateUser({
+        data: { role: "shop_owner" }
+      });
 
-      toast.success("Application submitted successfully!");
-      navigate("/application-pending");
+      toast.success(result.message || "Application approved! Welcome to LoyalCup.");
+      
+      // Redirect to shop owner dashboard
+      setTimeout(() => {
+        navigate("/shop-owner");
+      }, 1000);
     } catch (error) {
       console.error("Failed to submit application:", error);
       toast.error(error.message || "Failed to submit application");

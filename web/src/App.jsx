@@ -80,12 +80,22 @@ export default function App() {
                 <Route element={<AuthLayout />}>
                   <Route path="/login" element={<CustomerLogin />} />
                   <Route path="/register" element={<Register />} />
-                  <Route path="/shop-application" element={<ShopApplication />} />
                   <Route path="/application-pending" element={<ApplicationPending />} />
                 </Route>
 
                 {/* admin login (separate, hidden) */}
                 <Route path="/admin" element={<AdminLogin />} />
+
+                {/* protected shop application */}
+                <Route
+                  element={
+                    <ProtectedRoute>
+                      <AuthLayout />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route path="/shop-application" element={<ShopApplication />} />
+                </Route>
 
                 {/* public customer pages */}
                 <Route element={<MainLayout />}>

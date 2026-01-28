@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { Search, Coffee, Gift, Zap, Store, Users, TrendingUp } from 'lucide-react';
 import ShopCard from '../../components/customer/ShopCard';
 import { shopService } from '../../services/shopService';
+import { useAuth } from '../../context/AuthContext';
 
 export default function Home() {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const [shops, setShops] = useState([]);
   const [featuredShops, setFeaturedShops] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -38,6 +40,14 @@ export default function Home() {
     }
   };
 
+  const handleShopApplication = () => {
+    if (isAuthenticated) {
+      navigate('/shop-application');
+    } else {
+      navigate('/login?redirect=/shop-application');
+    }
+  };
+
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
@@ -61,7 +71,7 @@ export default function Home() {
                 Order Now
               </button>
               <button
-                onClick={() => navigate('/shop-application')}
+                onClick={handleShopApplication}
                 className="px-8 py-4 bg-white dark:bg-neutral-800 text-amber-700 dark:text-amber-400 border-2 border-amber-700 dark:border-amber-600 rounded-full hover:bg-amber-50 dark:hover:bg-neutral-700 transition text-lg font-semibold"
               >
                 List Your Shop
@@ -203,7 +213,7 @@ export default function Home() {
 
           <div className="text-center">
             <button
-              onClick={() => navigate('/shop-application')}
+              onClick={handleShopApplication}
               className="px-8 py-4 bg-white text-amber-700 rounded-full hover:bg-gray-100 transition text-lg font-semibold shadow-xl"
             >
               Apply Now

@@ -114,6 +114,71 @@ class ShopService:
             print(f"Error deleting shop {shop_id}: {e}")
             return False
     
+    async def create_shop_application(self, user_id: str, application_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Create a shop application and upgrade user to shop_owner.
+        Validates that user doesn't already own a shop.
+        """
+        if not self.db:
+            return {
+                "shop": application_data,
+                "message": "Shop application created successfully"
+            }
+        
+        try:
+            # Check if user already owns a shop
+            existing_shop = self.db.get_service_client()\
+                .table('shops')\
+                .select('id')\
+                .eq('owner_id', user_id)\
+                .execute()
+            
+            if existing_shop.data and len(existing_shop.data) > 0:
+                raise ValueError("User already owns a shop")
+            
+            # Create shop with active status
+            shop_data = {
+                'name': application_data.get('name'),
+                'description': application_data.get('description'),
+                'address': application_data.get('address'),
+                'city': application_data.get('city'),
+                'state': application_data.get('state'),
+                'zip': application_data.get('zip'),
+                'phone': application_data.get('phone'),
+                'owner_id': user_id,
+                'status': 'active'
+            }
+            
+            shop_response = self.db.get_service_client()\
+                .table('shops')\
+                .insert(shop_data)\
+                .execute()
+            
+            if not shop_response.data or len(shop_response.data) == 0:
+                raise Exception("Failed to create shop")
+            
+            shop = shop_response.data[0]
+            
+            # Update user role to shop_owner
+            profile_response = self.db.get_service_client()\
+                .table('profiles')\
+                .update({'role': 'shop_owner'})\
+                .eq('id', user_id)\
+                .execute()
+            
+            if not profile_response.data:
+                raise Exception("Failed to update user role")
+            
+            return {
+                "shop": shop,
+                "message": "Shop application approved! Welcome to LoyalCup."
+            }
+        except ValueError as e:
+            raise e
+        except Exception as e:
+            print(f"Error creating shop application: {e}")
+            raise Exception(f"Failed to create shop application: {str(e)}")
+    
     async def find_nearby_shops(
         self, 
         lat: float, 
