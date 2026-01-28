@@ -27,8 +27,16 @@ export default function CustomerLogin() {
       } else if (userRole === 'shop_worker') {
         navigate('/worker');
       } else {
-        const from = location.state?.from?.pathname || "/";
-        navigate(from, { replace: true });
+        // Check for redirect query parameter
+        const params = new URLSearchParams(location.search);
+        const redirect = params.get('redirect');
+        
+        if (redirect) {
+          navigate(redirect);
+        } else {
+          const from = location.state?.from?.pathname || "/";
+          navigate(from, { replace: true });
+        }
       }
     } catch (error) {
       console.error('Login error:', error);

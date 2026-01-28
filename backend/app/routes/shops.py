@@ -8,6 +8,7 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
 from app.services.shop_service import shop_service
+from app.utils.security import require_auth
 
 
 router = APIRouter(
@@ -46,6 +47,19 @@ class ShopUpdate(BaseModel):
     hours: Optional[Dict[str, Any]] = None
     loyalty_points_per_dollar: Optional[int] = None
     participates_in_global_loyalty: Optional[bool] = None
+
+
+class ShopApplicationRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+    address: str
+    city: str
+    state: str
+    zip: str
+    phone: str
+    business_license: Optional[str] = None
+    website: Optional[str] = None
+    why_join: Optional[str] = None
 
 
 # ============================================================================
@@ -112,6 +126,33 @@ async def get_shop_menu(shop_id: str):
         }
     
     return {"menu": menu_by_category}
+
+
+@router.post("/apply")
+async def apply_shop_owner(
+    application: ShopApplicationRequest,
+    token_payload: dict = Depends(require_auth())
+):
+    """
+    Apply to become a shop owner and create a new shop.
+    Automatically upgrades user role to 'shop_owner' and creates shop with active status.
+    """
+    try:
+        user_id = token_payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid user token")
+        
+        # Create shop application
+        result = await shop_service.create_shop_application(
+            user_id=user_id,
+            application_data=application.dict()
+        )
+        
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================

@@ -9,7 +9,8 @@ import {
   BarChart3,
   Users,
   Award,
-  LogOut
+  LogOut,
+  UserCircle
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -176,7 +177,21 @@ export default function ShopOwnerSidebar() {
           }
         >
           <SettingsIcon size={20} />
-          Settings
+          Shop Settings
+        </NavLink>
+
+        <NavLink
+          to="/profile"
+          className={({ isActive }) =>
+            `${linkClasses} ${
+              isActive
+                ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700"
+                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
+            }`
+          }
+        >
+          <UserCircle size={20} />
+          Profile
         </NavLink>
       </nav>
 
