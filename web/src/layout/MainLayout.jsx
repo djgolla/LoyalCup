@@ -1,4 +1,4 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, Link } from "react-router-dom";
 import Header from "../components/navigation/Header";
 
 export default function MainLayout() {
@@ -20,16 +20,16 @@ export default function MainLayout() {
             <div>
               <h4 className="font-semibold text-gray-900 dark:text-white mb-3">Quick Links</h4>
               <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                <li><a href="/shops" className="hover:text-amber-700 transition">Find Shops</a></li>
-                <li><a href="/about" className="hover:text-amber-700 transition">About Us</a></li>
-                <li><a href="/contact" className="hover:text-amber-700 transition">Contact</a></li>
+                <li><Link to="/shops" className="hover:text-amber-700 transition">Find Shops</Link></li>
+                <li><Link to="/about" className="hover:text-amber-700 transition">About Us</Link></li>
+                <li><Link to="/contact" className="hover:text-amber-700 transition">Contact</Link></li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold text-gray-900 dark:text-white mb-3">Legal</h4>
               <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                <li><a href="/privacy" className="hover:text-amber-700 transition">Privacy Policy</a></li>
-                <li><a href="/terms" className="hover:text-amber-700 transition">Terms of Service</a></li>
+                <li><Link to="/privacy" className="hover:text-amber-700 transition">Privacy Policy</Link></li>
+                <li><Link to="/terms" className="hover:text-amber-700 transition">Terms of Service</Link></li>
               </ul>
             </div>
           </div>
