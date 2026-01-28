@@ -50,6 +50,12 @@ import AdminAnalytics from "./pages/admin/Analytics";
 import AdminSettings from "./pages/admin/Settings";
 import AuditLog from "./pages/admin/AuditLog";
 
+// info pages
+import Contact from "./pages/info/Contact";
+import Privacy from "./pages/info/Privacy";
+import Terms from "./pages/info/Terms";
+import About from "./pages/info/About";
+
 // error pages
 import NotFound from "./pages/NotFound";
 
@@ -86,6 +92,11 @@ export default function App() {
                   <Route path="/" element={<Home />} />
                   <Route path="/shops" element={<ShopList />} />
                   <Route path="/shops/:id" element={<ShopDetail />} />
+                  {/* info pages */}
+                  <Route path="/contact" element={<Contact />} />
+                  <Route path="/privacy" element={<Privacy />} />
+                  <Route path="/terms" element={<Terms />} />
+                  <Route path="/about" element={<About />} />
                 </Route>
 
                 {/* protected customer pages */}

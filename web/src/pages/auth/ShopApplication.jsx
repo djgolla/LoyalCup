@@ -42,6 +42,7 @@ export default function ShopApplication() {
     setLoading(true);
 
     try {
+      // Create shop record with pending status
       const { data, error } = await supabase
         .from("shops")
         .insert({
@@ -58,6 +59,14 @@ export default function ShopApplication() {
         .single();
 
       if (error) throw error;
+
+      // Update user role to shop_owner
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ role: "shop_owner" })
+        .eq("id", user.id);
+
+      if (profileError) throw profileError;
 
       toast.success("Application submitted successfully!");
       navigate("/application-pending");
