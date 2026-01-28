@@ -162,6 +162,8 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     paddingHorizontal: 15,
     fontSize: 16,
+    color: '#000',
+    backgroundColor: '#FFF',
   },
   iconButton: {
     marginLeft: 10,
