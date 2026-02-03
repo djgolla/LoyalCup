@@ -73,6 +73,7 @@ export default function HomeScreen() {
         <TextInput
           style={styles.searchBar}
           placeholder="Search coffee shops..."
+          placeholderTextColor="#999"
           value={searchQuery}
           onChangeText={handleSearch}
         />

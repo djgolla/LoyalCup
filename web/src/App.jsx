@@ -19,6 +19,7 @@ import Cart from "./pages/customer/Cart";
 import OrderHistory from "./pages/customer/OrderHistory";
 import Rewards from "./pages/customer/Rewards";
 import Profile from "./pages/customer/Profile";
+import EditProfile from "./pages/customer/EditProfile";
 
 // auth pages
 import CustomerLogin from "./pages/auth/CustomerLogin";
@@ -121,6 +122,7 @@ export default function App() {
                   <Route path="/orders" element={<OrderHistory />} />
                   <Route path="/rewards" element={<Rewards />} />
                   <Route path="/profile" element={<Profile />} />
+                  <Route path="/profile/edit" element={<EditProfile />} />
                 </Route>
 
                 {/* shop owner pages */}

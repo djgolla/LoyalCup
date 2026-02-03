@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import Modal from "../../components/Modal";
 import Loading from "../../components/Loading";
 import CustomizationBuilder from "../../components/shop-owner/CustomizationBuilder";
+import { useShop } from "../../context/ShopContext";
 import {
   getCustomizationTemplates,
   createCustomizationTemplate,
@@ -14,9 +15,8 @@ import {
   deleteCustomizationTemplate,
 } from "../../api/menu";
 
-const SHOP_ID = "shop-1";
-
 export default function Customizations() {
+  const { shopId } = useShop();
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -30,13 +30,17 @@ export default function Customizations() {
   });
 
   useEffect(() => {
-    loadTemplates();
-  }, []);
+    if (shopId) {
+      loadTemplates();
+    }
+  }, [shopId]);
 
   const loadTemplates = async () => {
+    if (!shopId) return;
+    
     setLoading(true);
     try {
-      const response = await getCustomizationTemplates(SHOP_ID);
+      const response = await getCustomizationTemplates(shopId);
       setTemplates(response.templates || []);
     } catch (error) {
       console.error("Failed to load templates:", error);
@@ -74,10 +78,10 @@ export default function Customizations() {
 
     try {
       if (editingTemplate) {
-        await updateCustomizationTemplate(SHOP_ID, editingTemplate.id, formData);
+        await updateCustomizationTemplate(shopId, editingTemplate.id, formData);
         toast.success("Template updated");
       } else {
-        await createCustomizationTemplate(SHOP_ID, formData);
+        await createCustomizationTemplate(shopId, formData);
         toast.success("Template created");
       }
       setEditorOpen(false);
@@ -92,7 +96,7 @@ export default function Customizations() {
     if (!confirm(`Delete template "${template.name}"?`)) return;
     
     try {
-      await deleteCustomizationTemplate(SHOP_ID, template.id);
+      await deleteCustomizationTemplate(shopId, template.id);
       toast.success("Template deleted");
       loadTemplates();
     } catch (error) {
