@@ -43,7 +43,7 @@ async def create_order(
             )
         
         # Set db client for order_service
-        db = get_supabase_client()
+        db = get_supabase()
         order_service.db = db
         
         # Create order
@@ -69,7 +69,7 @@ async def get_customer_orders(
         customer_id = user.get("sub")
         
         # Set db client
-        db = get_supabase_client()
+        db = get_supabase()
         order_service.db = db
         
         orders = await order_service.list_orders(
@@ -90,7 +90,7 @@ async def get_order_details(
     """Get specific order details"""
     try:
         # Set db client
-        db = get_supabase_client()
+        db = get_supabase()
         order_service.db = db
         
         order = await order_service.get_order(order_id)
@@ -119,7 +119,7 @@ async def get_order_status(
     """Get order status for polling/realtime"""
     try:
         # Set db client
-        db = get_supabase_client()
+        db = get_supabase()
         order_service.db = db
         
         order = await order_service.get_order(order_id)
@@ -153,7 +153,7 @@ async def cancel_order(
         customer_id = user.get("sub")
         
         # Set db client
-        db = get_supabase_client()
+        db = get_supabase()
         order_service.db = db
         
         order = await order_service.cancel_order(order_id, customer_id)
@@ -176,7 +176,7 @@ async def get_shop_orders(
     """Get shop's orders with filters"""
     try:
         # Set db client
-        db = get_supabase_client()
+        db = get_supabase()
         order_service.db = db
         
         orders = await order_service.list_orders(
@@ -201,7 +201,7 @@ async def get_order_queue(
     """Get active order queue (pending, accepted, preparing, ready)"""
     try:
         # Set db client
-        db = get_supabase_client()
+        db = get_supabase()
         order_service.db = db
         
         # Get orders for each active status
@@ -234,7 +234,7 @@ async def update_order_status(
     """Update order status"""
     try:
         # Set db client
-        db = get_supabase_client()
+        db = get_supabase()
         order_service.db = db
         
         # Verify order belongs to this shop
@@ -264,7 +264,7 @@ async def get_order_stats(
     """Get today's order statistics"""
     try:
         # Set db client
-        db = get_supabase_client()
+        db = get_supabase()
         order_service.db = db
         
         # Get today's orders
@@ -321,7 +321,7 @@ async def get_order_history(
     """Full order history with filters"""
     try:
         # Set db client
-        db = get_supabase_client()
+        db = get_supabase()
         order_service.db = db
         
         # Get orders

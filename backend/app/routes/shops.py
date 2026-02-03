@@ -159,24 +159,22 @@ async def apply_shop_owner(
 # SHOP OWNER ENDPOINTS (require shop ownership)
 # ============================================================================
 
-# TODO: Add authentication/authorization middleware
-def get_current_user_id():
-    """Mock function - replace with actual auth"""
-    return "mock-user-id"
-
-
 @router.post("")
-async def create_shop(shop_data: ShopCreate):
+async def create_shop(shop_data: ShopCreate, user: dict = Depends(require_auth())):
     """Create new shop"""
-    user_id = get_current_user_id()
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
     shop = await shop_service.create_shop(shop_data.dict(), user_id)
     return {"shop": shop}
 
 
 @router.put("/{shop_id}")
-async def update_shop(shop_id: str, shop_data: ShopUpdate):
+async def update_shop(shop_id: str, shop_data: ShopUpdate, user: dict = Depends(require_auth())):
     """Update shop details"""
-    user_id = get_current_user_id()
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):
@@ -189,9 +187,11 @@ async def update_shop(shop_id: str, shop_data: ShopUpdate):
 
 
 @router.delete("/{shop_id}")
-async def delete_shop(shop_id: str):
+async def delete_shop(shop_id: str, user: dict = Depends(require_auth())):
     """Deactivate shop"""
-    user_id = get_current_user_id()
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):
@@ -202,9 +202,11 @@ async def delete_shop(shop_id: str):
 
 
 @router.post("/{shop_id}/logo")
-async def upload_shop_logo(shop_id: str, file: UploadFile = File(...)):
+async def upload_shop_logo(shop_id: str, file: UploadFile = File(...), user: dict = Depends(require_auth())):
     """Upload shop logo"""
-    user_id = get_current_user_id()
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):
@@ -216,9 +218,11 @@ async def upload_shop_logo(shop_id: str, file: UploadFile = File(...)):
 
 
 @router.post("/{shop_id}/banner")
-async def upload_shop_banner(shop_id: str, file: UploadFile = File(...)):
+async def upload_shop_banner(shop_id: str, file: UploadFile = File(...), user: dict = Depends(require_auth())):
     """Upload shop banner"""
-    user_id = get_current_user_id()
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):
@@ -230,9 +234,11 @@ async def upload_shop_banner(shop_id: str, file: UploadFile = File(...)):
 
 
 @router.get("/{shop_id}/analytics")
-async def get_shop_analytics(shop_id: str):
+async def get_shop_analytics(shop_id: str, user: dict = Depends(require_auth())):
     """Get shop analytics"""
-    user_id = get_current_user_id()
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):

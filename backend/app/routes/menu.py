@@ -3,11 +3,12 @@ Menu Routes - API endpoints for menu and customization management
 Includes public and shop owner endpoints
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Depends
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
 from app.services.shop_service import shop_service
+from app.utils.security import require_auth
 
 
 router = APIRouter(
@@ -77,11 +78,6 @@ class ItemAvailability(BaseModel):
 # HELPER FUNCTIONS
 # ============================================================================
 
-def get_current_user_id():
-    """Mock function - replace with actual auth"""
-    return "mock-user-id"
-
-
 # ============================================================================
 # PUBLIC ENDPOINTS - CATEGORIES
 # ============================================================================
@@ -128,9 +124,11 @@ async def get_menu_item(shop_id: str, item_id: str):
 # ============================================================================
 
 @router.post("/{shop_id}/categories")
-async def create_category(shop_id: str, category_data: CategoryCreate):
+async def create_category(shop_id: str, category_data: CategoryCreate, user: dict = Depends(require_auth())):
     """Create a category"""
-    user_id = get_current_user_id()
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):
@@ -151,7 +149,9 @@ async def update_category(
     category_data: CategoryUpdate
 ):
     """Update a category"""
-    user_id = get_current_user_id()
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):
@@ -166,7 +166,9 @@ async def update_category(
 @router.delete("/{shop_id}/categories/{category_id}")
 async def delete_category(shop_id: str, category_id: str):
     """Delete a category"""
-    user_id = get_current_user_id()
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):
@@ -182,7 +184,9 @@ async def reorder_categories(
     category_orders: List[CategoryReorder]
 ):
     """Reorder categories"""
-    user_id = get_current_user_id()
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):
@@ -200,7 +204,9 @@ async def reorder_categories(
 @router.post("/{shop_id}/items")
 async def create_menu_item(shop_id: str, item_data: MenuItemCreate):
     """Create a menu item"""
-    user_id = get_current_user_id()
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):
@@ -217,7 +223,9 @@ async def update_menu_item(
     item_data: MenuItemUpdate
 ):
     """Update a menu item"""
-    user_id = get_current_user_id()
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):
@@ -232,7 +240,9 @@ async def update_menu_item(
 @router.delete("/{shop_id}/items/{item_id}")
 async def delete_menu_item(shop_id: str, item_id: str):
     """Delete a menu item"""
-    user_id = get_current_user_id()
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):
@@ -249,7 +259,9 @@ async def toggle_item_availability(
     availability: ItemAvailability
 ):
     """Toggle menu item availability"""
-    user_id = get_current_user_id()
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):
@@ -266,7 +278,9 @@ async def upload_item_image(
     file: UploadFile = File(...)
 ):
     """Upload menu item image"""
-    user_id = get_current_user_id()
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):
@@ -294,7 +308,9 @@ async def create_customization_template(
     template_data: CustomizationTemplateCreate
 ):
     """Create a customization template"""
-    user_id = get_current_user_id()
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):
@@ -314,7 +330,9 @@ async def update_customization_template(
     template_data: CustomizationTemplateUpdate
 ):
     """Update a customization template"""
-    user_id = get_current_user_id()
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):
@@ -329,7 +347,9 @@ async def update_customization_template(
 @router.delete("/{shop_id}/customizations/{template_id}")
 async def delete_customization_template(shop_id: str, template_id: str):
     """Delete a customization template"""
-    user_id = get_current_user_id()
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):
