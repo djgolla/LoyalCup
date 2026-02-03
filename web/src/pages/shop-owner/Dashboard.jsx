@@ -5,19 +5,25 @@ import { useEffect, useState } from "react";
 import { DollarSign, ShoppingBag, TrendingUp, Users } from "lucide-react";
 import StatsCard from "../../components/shop-owner/StatsCard";
 import { getShopAnalytics } from "../../api/shops";
+import { useShop } from "../../context/ShopContext";
 import Loading from "../../components/Loading";
 
 export default function Dashboard() {
+  const { shopId } = useShop();
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadAnalytics();
-  }, []);
+    if (shopId) {
+      loadAnalytics();
+    }
+  }, [shopId]);
 
   const loadAnalytics = async () => {
+    if (!shopId) return;
+    
     try {
-      const response = await getShopAnalytics("shop-1");
+      const response = await getShopAnalytics(shopId);
       setAnalytics(response.analytics);
     } catch (error) {
       console.error("Failed to load analytics:", error);
