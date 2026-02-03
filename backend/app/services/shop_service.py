@@ -185,10 +185,37 @@ class ShopService:
         lng: float, 
         radius_km: float = 10
     ) -> List[Dict[str, Any]]:
-        """Find shops within radius of coordinates"""
-        # TODO: Implement geolocation query with PostGIS
-        # For now, return all active shops
-        return await self.list_shops(active_only=True)
+        """
+        Find shops within radius of coordinates using PostGIS earthdistance.
+        Requires cube and earthdistance extensions enabled in database.
+        Falls back to returning all shops if geolocation fails.
+        """
+        if not self.db:
+            return []
+        
+        try:
+            # Use PostGIS earthdistance for geolocation query
+            # This requires the cube and earthdistance extensions (installed in migration 004)
+            query = f"""
+                SELECT *, 
+                    earth_distance(
+                        ll_to_earth(lat, lng),
+                        ll_to_earth({lat}, {lng})
+                    ) / 1000 AS distance_km
+                FROM shops
+                WHERE status = 'active'
+                    AND lat IS NOT NULL 
+                    AND lng IS NOT NULL
+                    AND earth_box(ll_to_earth({lat}, {lng}), {radius_km * 1000}) @> ll_to_earth(lat, lng)
+                ORDER BY distance_km ASC
+                LIMIT 50;
+            """
+            response = self.db.get_service_client().rpc('execute_sql', {'query': query}).execute()
+            return response.data or []
+        except Exception as e:
+            print(f"Geolocation query failed, falling back to all shops: {e}")
+            # Fallback to returning all active shops
+            return await self.list_shops(active_only=True)
     
     async def upload_shop_image(
         self, 
@@ -287,7 +314,7 @@ class ShopService:
                 "orders_today": orders_today,
                 "revenue_today": revenue_today,
                 "avg_order_value": avg_order_value,
-                "top_items": []  # TODO: Implement top items query
+                "top_items": await self._get_top_items(shop_id)
             }
         except Exception as e:
             print(f"Error getting analytics for shop {shop_id}: {e}")
@@ -631,27 +658,98 @@ class ShopService:
         template_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Update customization template"""
-        # TODO: Implement with Supabase
-        return template_data
+        if not self.db:
+            return template_data
+        
+        try:
+            response = self.db.get_service_client()\
+                .table('customization_templates')\
+                .update(template_data)\
+                .eq('id', template_id)\
+                .execute()
+            return response.data[0] if response.data else {}
+        except Exception as e:
+            print(f"Error updating customization template {template_id}: {e}")
+            raise
     
     async def delete_customization_template(self, template_id: str) -> bool:
         """Delete customization template"""
-        # TODO: Implement with Supabase
-        return True
+        if not self.db:
+            return True
+        
+        try:
+            self.db.get_service_client()\
+                .table('customization_templates')\
+                .delete()\
+                .eq('id', template_id)\
+                .execute()
+            return True
+        except Exception as e:
+            print(f"Error deleting customization template {template_id}: {e}")
+            return False
     
     # ============================================================================
     # HELPER METHODS
     # ============================================================================
     
-    def verify_shop_ownership(self, shop_id: str, user_id: str) -> bool:
-        """Verify that user owns the shop"""
-        # TODO: Implement with Supabase
-        return True
+    async def _get_top_items(self, shop_id: str, limit: int = 5) -> List[Dict[str, Any]]:
+        """Get top selling items for a shop using the popular_menu_items view"""
+        if not self.db:
+            return []
+        
+        try:
+            # Query the popular_menu_items view created in migration 004
+            response = self.db.get_service_client()\
+                .table('popular_menu_items')\
+                .select('*')\
+                .eq('shop_id', shop_id)\
+                .order('order_count', desc=True)\
+                .limit(limit)\
+                .execute()
+            return response.data or []
+        except Exception as e:
+            print(f"Error getting top items: {e}")
+            return []
     
-    def is_admin(self, user_id: str) -> bool:
+    async def verify_shop_ownership(self, shop_id: str, user_id: str) -> bool:
+        """Verify that user owns the shop"""
+        if not self.db:
+            return True  # Allow in testing without DB
+        
+        try:
+            response = self.db.get_service_client()\
+                .table('shops')\
+                .select('owner_id')\
+                .eq('id', shop_id)\
+                .single()\
+                .execute()
+            
+            if response.data:
+                return response.data['owner_id'] == user_id
+            return False
+        except Exception as e:
+            print(f"Error verifying shop ownership: {e}")
+            return False
+    
+    async def is_admin(self, user_id: str) -> bool:
         """Check if user is admin"""
-        # TODO: Implement with Supabase
-        return False
+        if not self.db:
+            return False
+        
+        try:
+            response = self.db.get_service_client()\
+                .table('profiles')\
+                .select('role')\
+                .eq('id', user_id)\
+                .single()\
+                .execute()
+            
+            if response.data:
+                return response.data['role'] == 'admin'
+            return False
+        except Exception as e:
+            print(f"Error checking admin status: {e}")
+            return False
 
 
 # Global service instance
