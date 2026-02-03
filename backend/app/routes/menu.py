@@ -146,7 +146,8 @@ async def create_category(shop_id: str, category_data: CategoryCreate, user: dic
 async def update_category(
     shop_id: str, 
     category_id: str, 
-    category_data: CategoryUpdate
+    category_data: CategoryUpdate,
+    user: dict = Depends(require_auth())
 ):
     """Update a category"""
     user_id = user.get("sub")
@@ -164,7 +165,7 @@ async def update_category(
 
 
 @router.delete("/{shop_id}/categories/{category_id}")
-async def delete_category(shop_id: str, category_id: str):
+async def delete_category(shop_id: str, category_id: str, user: dict = Depends(require_auth())):
     """Delete a category"""
     user_id = user.get("sub")
     if not user_id:
@@ -181,7 +182,8 @@ async def delete_category(shop_id: str, category_id: str):
 @router.put("/{shop_id}/categories/reorder")
 async def reorder_categories(
     shop_id: str, 
-    category_orders: List[CategoryReorder]
+    category_orders: List[CategoryReorder],
+    user: dict = Depends(require_auth())
 ):
     """Reorder categories"""
     user_id = user.get("sub")
@@ -202,7 +204,7 @@ async def reorder_categories(
 # ============================================================================
 
 @router.post("/{shop_id}/items")
-async def create_menu_item(shop_id: str, item_data: MenuItemCreate):
+async def create_menu_item(shop_id: str, item_data: MenuItemCreate, user: dict = Depends(require_auth())):
     """Create a menu item"""
     user_id = user.get("sub")
     if not user_id:
@@ -220,7 +222,8 @@ async def create_menu_item(shop_id: str, item_data: MenuItemCreate):
 async def update_menu_item(
     shop_id: str, 
     item_id: str, 
-    item_data: MenuItemUpdate
+    item_data: MenuItemUpdate,
+    user: dict = Depends(require_auth())
 ):
     """Update a menu item"""
     user_id = user.get("sub")
@@ -238,7 +241,7 @@ async def update_menu_item(
 
 
 @router.delete("/{shop_id}/items/{item_id}")
-async def delete_menu_item(shop_id: str, item_id: str):
+async def delete_menu_item(shop_id: str, item_id: str, user: dict = Depends(require_auth())):
     """Delete a menu item"""
     user_id = user.get("sub")
     if not user_id:
@@ -256,7 +259,8 @@ async def delete_menu_item(shop_id: str, item_id: str):
 async def toggle_item_availability(
     shop_id: str, 
     item_id: str, 
-    availability: ItemAvailability
+    availability: ItemAvailability,
+    user: dict = Depends(require_auth())
 ):
     """Toggle menu item availability"""
     user_id = user.get("sub")
@@ -275,7 +279,8 @@ async def toggle_item_availability(
 async def upload_item_image(
     shop_id: str, 
     item_id: str, 
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    user: dict = Depends(require_auth())
 ):
     """Upload menu item image"""
     user_id = user.get("sub")
@@ -305,7 +310,8 @@ async def get_customization_templates(shop_id: str):
 @router.post("/{shop_id}/customizations")
 async def create_customization_template(
     shop_id: str, 
-    template_data: CustomizationTemplateCreate
+    template_data: CustomizationTemplateCreate,
+    user: dict = Depends(require_auth())
 ):
     """Create a customization template"""
     user_id = user.get("sub")
@@ -327,7 +333,8 @@ async def create_customization_template(
 async def update_customization_template(
     shop_id: str, 
     template_id: str, 
-    template_data: CustomizationTemplateUpdate
+    template_data: CustomizationTemplateUpdate,
+    user: dict = Depends(require_auth())
 ):
     """Update a customization template"""
     user_id = user.get("sub")
@@ -345,7 +352,11 @@ async def update_customization_template(
 
 
 @router.delete("/{shop_id}/customizations/{template_id}")
-async def delete_customization_template(shop_id: str, template_id: str):
+async def delete_customization_template(
+    shop_id: str, 
+    template_id: str,
+    user: dict = Depends(require_auth())
+):
     """Delete a customization template"""
     user_id = user.get("sub")
     if not user_id:

@@ -30,10 +30,14 @@ export default function Customizations() {
   });
 
   useEffect(() => {
-    loadTemplates();
-  }, []);
+    if (shopId) {
+      loadTemplates();
+    }
+  }, [shopId]);
 
   const loadTemplates = async () => {
+    if (!shopId) return;
+    
     setLoading(true);
     try {
       const response = await getCustomizationTemplates(shopId);
