@@ -1,9 +1,11 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi.responses import Response
 from typing import List, Optional
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 
 from app.services.order_service import order_service
+from app.services.export_service import export_service
 from app.utils.security import require_auth, require_shop_worker, verify_token
 from app.database import get_supabase
 
@@ -359,8 +361,48 @@ async def export_orders(
     user: dict = Depends(require_shop_worker()),
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    format: str = Query("csv", regex="^(csv|json)$")
+    format: str = Query("csv", regex="^(csv|pdf)$")
 ):
-    """Export orders as CSV or JSON"""
-    # TODO: Implement export functionality
-    return {"message": "Export functionality not yet implemented"}
+    """Export orders as CSV or PDF"""
+    try:
+        # Set db client
+        db = get_supabase()
+        order_service.db = db
+        
+        # Get all orders for the shop
+        orders = await order_service.list_orders(
+            shop_id=shop_id,
+            limit=10000  # High limit for export
+        )
+        
+        # Filter by date range if provided
+        if start_date:
+            orders = [o for o in orders if o.get("created_at", "") >= start_date]
+        if end_date:
+            orders = [o for o in orders if o.get("created_at", "") <= end_date]
+        
+        # Get shop name for PDF
+        shop_result = db.table("shops").select("name").eq("id", shop_id).execute()
+        shop_name = shop_result.data[0]["name"] if shop_result.data else "Shop"
+        
+        # Generate export based on format
+        if format == "csv":
+            csv_content = export_service.export_orders_to_csv(orders)
+            return Response(
+                content=csv_content,
+                media_type="text/csv",
+                headers={
+                    "Content-Disposition": f"attachment; filename=orders_{shop_id}_{datetime.now().strftime('%Y%m%d')}.csv"
+                }
+            )
+        elif format == "pdf":
+            pdf_content = export_service.export_orders_to_pdf(orders, shop_name)
+            return Response(
+                content=pdf_content,
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f"attachment; filename=orders_{shop_id}_{datetime.now().strftime('%Y%m%d')}.pdf"
+                }
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -9,3 +9,8 @@ passlib[bcrypt]==1.7.4
 python-multipart==0.0.20
 httpx>=0.25.0
 email-validator>=2.0.0
+slowapi==0.1.9
+sentry-sdk[fastapi]==2.19.0
+reportlab==4.2.5
+sendgrid==6.11.0
+redis==5.2.1
