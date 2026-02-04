@@ -253,21 +253,21 @@ async def get_shop_analytics(shop_id: str, user: dict = Depends(require_auth()))
 # ============================================================================
 
 @router.get("/admin/shops")
-async def list_all_shops(token_payload: dict = Depends(require_admin())):
+async def list_all_shops(_: dict = Depends(require_admin())):
     """List all shops including inactive (admin only)"""
     shops = await shop_service.list_shops(active_only=False)
     return {"shops": shops}
 
 
 @router.put("/admin/shops/{shop_id}/approve")
-async def approve_shop(shop_id: str, token_payload: dict = Depends(require_admin())):
+async def approve_shop(shop_id: str, _: dict = Depends(require_admin())):
     """Approve new shop (admin only)"""
     shop = await shop_service.update_shop(shop_id, {"approved": True})
     return {"shop": shop}
 
 
 @router.put("/admin/shops/{shop_id}/feature")
-async def feature_shop(shop_id: str, token_payload: dict = Depends(require_admin())):
+async def feature_shop(shop_id: str, _: dict = Depends(require_admin())):
     """Feature shop on homepage (admin only)"""
     shop = await shop_service.update_shop(shop_id, {"featured": True})
     return {"shop": shop}
