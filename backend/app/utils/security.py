@@ -1,7 +1,7 @@
 """
 Security utilities for JWT validation and role-based access control.
 """
-from typing import Optional, Callable
+from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError

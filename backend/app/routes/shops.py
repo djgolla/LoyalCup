@@ -8,7 +8,7 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
 from app.services.shop_service import shop_service
-from app.utils.security import require_auth
+from app.utils.security import require_auth, require_admin
 
 
 router = APIRouter(
@@ -253,36 +253,21 @@ async def get_shop_analytics(shop_id: str, user: dict = Depends(require_auth()))
 # ============================================================================
 
 @router.get("/admin/shops")
-async def list_all_shops():
+async def list_all_shops(token_payload: dict = Depends(require_admin())):
     """List all shops including inactive (admin only)"""
-    user_id = get_current_user_id()
-    
-    if not shop_service.is_admin(user_id):
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
     shops = await shop_service.list_shops(active_only=False)
     return {"shops": shops}
 
 
 @router.put("/admin/shops/{shop_id}/approve")
-async def approve_shop(shop_id: str):
+async def approve_shop(shop_id: str, token_payload: dict = Depends(require_admin())):
     """Approve new shop (admin only)"""
-    user_id = get_current_user_id()
-    
-    if not shop_service.is_admin(user_id):
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
     shop = await shop_service.update_shop(shop_id, {"approved": True})
     return {"shop": shop}
 
 
 @router.put("/admin/shops/{shop_id}/feature")
-async def feature_shop(shop_id: str):
+async def feature_shop(shop_id: str, token_payload: dict = Depends(require_admin())):
     """Feature shop on homepage (admin only)"""
-    user_id = get_current_user_id()
-    
-    if not shop_service.is_admin(user_id):
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
     shop = await shop_service.update_shop(shop_id, {"featured": True})
     return {"shop": shop}
