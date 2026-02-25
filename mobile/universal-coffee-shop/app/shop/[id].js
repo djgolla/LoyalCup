@@ -1,7 +1,7 @@
 // shop detail screen
 // universal-coffee-shop/app/shop/[id].js
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { shopService } from '../../services/shopService';
@@ -86,7 +86,17 @@ export default function ShopDetailScreen() {
 
       <ScrollView style={styles.content}>
         <View style={styles.shopInfo}>
-          <View style={[styles.shopLogo, { backgroundColor: shop?.color || '#F0F0F0' }]} />
+          {shop?.logo_url ? (
+            <Image 
+              source={{ uri: shop.logo_url }} 
+              style={styles.shopLogo}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={[styles.shopLogo, { backgroundColor: shop?.color || '#F0F0F0', justifyContent: 'center', alignItems: 'center' }]}>
+              <Text style={{ fontSize: 40 }}>☕</Text>
+            </View>
+          )}
           <Text style={styles.shopName}>{shop?.name}</Text>
           <Text style={styles.shopAddress}>{shop?.address || 'Location not available'}</Text>
         </View>
@@ -143,25 +153,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 15,
     borderBottomWidth: 2,
-    borderBottomColor: '#000',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderColor: '#000',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontFamily: 'Anton-Regular',
-    flex: 1,
-    textAlign: 'center',
+  },
+  backButton: {
+    padding: 5,
   },
   cartButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 5,
+    position: 'relative',
   },
   badge: {
     position: 'absolute',
@@ -177,7 +180,7 @@ const styles = StyleSheet.create({
   badgeText: {
     color: '#FFF',
     fontSize: 12,
-    fontFamily: 'Anton-Regular',
+    fontWeight: 'bold',
   },
   content: {
     flex: 1,
@@ -223,7 +226,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   categoryText: {
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: 'Anton-Regular',
     color: '#000',
   },

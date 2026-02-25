@@ -1,6 +1,7 @@
-// universal-coffee-shop/components/CoffeeShopCard.js - Enhanced with better visuals
+// CoffeeShopCard component
+// universal-coffee-shop/components/CoffeeShopCard.js
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Image } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
@@ -15,7 +16,17 @@ export default function CoffeeShopCard({ shop }) {
       activeOpacity={0.7}>
       
       <View style={[styles.logoContainer, { backgroundColor: shop.color || '#F5F5F5' }]}>
-        <View style={styles.logo} />
+        {shop.logo_url ? (
+          <Image 
+            source={{ uri: shop.logo_url }} 
+            style={styles.logo}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={styles.logo}>
+            <Text style={{ fontSize: 24 }}>☕</Text>
+          </View>
+        )}
       </View>
       
       <View style={styles.cardContent}>
@@ -28,23 +39,19 @@ export default function CoffeeShopCard({ shop }) {
         </View>
         <View style={styles.ratingRow}>
           <Feather name="star" size={14} color="#FFB800" />
-          <Text style={styles.ratingText}>4.8</Text>
-          <Text style={styles.dotSeparator}>•</Text>
-          <Text style={styles.distanceText}>0.3 mi</Text>
+          <Text style={styles.ratingText}>4.5</Text>
+          <Text style={styles.reviewCount}>(120)</Text>
         </View>
       </View>
 
       <TouchableOpacity 
-        style={[styles.favoriteButton, isFavorited && styles.favoriteButtonActive]} 
-        onPress={(e) => {
-          e.stopPropagation();
-          setIsFavorited(!isFavorited);
-        }}>
+        style={styles.favoriteButton}
+        onPress={() => setIsFavorited(!isFavorited)}>
         <Feather 
           name={isFavorited ? "heart" : "heart"} 
           size={20} 
-          color={isFavorited ? '#FF3B30' : '#999'} 
-          fill={isFavorited ? '#FF3B30' : 'none'}
+          color={isFavorited ? "#FF0000" : "#999"}
+          fill={isFavorited ? "#FF0000" : "none"}
         />
       </TouchableOpacity>
     </TouchableOpacity>
@@ -54,24 +61,22 @@ export default function CoffeeShopCard({ shop }) {
 const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 20,
-    marginBottom: 16,
     backgroundColor: '#FFF',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: '#000',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: '#F0F0F0',
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 5,
   },
   logoContainer: {
     width: 70,
     height: 70,
-    borderRadius: 16,
-    marginRight: 16,
+    borderRadius: 12,
     borderWidth: 2,
     borderColor: '#000',
     justifyContent: 'center',
@@ -79,65 +84,48 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   logo: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#FFF',
-    borderWidth: 2,
-    borderColor: '#000',
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   cardContent: {
     flex: 1,
+    marginLeft: 12,
     justifyContent: 'center',
   },
   shopName: {
-    fontSize: 18,
-    color: '#1A1A1A',
+    fontSize: 16,
     fontFamily: 'Anton-Regular',
-    textTransform: 'uppercase',
     marginBottom: 4,
-    letterSpacing: 0.5,
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 4,
-    gap: 4,
   },
   locationText: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#666',
-    flex: 1,
+    marginLeft: 4,
   },
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
   },
   ratingText: {
-    fontSize: 13,
-    color: '#1A1A1A',
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginLeft: 4,
   },
-  dotSeparator: {
-    fontSize: 13,
-    color: '#CCC',
-    marginHorizontal: 4,
-  },
-  distanceText: {
-    fontSize: 13,
+  reviewCount: {
+    fontSize: 12,
     color: '#666',
+    marginLeft: 4,
   },
   favoriteButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    padding: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    marginLeft: 8,
-  },
-  favoriteButtonActive: {
-    backgroundColor: '#FFE5E5',
   },
 });
