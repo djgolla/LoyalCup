@@ -1,69 +1,80 @@
-// Launch screen - Enhanced with better typography and animations
-// universal-coffee-shop/app/launch.js
-import React from "react";
-import { StyleSheet, Text, View, PanResponder, Animated } from "react-native";
-import { useRouter } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
+import React from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, Image, Dimensions } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Feather } from '@expo/vector-icons';
+
+const { width, height } = Dimensions.get('window');
 
 export default function LaunchScreen() {
   const router = useRouter();
-  const pulseAnim = React.useRef(new Animated.Value(1)).current;
-
-  React.useEffect(() => {
-    // Pulse animation for swipe up indicator
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.2,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }, []);
-
-  // Simple RN gesture detector (no Reanimated)
-  const panResponder = React.useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        // start responding only if finger moves vertically
-        return Math.abs(gestureState.dy) > 20;
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy < -20) {
-          // negative = swipe up
-          router.push("/login");
-        }
-      },
-    })
-  ).current;
 
   return (
-    <SafeAreaView style={styles.container} {...panResponder.panHandlers}>
-      <View style={styles.gradientOverlay} />
-      
-      <View style={styles.textContainer}>
-        <View style={styles.titleWrapper}>
-          <Text style={styles.title}>DISCOVER</Text>
-          <Text style={[styles.title, styles.localTitle]}>LOCAL</Text>
-          <Text style={styles.title}>STAY</Text>
-          <Text style={styles.title}>LOYAL</Text>
-        </View>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <LinearGradient
+        colors={['#00704A', '#004D33', '#003324']}
+        style={styles.gradient}>
         
-        <Text style={styles.subtitle}>Your favorite coffee, one tap away</Text>
-      </View>
-      
-      <View style={styles.swipeContainer}>
-        <Animated.View style={[styles.swipeIndicator, { transform: [{ scale: pulseAnim }] }]}>
-          <Text style={styles.swipeArrow}>↑</Text>
-        </Animated.View>
-        <Text style={styles.swipeUpText}>SWIPE UP TO START</Text>
-      </View>
+        <View style={styles.content}>
+          <View style={styles.logoContainer}>
+            <View style={styles.logoCircle}>
+              <Feather name="coffee" size={60} color="#FFF" />
+            </View>
+            <Text style={styles.appName}>LoyalCup</Text>
+            <Text style={styles.tagline}>Your favorite coffee shops,{'\n'}all in one place</Text>
+          </View>
+
+          <View style={styles.features}>
+            <View style={styles.featureItem}>
+              <View style={styles.featureIcon}>
+                <Feather name="map-pin" size={24} color="#00704A" />
+              </View>
+              <View style={styles.featureText}>
+                <Text style={styles.featureTitle}>Discover Local</Text>
+                <Text style={styles.featureDescription}>Find amazing coffee shops nearby</Text>
+              </View>
+            </View>
+
+            <View style={styles.featureItem}>
+              <View style={styles.featureIcon}>
+                <Feather name="award" size={24} color="#00704A" />
+              </View>
+              <View style={styles.featureText}>
+                <Text style={styles.featureTitle}>Earn Rewards</Text>
+                <Text style={styles.featureDescription}>Get points with every purchase</Text>
+              </View>
+            </View>
+
+            <View style={styles.featureItem}>
+              <View style={styles.featureIcon}>
+                <Feather name="zap" size={24} color="#00704A" />
+              </View>
+              <View style={styles.featureText}>
+                <Text style={styles.featureTitle}>Order Ahead</Text>
+                <Text style={styles.featureDescription}>Skip the line, save time</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.buttons}>
+            <TouchableOpacity 
+              style={styles.primaryButton}
+              onPress={() => router.push('/signup')}
+              activeOpacity={0.8}>
+              <Text style={styles.primaryButtonText}>Get Started</Text>
+              <Feather name="arrow-right" size={20} color="#00704A" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.secondaryButton}
+              onPress={() => router.push('/login')}
+              activeOpacity={0.8}>
+              <Text style={styles.secondaryButtonText}>I Already Have an Account</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </LinearGradient>
     </SafeAreaView>
   );
 }
@@ -71,79 +82,101 @@ export default function LaunchScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FAFAFA",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 60,
   },
-  gradientOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '40%',
-    backgroundColor: 'rgba(139, 69, 19, 0.03)',
-  },
-  textContainer: {
+  gradient: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 20,
   },
-  titleWrapper: {
-    alignItems: "center",
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 40,
+    paddingBottom: 40,
+    justifyContent: 'space-between',
   },
-  title: {
-    fontSize: 68,
-    color: "#1A1A1A",
-    fontFamily: "Anton-Regular",
-    lineHeight: 72,
-    textTransform: "uppercase",
-    letterSpacing: 2,
+  logoContainer: {
+    alignItems: 'center',
+    marginTop: 40,
   },
-  localTitle: {
-    fontSize: 88,
-    color: "#2C1810",
-    fontFamily: "Canopee",
-    textShadowColor: 'rgba(139, 69, 19, 0.3)',
-    textShadowOffset: { width: 3, height: 3 },
-    textShadowRadius: 6,
-    lineHeight: 92,
+  logoCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    borderWidth: 3,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
-  subtitle: {
+  appName: {
+    fontSize: 48,
+    fontWeight: '800',
+    color: '#FFF',
+    marginBottom: 12,
+    letterSpacing: -1,
+  },
+  tagline: {
     fontSize: 16,
-    color: "#666",
-    marginTop: 30,
-    textAlign: "center",
-    letterSpacing: 0.5,
+    color: 'rgba(255, 255, 255, 0.9)',
+    textAlign: 'center',
+    lineHeight: 24,
   },
-  swipeContainer: {
-    alignItems: "center",
-    gap: 15,
+  features: {
+    gap: 20,
   },
-  swipeIndicator: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: "#000",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+  featureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
   },
-  swipeArrow: {
-    fontSize: 32,
-    color: "#FFF",
-    fontWeight: "bold",
+  featureIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: '#FFF',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  swipeUpText: {
-    fontSize: 13,
-    color: "#000000",
-    letterSpacing: 3,
-    fontFamily: "Anton-Regular",
-    opacity: 0.7,
+  featureText: {
+    flex: 1,
+  },
+  featureTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFF',
+    marginBottom: 4,
+  },
+  featureDescription: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  buttons: {
+    gap: 12,
+  },
+  primaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF',
+    paddingVertical: 18,
+    borderRadius: 16,
+    gap: 8,
+  },
+  primaryButtonText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#00704A',
+  },
+  secondaryButton: {
+    alignItems: 'center',
+    paddingVertical: 18,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  secondaryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFF',
   },
 });
