@@ -1,10 +1,11 @@
-// shop detail screen - STARBUCKS STYLE
-// universal-coffee-shop/app/shop/[id].js
-import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, Animated, Dimensions } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { 
+  StyleSheet, Text, View, TouchableOpacity, ScrollView, 
+  Image, Dimensions, RefreshControl, ActivityIndicator, Linking, Alert 
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { shopService } from '../../services/shopService';
 import { useCart } from '../../context/CartContext';
 import { supabase } from '../../lib/supabase';
 
@@ -15,11 +16,11 @@ export default function ShopDetailScreen() {
   const { id } = useLocalSearchParams();
   const { addItem, getItemCount } = useCart();
   const [shop, setShop] = useState(null);
-  const [menu, setMenu] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [menuItems, setMenuItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [shopStats, setShopStats] = useState({ rating: 0, reviewCount: 0, avgPrepTime: 15 });
-  const scrollY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     loadShopData();
@@ -27,284 +28,393 @@ export default function ShopDetailScreen() {
 
   const loadShopData = async () => {
     try {
-      const [shopData, menuData] = await Promise.all([
-        shopService.getShop(id),
-        shopService.getMenu(id),
-        loadShopStats(id)
-      ]);
+      const { data: shopData, error: shopError } = await supabase
+        .from('shops')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (shopError) throw shopError;
       setShop(shopData);
-      setMenu(menuData);
+
+      const { data: categoriesData, error: categoriesError } = await supabase
+        .from('menu_categories')
+        .select('*')
+        .eq('shop_id', id)
+        .order('display_order', { ascending: true });
+
+      if (categoriesError) throw categoriesError;
+      setCategories(categoriesData || []);
+
+      const { data: itemsData, error: itemsError } = await supabase
+        .from('menu_items')
+        .select('*')
+        .eq('shop_id', id)
+        .eq('is_available', true)
+        .order('display_order', { ascending: true });
+
+      if (itemsError) throw itemsError;
+      setMenuItems(itemsData || []);
     } catch (error) {
       console.error('Failed to load shop data:', error);
-      Alert.alert('Error', 'Failed to load shop details');
     } finally {
       setLoading(false);
     }
   };
 
-  const loadShopStats = async (shopId) => {
-    try {
-      // Get order count and calculate average rating from orders
-      const { data: orders, error } = await supabase
-        .from('orders')
-        .select('rating, created_at, completed_at')
-        .eq('shop_id', shopId)
-        .eq('status', 'completed')
-        .not('rating', 'is', null);
-
-      if (!error && orders && orders.length > 0) {
-        // Calculate average rating
-        const totalRating = orders.reduce((sum, order) => sum + (order.rating || 0), 0);
-        const avgRating = (totalRating / orders.length).toFixed(1);
-        
-        // Calculate average prep time
-        const timeDiffs = orders
-          .filter(o => o.completed_at && o.created_at)
-          .map(o => {
-            const created = new Date(o.created_at);
-            const completed = new Date(o.completed_at);
-            return (completed - created) / 1000 / 60; // minutes
-          });
-        
-        const avgTime = timeDiffs.length > 0 
-          ? Math.round(timeDiffs.reduce((sum, t) => sum + t, 0) / timeDiffs.length)
-          : 15;
-
-        setShopStats({
-          rating: parseFloat(avgRating),
-          reviewCount: orders.length,
-          avgPrepTime: avgTime
-        });
-      } else {
-        // Default values if no data
-        setShopStats({ rating: 0, reviewCount: 0, avgPrepTime: 15 });
-      }
-    } catch (error) {
-      console.error('Failed to load shop stats:', error);
-      setShopStats({ rating: 0, reviewCount: 0, avgPrepTime: 15 });
-    }
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadShopData();
+    setRefreshing(false);
   };
 
   const handleAddToCart = (item) => {
-    addItem({
+    const cartItem = {
       id: `${id}:${item.id}`,
       name: item.name,
-      price: item.price,
-      image_url: item.image_url,
+      price: parseFloat(item.base_price),
+      quantity: 1,
       shopId: id,
       shopName: shop?.name,
-    });
-    Alert.alert('Added! 🎉', `${item.name} is in your cart`);
+      image_url: item.image_url,
+    };
+    
+    addItem(cartItem);
   };
 
-  const categories = ['all', ...new Set(menu.map(item => item.category))];
-  const filteredMenu = selectedCategory === 'all' 
-    ? menu 
-    : menu.filter(item => item.category === selectedCategory);
+  const handleCall = () => {
+    if (!shop?.phone) {
+      Alert.alert('No phone number', 'This shop hasn\'t added a phone number yet.');
+      return;
+    }
+    
+    const phoneNumber = shop.phone.replace(/[^0-9]/g, '');
+    Linking.openURL(`tel:${phoneNumber}`);
+  };
+
+  const handleDirections = () => {
+    if (!shop?.address) {
+      Alert.alert('No address', 'This shop hasn\'t added an address yet.');
+      return;
+    }
+    
+    const encodedAddress = encodeURIComponent(shop.address);
+    const url = `https://maps.apple.com/?q=${encodedAddress}`;
+    Linking.openURL(url);
+  };
+
+  const getFilteredItems = () => {
+    if (selectedCategory === 'all') {
+      return menuItems;
+    }
+    return menuItems.filter(item => item.category_id === selectedCategory);
+  };
+
+  const getItemsByCategory = () => {
+    const grouped = {};
+    
+    menuItems.forEach(item => {
+      const categoryId = item.category_id || 'uncategorized';
+      if (!grouped[categoryId]) {
+        grouped[categoryId] = [];
+      }
+      grouped[categoryId].push(item);
+    });
+
+    return grouped;
+  };
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#00704A" />
+          <Text style={styles.loadingText}>Loading shop...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  const headerOpacity = scrollY.interpolate({
-    inputRange: [0, 100],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  });
+  if (!shop) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <View style={styles.errorContainer}>
+          <Feather name="alert-circle" size={64} color="#FF3B30" />
+          <Text style={styles.errorText}>Shop not found</Text>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <Text style={styles.backButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const filteredItems = getFilteredItems();
+  const itemsByCategory = getItemsByCategory();
+  const cartCount = getItemCount();
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Floating Header */}
-      <Animated.View style={[styles.header, { 
-        backgroundColor: headerOpacity.interpolate({
-          inputRange: [0, 1],
-          outputRange: ['rgba(255,255,255,0)', 'rgba(255,255,255,0.98)']
-        }),
-        borderBottomColor: headerOpacity.interpolate({
-          inputRange: [0, 1],
-          outputRange: ['rgba(0,0,0,0)', 'rgba(0,0,0,0.1)']
-        })
-      }]}>
-        <TouchableOpacity 
-          style={styles.headerButton}
-          onPress={() => router.back()}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
           <Feather name="arrow-left" size={24} color="#000" />
         </TouchableOpacity>
-        <Animated.Text style={[styles.headerTitle, { opacity: headerOpacity }]}>
-          {shop?.name}
-        </Animated.Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>{shop.name}</Text>
         <TouchableOpacity 
-          style={styles.headerButton}
+          style={styles.headerButton} 
           onPress={() => router.push('/cart')}>
-          <Feather name="shopping-bag" size={24} color="#000" />
-          {getItemCount() > 0 && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{getItemCount()}</Text>
+          <Feather name="shopping-cart" size={24} color="#000" />
+          {cartCount > 0 && (
+            <View style={styles.cartBadge}>
+              <Text style={styles.cartBadgeText}>{cartCount}</Text>
             </View>
           )}
         </TouchableOpacity>
-      </Animated.View>
+      </View>
 
-      <Animated.ScrollView 
-        style={styles.content}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: false }
-        )}
-        scrollEventThrottle={16}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-      >
-        {/* Hero Section */}
-        <View style={styles.heroSection}>
-          {shop?.banner_url ? (
-            <Image 
-              source={{ uri: shop.banner_url }} 
-              style={styles.heroBanner}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={styles.heroBannerPlaceholder}>
-              <Text style={{ fontSize: 60, opacity: 0.3 }}>☕</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Shop Info */}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }>
+        
         <View style={styles.shopInfo}>
-          <View style={styles.shopHeader}>
-            <View style={styles.shopLogoContainer}>
-              {shop?.logo_url ? (
-                <Image 
-                  source={{ uri: shop.logo_url }} 
-                  style={styles.shopLogo}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View style={[styles.shopLogo, styles.shopLogoPlaceholder]}>
-                  <Text style={{ fontSize: 32 }}>☕</Text>
-                </View>
-              )}
-            </View>
-            <View style={styles.shopHeaderInfo}>
-              <Text style={styles.shopName}>{shop?.name}</Text>
-              <View style={styles.statsRow}>
-                {shopStats.reviewCount > 0 ? (
-                  <>
-                    <View style={styles.statItem}>
-                      <Feather name="star" size={16} color="#00704A" />
-                      <Text style={styles.statText}>{shopStats.rating}</Text>
-                      <Text style={styles.statTextGray}>({shopStats.reviewCount})</Text>
-                    </View>
-                    <Text style={styles.statDivider}>•</Text>
-                  </>
-                ) : (
-                  <>
-                    <View style={styles.newBadge}>
-                      <Text style={styles.newBadgeText}>NEW</Text>
-                    </View>
-                    <Text style={styles.statDivider}>•</Text>
-                  </>
-                )}
-                <View style={styles.statItem}>
-                  <Feather name="clock" size={16} color="#666" />
-                  <Text style={styles.statText}>{shopStats.avgPrepTime}-{shopStats.avgPrepTime + 5} min</Text>
-                </View>
+          <View style={styles.shopLogoContainer}>
+            {shop.logo_url ? (
+              <Image source={{ uri: shop.logo_url }} style={styles.shopLogo} />
+            ) : (
+              <View style={styles.shopLogoPlaceholder}>
+                <Feather name="coffee" size={40} color="#00704A" />
               </View>
-              {shop?.address && (
-                <View style={styles.addressRow}>
-                  <Feather name="map-pin" size={14} color="#666" />
-                  <Text style={styles.addressText} numberOfLines={1}>
-                    {shop.address}, {shop.city}
-                  </Text>
-                </View>
-              )}
-            </View>
+            )}
           </View>
-
-          {shop?.description && (
+          
+          {shop.description && (
             <Text style={styles.shopDescription}>{shop.description}</Text>
           )}
+          
+          <View style={styles.shopDetails}>
+            {shop.address && (
+              <View style={styles.detailRow}>
+                <Feather name="map-pin" size={16} color="#00704A" />
+                <Text style={styles.detailText}>{shop.address}</Text>
+              </View>
+            )}
+            {shop.phone && (
+              <View style={styles.detailRow}>
+                <Feather name="phone" size={16} color="#00704A" />
+                <Text style={styles.detailText}>{shop.phone}</Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.actionButtons}>
+            {shop.phone && (
+              <TouchableOpacity style={styles.actionButton} onPress={handleCall}>
+                <Feather name="phone" size={20} color="#00704A" />
+                <Text style={styles.actionButtonText}>Call</Text>
+              </TouchableOpacity>
+            )}
+            {shop.address && (
+              <TouchableOpacity style={styles.actionButton} onPress={handleDirections}>
+                <Feather name="navigation" size={20} color="#00704A" />
+                <Text style={styles.actionButtonText}>Directions</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
-        {/* Category Tabs */}
-        <View style={styles.categorySection}>
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoryScroll}
-          >
-            {categories.map(category => (
+        {categories.length > 0 && (
+          <View style={styles.categoryTabsWrapper}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryTabsContent}>
               <TouchableOpacity
-                key={category}
                 style={[
                   styles.categoryTab,
-                  selectedCategory === category && styles.categoryTabActive
+                  selectedCategory === 'all' && styles.categoryTabActive
                 ]}
-                onPress={() => setSelectedCategory(category)}>
+                onPress={() => setSelectedCategory('all')}>
                 <Text style={[
                   styles.categoryTabText,
-                  selectedCategory === category && styles.categoryTabTextActive
+                  selectedCategory === 'all' && styles.categoryTabTextActive
                 ]}>
-                  {category === 'all' ? 'All Items' : category}
+                  All
                 </Text>
               </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+              {categories.map((category) => (
+                <TouchableOpacity
+                  key={category.id}
+                  style={[
+                    styles.categoryTab,
+                    selectedCategory === category.id && styles.categoryTabActive
+                  ]}
+                  onPress={() => setSelectedCategory(category.id)}>
+                  <Text style={[
+                    styles.categoryTabText,
+                    selectedCategory === category.id && styles.categoryTabTextActive
+                  ]}>
+                    {category.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
-        {/* Menu Grid */}
-        <View style={styles.menuGrid}>
-          {filteredMenu.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Feather name="coffee" size={48} color="#DDD" />
-              <Text style={styles.emptyText}>No items available</Text>
-            </View>
-          ) : (
-            filteredMenu.map(item => (
-              <TouchableOpacity 
-                key={item.id} 
-                style={styles.menuItem}
-                onPress={() => handleAddToCart(item)}
-                activeOpacity={0.9}
-              >
-                {item.image_url ? (
-                  <Image 
-                    source={{ uri: item.image_url }} 
-                    style={styles.menuItemImage}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={styles.menuItemImagePlaceholder}>
-                    <Text style={{ fontSize: 48 }}>☕</Text>
-                  </View>
-                )}
-                <View style={styles.menuItemInfo}>
-                  <Text style={styles.menuItemName} numberOfLines={2}>{item.name}</Text>
-                  {item.description && (
-                    <Text style={styles.menuItemDescription} numberOfLines={2}>
-                      {item.description}
-                    </Text>
-                  )}
-                  <View style={styles.menuItemFooter}>
-                    <Text style={styles.menuItemPrice}>${item.price?.toFixed(2) || '0.00'}</Text>
-                    <View style={styles.addButtonSmall}>
-                      <Feather name="plus" size={16} color="#FFF" />
+        {selectedCategory === 'all' ? (
+          <View style={styles.menuContainer}>
+            {categories.length > 0 ? (
+              categories.map((category) => {
+                const categoryItems = itemsByCategory[category.id] || [];
+                if (categoryItems.length === 0) return null;
+
+                return (
+                  <View key={category.id} style={styles.categorySection}>
+                    <Text style={styles.categorySectionTitle}>{category.name}</Text>
+                    {category.description && (
+                      <Text style={styles.categorySectionDescription}>
+                        {category.description}
+                      </Text>
+                    )}
+                    <View style={styles.menuGrid}>
+                      {categoryItems.map((item) => (
+                        <View key={item.id} style={styles.menuItem}>
+                          {item.image_url && (
+                            <Image 
+                              source={{ uri: item.image_url }} 
+                              style={styles.menuItemImage}
+                            />
+                          )}
+                          <View style={styles.menuItemContent}>
+                            <Text style={styles.menuItemName} numberOfLines={2}>
+                              {item.name}
+                            </Text>
+                            {item.description && (
+                              <Text style={styles.menuItemDescription} numberOfLines={2}>
+                                {item.description}
+                              </Text>
+                            )}
+                            <View style={styles.menuItemFooter}>
+                              <Text style={styles.menuItemPrice}>
+                                ${parseFloat(item.base_price).toFixed(2)}
+                              </Text>
+                              <TouchableOpacity
+                                style={styles.addButton}
+                                onPress={() => handleAddToCart(item)}>
+                                <Feather name="plus" size={20} color="#FFF" />
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        </View>
+                      ))}
                     </View>
                   </View>
-                </View>
-              </TouchableOpacity>
-            ))
-          )}
-        </View>
+                );
+              })
+            ) : null}
 
-        <View style={{ height: 60 }} />
-      </Animated.ScrollView>
+            {itemsByCategory.uncategorized && itemsByCategory.uncategorized.length > 0 && (
+              <View style={styles.categorySection}>
+                <Text style={styles.categorySectionTitle}>Menu Items</Text>
+                <View style={styles.menuGrid}>
+                  {itemsByCategory.uncategorized.map((item) => (
+                    <View key={item.id} style={styles.menuItem}>
+                      {item.image_url && (
+                        <Image 
+                          source={{ uri: item.image_url }} 
+                          style={styles.menuItemImage}
+                        />
+                      )}
+                      <View style={styles.menuItemContent}>
+                        <Text style={styles.menuItemName} numberOfLines={2}>
+                          {item.name}
+                        </Text>
+                        {item.description && (
+                          <Text style={styles.menuItemDescription} numberOfLines={2}>
+                            {item.description}
+                          </Text>
+                        )}
+                        <View style={styles.menuItemFooter}>
+                          <Text style={styles.menuItemPrice}>
+                            ${parseFloat(item.base_price).toFixed(2)}
+                          </Text>
+                          <TouchableOpacity
+                            style={styles.addButton}
+                            onPress={() => handleAddToCart(item)}>
+                            <Feather name="plus" size={20} color="#FFF" />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
+        ) : (
+          <View style={styles.menuContainer}>
+            {filteredItems.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Feather name="coffee" size={64} color="#CCC" />
+                <Text style={styles.emptyText}>No items in this category</Text>
+              </View>
+            ) : (
+              <View style={styles.menuGrid}>
+                {filteredItems.map((item) => (
+                  <View key={item.id} style={styles.menuItem}>
+                    {item.image_url && (
+                      <Image 
+                        source={{ uri: item.image_url }} 
+                        style={styles.menuItemImage}
+                      />
+                    )}
+                    <View style={styles.menuItemContent}>
+                      <Text style={styles.menuItemName} numberOfLines={2}>
+                        {item.name}
+                      </Text>
+                      {item.description && (
+                        <Text style={styles.menuItemDescription} numberOfLines={2}>
+                          {item.description}
+                        </Text>
+                      )}
+                      <View style={styles.menuItemFooter}>
+                        <Text style={styles.menuItemPrice}>
+                          ${parseFloat(item.base_price).toFixed(2)}
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.addButton}
+                          onPress={() => handleAddToCart(item)}>
+                          <Feather name="plus" size={20} color="#FFF" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
+        <View style={{ height: 100 }} />
+      </ScrollView>
+
+      {cartCount > 0 && (
+        <TouchableOpacity 
+          style={styles.floatingCartButton}
+          onPress={() => router.push('/cart')}>
+          <View style={styles.floatingCartContent}>
+            <View style={styles.floatingCartBadge}>
+              <Text style={styles.floatingCartBadgeText}>{cartCount}</Text>
+            </View>
+            <Text style={styles.floatingCartText}>View Cart</Text>
+            <Feather name="arrow-right" size={20} color="#FFF" />
+          </View>
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 }
@@ -319,36 +429,62 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  errorText: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#000',
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  backButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: '#00704A',
+    borderRadius: 8,
+  },
+  backButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
   header: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 50,
-    paddingBottom: 12,
-    zIndex: 100,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFF',
     borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
   headerButton: {
     padding: 8,
     position: 'relative',
   },
   headerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#000',
     flex: 1,
     textAlign: 'center',
-    color: '#000',
+    paddingHorizontal: 16,
   },
-  badge: {
+  cartBadge: {
     position: 'absolute',
     top: 4,
     right: 4,
-    backgroundColor: '#00704A',
+    backgroundColor: '#FF3B30',
     borderRadius: 10,
     minWidth: 20,
     height: 20,
@@ -356,187 +492,181 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 6,
   },
-  badgeText: {
-    color: '#FFF',
-    fontSize: 11,
-    fontWeight: 'bold',
-  },
-  content: {
-    flex: 1,
-  },
-  heroSection: {
-    height: 160,
-    width: '100%',
-  },
-  heroBanner: {
-    width: '100%',
-    height: '100%',
-  },
-  heroBannerPlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#E8F5E9',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  shopInfo: {
-    backgroundColor: '#FFF',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
-  },
-  shopHeader: {
-    flexDirection: 'row',
-    marginBottom: 12,
-  },
-  shopLogoContainer: {
-    marginRight: 16,
-  },
-  shopLogo: {
-    width: 70,
-    height: 70,
-    borderRadius: 12,
-    backgroundColor: '#FFF',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-  },
-  shopLogoPlaceholder: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-  },
-  shopHeaderInfo: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  shopName: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 6,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  statText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000',
-  },
-  statTextGray: {
-    fontSize: 14,
-    color: '#666',
-  },
-  statDivider: {
-    marginHorizontal: 8,
-    color: '#CCC',
-  },
-  newBadge: {
-    backgroundColor: '#00704A',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  newBadgeText: {
+  cartBadgeText: {
     color: '#FFF',
     fontSize: 12,
     fontWeight: 'bold',
   },
-  addressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  addressText: {
-    fontSize: 13,
-    color: '#666',
+  scrollView: {
     flex: 1,
   },
+  scrollContent: {
+    paddingBottom: 20,
+  },
+  shopInfo: {
+    backgroundColor: '#FFF',
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 20,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  shopLogoContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#FFF',
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: '#00704A',
+  },
+  shopLogo: {
+    width: '100%',
+    height: '100%',
+  },
+  shopLogoPlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+  },
   shopDescription: {
+    fontSize: 15,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  shopDetails: {
+    width: '100%',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    gap: 8,
+  },
+  detailText: {
     fontSize: 14,
     color: '#666',
-    lineHeight: 20,
   },
-  categorySection: {
-    backgroundColor: '#FFF',
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
   },
-  categoryScroll: {
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: '#00704A',
+  },
+  actionButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#00704A',
+  },
+  categoryTabsWrapper: {
+    backgroundColor: '#FFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  categoryTabsContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     gap: 8,
   },
   categoryTab: {
     paddingHorizontal: 20,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 20,
     backgroundColor: '#F5F5F5',
+    marginRight: 8,
   },
   categoryTabActive: {
     backgroundColor: '#00704A',
   },
   categoryTabText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
     color: '#666',
   },
   categoryTabTextActive: {
     color: '#FFF',
   },
-  menuGrid: {
-    paddingHorizontal: 16,
+  menuContainer: {
     paddingTop: 16,
+  },
+  categorySection: {
+    marginBottom: 32,
+  },
+  categorySectionTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#000',
+    paddingHorizontal: 20,
+    marginBottom: 8,
+  },
+  categorySectionDescription: {
+    fontSize: 14,
+    color: '#666',
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  menuGrid: {
+    paddingHorizontal: 12,
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
   menuItem: {
-    width: (width - 48) / 2,
+    width: (width - 32) / 2,
     backgroundColor: '#FFF',
-    borderRadius: 12,
+    borderRadius: 16,
     marginBottom: 16,
+    marginHorizontal: 4,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   menuItemImage: {
     width: '100%',
     height: 140,
     backgroundColor: '#F5F5F5',
   },
-  menuItemImagePlaceholder: {
-    width: '100%',
-    height: 140,
-    backgroundColor: '#F5F5F5',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  menuItemInfo: {
+  menuItemContent: {
     padding: 12,
   },
   menuItemName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
     color: '#000',
     marginBottom: 4,
-    lineHeight: 20,
   },
   menuItemDescription: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#666',
-    marginBottom: 8,
-    lineHeight: 16,
+    marginBottom: 12,
+    lineHeight: 18,
   },
   menuItemFooter: {
     flexDirection: 'row',
@@ -544,26 +674,66 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   menuItemPrice: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#000',
+    color: '#00704A',
   },
-  addButtonSmall: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  addButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#00704A',
     justifyContent: 'center',
     alignItems: 'center',
   },
   emptyState: {
-    width: '100%',
-    paddingVertical: 60,
     alignItems: 'center',
+    paddingVertical: 60,
   },
   emptyText: {
     fontSize: 16,
     color: '#999',
-    marginTop: 12,
+    marginTop: 16,
+  },
+  floatingCartButton: {
+    position: 'absolute',
+    bottom: 24,
+    left: 20,
+    right: 20,
+    backgroundColor: '#00704A',
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  floatingCartContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    gap: 12,
+  },
+  floatingCartBadge: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    minWidth: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  floatingCartBadgeText: {
+    color: '#00704A',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  floatingCartText: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+    flex: 1,
   },
 });
