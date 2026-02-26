@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { toast } from "sonner";
-import supabase from "../../lib/supabase";
+import { supabase } from "../../lib/supabase";
 
 export default function ShopApplication() {
   const { user } = useAuth();
@@ -42,7 +42,6 @@ export default function ShopApplication() {
     setLoading(true);
 
     try {
-      // Get access token
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         toast.error("You must be logged in to apply");
@@ -50,14 +49,11 @@ export default function ShopApplication() {
         return;
       }
 
-      // Call the new apply endpoint
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/shops/apply`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({
+      // Insert shop directly into Supabase
+      const { data: shopData, error: shopError } = await supabase
+        .from('shops')
+        .insert({
+          owner_id: session.user.id,
           name: formData.businessName,
           description: formData.description,
           address: formData.address,
@@ -65,24 +61,35 @@ export default function ShopApplication() {
           state: formData.state,
           zip: formData.zip,
           phone: formData.phone,
-          business_license: formData.businessLicense,
           website: formData.website,
-          why_join: formData.whyJoin
         })
-      });
+        .select()
+        .single();
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.detail || "Failed to submit application");
+      if (shopError) {
+        console.error("Shop creation error:", shopError);
+        throw new Error(shopError.message);
       }
 
-      // Update user metadata in Supabase auth
+      console.log("Shop created:", shopData);
+
+      // Update user role in profiles table
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ role: 'shop_owner' })
+        .eq('id', session.user.id);
+
+      if (profileError) {
+        console.error("Profile update error:", profileError);
+        // Don't throw - shop is already created
+      }
+
+      // Update user metadata
       await supabase.auth.updateUser({
         data: { role: "shop_owner" }
       });
 
-      toast.success(result.message || "Application approved! Welcome to LoyalCup.");
+      toast.success("Shop created successfully! Welcome to LoyalCup.");
       
       // Redirect to shop owner dashboard
       setTimeout(() => {
