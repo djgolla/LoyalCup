@@ -4,17 +4,17 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, SafeAreaView, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { loyaltyService } from '../services/loyaltyService';
+import { supabase } from '../lib/supabase';
+import { getGlobalPoints, getAllShopPoints, getPointsHistory } from '../services/loyaltyService';
 
 export default function RewardsScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [points, setPoints] = useState(0);
-  const [balances, setBalances] = useState([]);
-  const [rewards, setRewards] = useState([]);
+  const [globalPoints, setGlobalPoints] = useState(null);
+  const [shopPoints, setShopPoints] = useState([]);
   const [transactions, setTransactions] = useState([]);
-  const [activeTab, setActiveTab] = useState('rewards'); // rewards | history
+  const [activeTab, setActiveTab] = useState('overview'); // overview | history
 
   useEffect(() => {
     loadData();
@@ -22,16 +22,18 @@ export default function RewardsScreen() {
 
   const loadData = async () => {
     try {
-      const [pointsData, rewardsData, transactionsData] = await Promise.all([
-        loyaltyService.getPoints(),
-        loyaltyService.getRewards(),
-        loyaltyService.getTransactions(),
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const [global, shops, history] = await Promise.all([
+        getGlobalPoints(user.id),
+        getAllShopPoints(user.id),
+        getPointsHistory(user.id, 20)
       ]);
-      
-      setPoints(pointsData.points || 0);
-      setBalances(pointsData.balances || []);
-      setRewards(rewardsData);
-      setTransactions(transactionsData.slice(0, 20)); // Last 20 transactions
+
+      setGlobalPoints(global);
+      setShopPoints(shops);
+      setTransactions(history);
     } catch (error) {
       console.error('Failed to load rewards data:', error);
     } finally {
@@ -45,25 +47,15 @@ export default function RewardsScreen() {
     setRefreshing(false);
   };
 
-  const handleRedeemReward = async (rewardId, pointsRequired) => {
-    if (points < pointsRequired) {
-      alert('Not enough points to redeem this reward');
-      return;
-    }
-
-    try {
-      await loyaltyService.redeemPoints(pointsRequired, rewardId);
-      alert('Reward redeemed successfully!');
-      loadData();
-    } catch (error) {
-      console.error('Failed to redeem reward:', error);
-      alert('Failed to redeem reward. Please try again.');
-    }
-  };
-
   const formatDate = (dateStr) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const getTotalPoints = () => {
+    const global = globalPoints?.current_balance || 0;
+    const shopTotal = shopPoints.reduce((sum, sp) => sum + (sp.current_balance || 0), 0);
+    return global + shopTotal;
   };
 
   if (loading) {
@@ -97,20 +89,37 @@ export default function RewardsScreen() {
         {/* Points Card */}
         <View style={styles.pointsCard}>
           <Text style={styles.pointsLabel}>TOTAL POINTS</Text>
-          <Text style={styles.pointsValue}>{points}</Text>
+          <Text style={styles.pointsValue}>{getTotalPoints()}</Text>
           <Text style={styles.pointsSubtext}>Keep earning to unlock more rewards!</Text>
         </View>
 
-        {/* Shop Balances */}
-        {balances.length > 0 && (
+        {/* Global Points */}
+        {globalPoints && globalPoints.current_balance > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Shop Balances</Text>
-            {balances.map((balance) => (
+            <Text style={styles.sectionTitle}>Global Points</Text>
+            <View style={styles.balanceCard}>
+              <View>
+                <Text style={styles.balanceName}>Universal Points</Text>
+                <Text style={styles.balanceSubtext}>Use at any shop</Text>
+              </View>
+              <Text style={styles.balancePoints}>{globalPoints.current_balance} pts</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Shop Balances */}
+        {shopPoints.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Shop Points</Text>
+            {shopPoints.map((balance) => (
               <View key={balance.id} style={styles.balanceCard}>
-                <Text style={styles.balanceName}>
-                  {balance.shops?.name || 'Global Loyalty'}
-                </Text>
-                <Text style={styles.balancePoints}>{balance.points} pts</Text>
+                <View>
+                  <Text style={styles.balanceName}>
+                    {balance.shop?.name || 'Unknown Shop'}
+                  </Text>
+                  <Text style={styles.balanceSubtext}>Shop-specific rewards</Text>
+                </View>
+                <Text style={styles.balancePoints}>{balance.current_balance} pts</Text>
               </View>
             ))}
           </View>
@@ -119,11 +128,11 @@ export default function RewardsScreen() {
         {/* Tabs */}
         <View style={styles.tabs}>
           <TouchableOpacity
-            style={[styles.tab, activeTab === 'rewards' && styles.tabActive]}
-            onPress={() => setActiveTab('rewards')}
+            style={[styles.tab, activeTab === 'overview' && styles.tabActive]}
+            onPress={() => setActiveTab('overview')}
           >
-            <Text style={[styles.tabText, activeTab === 'rewards' && styles.tabTextActive]}>
-              Available Rewards
+            <Text style={[styles.tabText, activeTab === 'overview' && styles.tabTextActive]}>
+              Overview
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -136,42 +145,26 @@ export default function RewardsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Available Rewards */}
-        {activeTab === 'rewards' && (
+        {/* Overview Tab */}
+        {activeTab === 'overview' && (
           <View style={styles.section}>
-            {rewards.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Feather name="gift" size={48} color="#CCC" />
-                <Text style={styles.emptyText}>No rewards available yet</Text>
+            <View style={styles.statsGrid}>
+              <View style={styles.statCard}>
+                <Text style={styles.statValue}>{globalPoints?.total_earned || 0}</Text>
+                <Text style={styles.statLabel}>Total Earned</Text>
               </View>
-            ) : (
-              rewards.map((reward) => {
-                const canRedeem = points >= reward.points_required;
-                return (
-                  <View key={reward.id} style={styles.rewardCard}>
-                    <View style={styles.rewardInfo}>
-                      <Text style={styles.rewardName}>{reward.name}</Text>
-                      <Text style={styles.rewardDescription}>{reward.description}</Text>
-                      <Text style={styles.rewardShop}>
-                        {reward.shops?.name || 'LoyalCup'}
-                      </Text>
-                    </View>
-                    <View style={styles.rewardAction}>
-                      <Text style={styles.rewardPoints}>{reward.points_required} pts</Text>
-                      <TouchableOpacity
-                        style={[styles.redeemButton, !canRedeem && styles.redeemButtonDisabled]}
-                        onPress={() => handleRedeemReward(reward.id, reward.points_required)}
-                        disabled={!canRedeem}
-                      >
-                        <Text style={[styles.redeemButtonText, !canRedeem && styles.redeemButtonTextDisabled]}>
-                          {canRedeem ? 'Redeem' : 'Locked'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                );
-              })
-            )}
+              <View style={styles.statCard}>
+                <Text style={styles.statValue}>{globalPoints?.total_spent || 0}</Text>
+                <Text style={styles.statLabel}>Total Spent</Text>
+              </View>
+            </View>
+
+            <View style={styles.infoCard}>
+              <Feather name="info" size={20} color="#00704A" />
+              <Text style={styles.infoText}>
+                Earn 10 points per $1 spent at any shop. Redeem 100 points for $1 off!
+              </Text>
+            </View>
           </View>
         )}
 
@@ -182,16 +175,24 @@ export default function RewardsScreen() {
               <View style={styles.emptyState}>
                 <Feather name="clock" size={48} color="#CCC" />
                 <Text style={styles.emptyText}>No transaction history yet</Text>
+                <Text style={styles.emptySubtext}>Start earning points by placing orders!</Text>
               </View>
             ) : (
               transactions.map((transaction) => (
                 <View key={transaction.id} style={styles.transactionCard}>
+                  <View style={styles.transactionIcon}>
+                    <Feather 
+                      name={transaction.type === 'earned' ? 'arrow-down-right' : 'arrow-up-right'} 
+                      size={20} 
+                      color={transaction.type === 'earned' ? '#22C55E' : '#EF4444'} 
+                    />
+                  </View>
                   <View style={styles.transactionInfo}>
-                    <Text style={styles.transactionType}>
-                      {transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1)}
+                    <Text style={styles.transactionDescription}>
+                      {transaction.description || transaction.type}
                     </Text>
                     <Text style={styles.transactionShop}>
-                      {transaction.shops?.name || 'LoyalCup'}
+                      {transaction.shop?.name || 'LoyalCup'}
                     </Text>
                     <Text style={styles.transactionDate}>
                       {formatDate(transaction.created_at)}
@@ -200,10 +201,10 @@ export default function RewardsScreen() {
                   <Text
                     style={[
                       styles.transactionPoints,
-                      transaction.points_change > 0 ? styles.pointsEarned : styles.pointsSpent
+                      transaction.amount > 0 ? styles.pointsEarned : styles.pointsSpent
                     ]}
                   >
-                    {transaction.points_change > 0 ? '+' : ''}{transaction.points_change}
+                    {transaction.amount > 0 ? '+' : ''}{transaction.amount}
                   </Text>
                 </View>
               ))
@@ -241,7 +242,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 20,
-    fontFamily: 'Anton-Regular',
+    fontWeight: 'bold',
   },
   content: {
     flex: 1,
@@ -256,14 +257,14 @@ const styles = StyleSheet.create({
   pointsLabel: {
     color: '#FFF',
     fontSize: 14,
-    fontFamily: 'Anton-Regular',
+    fontWeight: 'bold',
     letterSpacing: 2,
     marginBottom: 10,
   },
   pointsValue: {
     color: '#FFF',
     fontSize: 64,
-    fontFamily: 'Anton-Regular',
+    fontWeight: 'bold',
   },
   pointsSubtext: {
     color: '#CCC',
@@ -276,7 +277,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontFamily: 'Anton-Regular',
+    fontWeight: 'bold',
     marginBottom: 15,
   },
   balanceCard: {
@@ -290,11 +291,17 @@ const styles = StyleSheet.create({
   },
   balanceName: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
+  },
+  balanceSubtext: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
   },
   balancePoints: {
-    fontSize: 16,
-    fontFamily: 'Anton-Regular',
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#00704A',
   },
   tabs: {
     flexDirection: 'row',
@@ -315,80 +322,69 @@ const styles = StyleSheet.create({
   },
   tabText: {
     fontSize: 14,
-    fontFamily: 'Anton-Regular',
+    fontWeight: 'bold',
     color: '#000',
   },
   tabTextActive: {
     color: '#FFF',
   },
-  rewardCard: {
+  statsGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 15,
-    borderWidth: 2,
-    borderColor: '#000',
-    borderRadius: 15,
-    marginBottom: 10,
+    gap: 10,
+    marginBottom: 15,
   },
-  rewardInfo: {
+  statCard: {
     flex: 1,
-    marginRight: 15,
+    padding: 20,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 10,
+    alignItems: 'center',
   },
-  rewardName: {
-    fontSize: 16,
+  statValue: {
+    fontSize: 32,
     fontWeight: 'bold',
+    color: '#00704A',
     marginBottom: 5,
   },
-  rewardDescription: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 5,
-  },
-  rewardShop: {
+  statLabel: {
     fontSize: 12,
-    color: '#999',
-  },
-  rewardAction: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
-  rewardPoints: {
-    fontSize: 16,
-    fontFamily: 'Anton-Regular',
-    marginBottom: 10,
-  },
-  redeemButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    backgroundColor: '#000',
-    borderRadius: 20,
-  },
-  redeemButtonDisabled: {
-    backgroundColor: '#CCC',
-  },
-  redeemButtonText: {
-    color: '#FFF',
-    fontSize: 14,
-    fontFamily: 'Anton-Regular',
-  },
-  redeemButtonTextDisabled: {
     color: '#666',
+  },
+  infoCard: {
+    flexDirection: 'row',
+    padding: 15,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 10,
+    gap: 10,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#00704A',
   },
   transactionCard: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     padding: 15,
     backgroundColor: '#F5F5F5',
     borderRadius: 10,
     marginBottom: 10,
+    gap: 12,
+  },
+  transactionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFF',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   transactionInfo: {
     flex: 1,
   },
-  transactionType: {
+  transactionDescription: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
     marginBottom: 3,
   },
   transactionShop: {
@@ -402,7 +398,7 @@ const styles = StyleSheet.create({
   },
   transactionPoints: {
     fontSize: 20,
-    fontFamily: 'Anton-Regular',
+    fontWeight: 'bold',
   },
   pointsEarned: {
     color: '#22C55E',
@@ -416,7 +412,13 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: '#999',
+    color: '#666',
     marginTop: 15,
+    fontWeight: '600',
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 5,
   },
 });

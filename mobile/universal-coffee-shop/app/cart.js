@@ -1,4 +1,4 @@
-// cart screen - STARBUCKS STYLE
+// cart screen
 // universal-coffee-shop/app/cart.js
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, Image, Alert } from 'react-native';
@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCart } from '../context/CartContext';
 import { supabase } from '../lib/supabase';
+import { awardPointsForOrder } from '../services/loyaltyService'; 
 
 export default function CartScreen() {
   const router = useRouter();
@@ -78,6 +79,20 @@ export default function CartScreen() {
         }
 
         console.log('Order created:', order);
+
+        const pointsResult = await awardPointsForOrder(
+          order.id,
+          user.id,
+          shopId,
+          total
+        );
+
+        if (pointsResult.success) {
+          console.log(`🎉 Awarded ${pointsResult.points} ${pointsResult.type} points!`);
+        } else {
+          console.error('Failed to award points:', pointsResult.error);
+        }
+
         // Now create order items in order_items table
         const orderItems = items.map(item => {
           const unitPrice = parseFloat(item.price) || 0;
@@ -105,8 +120,15 @@ export default function CartScreen() {
 
       Alert.alert(
         'Order Placed! 🎉',
-        'Your order has been sent to the shop',
+        `Your order has been sent to the shop. You earned loyalty points!`,
         [
+          {
+            text: 'View Rewards',
+            onPress: () => {
+              clearCart();
+              router.push('/rewards');
+            }
+          },
           {
             text: 'Continue Shopping',
             onPress: () => {
@@ -133,10 +155,55 @@ export default function CartScreen() {
     );
   };
 
-  const subtotal = getTotalPrice();
+  const handleUpdateQuantity = (itemId, change) => {
+    const item = cart.find(i => i.id === itemId);
+    if (item) {
+      const newQuantity = (item.quantity || 1) + change;
+      if (newQuantity > 0) {
+        updateQuantity(itemId, newQuantity);
+      } else {
+        handleRemoveItem(itemId);
+      }
+    }
+  };
+
+  // Calculate totals
+  const subtotal = cart.reduce((sum, item) => {
+    const price = parseFloat(item.price) || 0;
+    const quantity = item.quantity || 1;
+    return sum + (price * quantity);
+  }, 0);
+
   const tax = subtotal * 0.08;
   const serviceFee = 0.99;
   const total = subtotal + tax + serviceFee;
+
+  if (cart.length === 0) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.headerButton}
+            onPress={() => router.back()}>
+            <Feather name="arrow-left" size={24} color="#000" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Cart</Text>
+          <View style={styles.headerButton} />
+        </View>
+
+        <View style={styles.emptyContainer}>
+          <Feather name="shopping-bag" size={80} color="#CCC" />
+          <Text style={styles.emptyTitle}>Your cart is empty</Text>
+          <Text style={styles.emptySubtitle}>Add items to get started</Text>
+          <TouchableOpacity 
+            style={styles.shopButton}
+            onPress={() => router.push('/browse')}>
+            <Text style={styles.shopButtonText}>Browse Shops</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -145,157 +212,110 @@ export default function CartScreen() {
         <TouchableOpacity 
           style={styles.headerButton}
           onPress={() => router.back()}>
-          <Feather name="x" size={24} color="#000" />
+          <Feather name="arrow-left" size={24} color="#000" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Cart</Text>
+        <Text style={styles.headerTitle}>Cart ({cart.length})</Text>
         <TouchableOpacity 
           style={styles.headerButton}
-          onPress={() => {
-            if (cart.length > 0) {
-              Alert.alert(
-                'Clear Cart',
-                'Remove all items from cart?',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Clear', style: 'destructive', onPress: clearCart }
-                ]
-              );
-            }
-          }}>
-          <Feather name="trash-2" size={20} color={cart.length > 0 ? "#FF3B30" : "#CCC"} />
+          onPress={clearCart}>
+          <Feather name="trash-2" size={20} color="#FF3B30" />
         </TouchableOpacity>
       </View>
 
-      {cart.length === 0 ? (
-        // Empty State
-        <View style={styles.emptyContainer}>
-          <View style={styles.emptyIconCircle}>
-            <Feather name="shopping-bag" size={64} color="#CCC" />
+      {/* Cart Items */}
+      <>
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}>
+          
+          {Object.entries(itemsByShop).map(([shopName, items]) => (
+            <View key={shopName} style={styles.shopSection}>
+              <Text style={styles.shopName}>{shopName}</Text>
+              
+              {items.map((item) => (
+                <View key={item.id} style={styles.cartItem}>
+                  {/* Item Image */}
+                  {item.image_url && (
+                    <Image 
+                      source={{ uri: item.image_url }} 
+                      style={styles.itemImage}
+                    />
+                  )}
+
+                  {/* Item Details */}
+                  <View style={styles.itemDetails}>
+                    <Text style={styles.itemName}>{item.name}</Text>
+                    <Text style={styles.itemPrice}>
+                      ${(parseFloat(item.price) * (item.quantity || 1)).toFixed(2)}
+                    </Text>
+
+                    {/* Quantity Controls */}
+                    <View style={styles.quantityContainer}>
+                      <TouchableOpacity 
+                        style={styles.quantityButton}
+                        onPress={() => handleUpdateQuantity(item.id, -1)}>
+                        <Feather name="minus" size={16} color="#000" />
+                      </TouchableOpacity>
+                      
+                      <Text style={styles.quantityText}>{item.quantity || 1}</Text>
+                      
+                      <TouchableOpacity 
+                        style={styles.quantityButton}
+                        onPress={() => handleUpdateQuantity(item.id, 1)}>
+                        <Feather name="plus" size={16} color="#000" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity 
+                    style={styles.removeButton}
+                    onPress={() => handleRemoveItem(item.id)}>
+                    <Feather name="trash-2" size={18} color="#FF3B30" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          ))}
+
+          <View style={{ height: 200 }} />
+        </ScrollView>
+
+        {/* Bottom Checkout Card */}
+        <View style={styles.checkoutCard}>
+          {/* Price Breakdown */}
+          <View style={styles.priceBreakdown}>
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>Subtotal</Text>
+              <Text style={styles.priceValue}>${subtotal.toFixed(2)}</Text>
+            </View>
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>Tax (8%)</Text>
+              <Text style={styles.priceValue}>${tax.toFixed(2)}</Text>
+            </View>
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>Service Fee</Text>
+              <Text style={styles.priceValue}>${serviceFee.toFixed(2)}</Text>
+            </View>
+            
+            <View style={styles.divider} />
+            
+            <View style={styles.priceRow}>
+              <Text style={styles.totalLabel}>Total</Text>
+              <Text style={styles.totalValue}>${total.toFixed(2)}</Text>
+            </View>
           </View>
-          <Text style={styles.emptyTitle}>Your cart is empty</Text>
-          <Text style={styles.emptySubtitle}>Add items from a shop to get started</Text>
+
+          {/* Checkout Button */}
           <TouchableOpacity 
-            style={styles.browseShopsButton}
-            onPress={() => router.push('/(tabs)')}>
-            <Text style={styles.browseShopsText}>Browse Shops</Text>
+            style={styles.checkoutButton}
+            onPress={handleCheckout}
+            activeOpacity={0.8}>
+            <Text style={styles.checkoutButtonText}>Place Order</Text>
+            <Feather name="arrow-right" size={20} color="#FFF" />
           </TouchableOpacity>
         </View>
-      ) : (
-        <>
-          {/* Cart Items */}
-          <ScrollView 
-            style={styles.content}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}
-          >
-            {Object.entries(itemsByShop).map(([shopName, items]) => (
-              <View key={shopName} style={styles.shopSection}>
-                {/* Shop Header */}
-                <View style={styles.shopHeader}>
-                  <View style={styles.shopIcon}>
-                    <Text style={{ fontSize: 20 }}>☕</Text>
-                  </View>
-                  <Text style={styles.shopName}>{shopName}</Text>
-                </View>
-
-                {/* Items */}
-                {items.map((item) => (
-                  <View key={item.id} style={styles.cartItem}>
-                    <View style={styles.itemImageContainer}>
-                      {item.image_url ? (
-                        <Image 
-                          source={{ uri: item.image_url }} 
-                          style={styles.itemImage}
-                          resizeMode="cover"
-                        />
-                      ) : (
-                        <View style={styles.itemImagePlaceholder}>
-                          <Text style={{ fontSize: 24 }}>☕</Text>
-                        </View>
-                      )}
-                    </View>
-
-                    <View style={styles.itemDetails}>
-                      <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
-                      <Text style={styles.itemPrice}>${item.price?.toFixed(2)}</Text>
-
-                      {/* Quantity Controls */}
-                      <View style={styles.quantityContainer}>
-                        <TouchableOpacity 
-                          style={styles.quantityButton}
-                          onPress={() => {
-                            const currentQty = item.quantity || 1;
-                            if (currentQty > 1) {
-                              updateQuantity?.(item.id, currentQty - 1);
-                            } else {
-                              handleRemoveItem(item.id);
-                            }
-                          }}>
-                          <Feather name="minus" size={16} color="#000" />
-                        </TouchableOpacity>
-                        
-                        <Text style={styles.quantityText}>{item.quantity || 1}</Text>
-                        
-                        <TouchableOpacity 
-                          style={styles.quantityButton}
-                          onPress={() => {
-                            const currentQty = item.quantity || 1;
-                            updateQuantity?.(item.id, currentQty + 1);
-                          }}>
-                          <Feather name="plus" size={16} color="#000" />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-
-                    <TouchableOpacity 
-                      style={styles.removeButton}
-                      onPress={() => handleRemoveItem(item.id)}>
-                      <Feather name="trash-2" size={18} color="#FF3B30" />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            ))}
-
-            <View style={{ height: 200 }} />
-          </ScrollView>
-
-          {/* Bottom Checkout Card */}
-          <View style={styles.checkoutCard}>
-            {/* Price Breakdown */}
-            <View style={styles.priceBreakdown}>
-              <View style={styles.priceRow}>
-                <Text style={styles.priceLabel}>Subtotal</Text>
-                <Text style={styles.priceValue}>${subtotal.toFixed(2)}</Text>
-              </View>
-              <View style={styles.priceRow}>
-                <Text style={styles.priceLabel}>Tax (8%)</Text>
-                <Text style={styles.priceValue}>${tax.toFixed(2)}</Text>
-              </View>
-              <View style={styles.priceRow}>
-                <Text style={styles.priceLabel}>Service Fee</Text>
-                <Text style={styles.priceValue}>${serviceFee.toFixed(2)}</Text>
-              </View>
-              
-              <View style={styles.divider} />
-              
-              <View style={styles.priceRow}>
-                <Text style={styles.totalLabel}>Total</Text>
-                <Text style={styles.totalValue}>${total.toFixed(2)}</Text>
-              </View>
-            </View>
-
-            {/* Checkout Button */}
-            <TouchableOpacity 
-              style={styles.checkoutButton}
-              onPress={handleCheckout}
-              activeOpacity={0.8}>
-              <Text style={styles.checkoutButtonText}>Place Order</Text>
-              <Feather name="arrow-right" size={20} color="#FFF" />
-            </TouchableOpacity>
-          </View>
-        </>
-      )}
+      </>
     </SafeAreaView>
   );
 }
@@ -321,7 +341,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#000',
   },
   emptyContainer: {
@@ -330,102 +350,65 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 40,
   },
-  emptyIconCircle: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: '#F5F5F5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
   emptyTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '700',
     color: '#000',
+    marginTop: 20,
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 16,
     color: '#666',
-    textAlign: 'center',
-    marginBottom: 32,
+    marginBottom: 30,
   },
-  browseShopsButton: {
+  shopButton: {
     backgroundColor: '#00704A',
     paddingHorizontal: 32,
-    paddingVertical: 16,
-    borderRadius: 12,
+    paddingVertical: 14,
+    borderRadius: 25,
   },
-  browseShopsText: {
+  shopButtonText: {
     color: '#FFF',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
-  content: {
+  scrollView: {
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
+    paddingBottom: 20,
   },
   shopSection: {
+    marginBottom: 16,
     backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  shopHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-    paddingBottom: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
-  shopIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F5F5F5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
   shopName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#00704A',
+    marginBottom: 12,
   },
   cartItem: {
     flexDirection: 'row',
-    paddingVertical: 12,
+    marginBottom: 12,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F5F5F5',
-  },
-  itemImageContainer: {
-    marginRight: 12,
   },
   itemImage: {
     width: 70,
     height: 70,
-    borderRadius: 12,
-    backgroundColor: '#F5F5F5',
-  },
-  itemImagePlaceholder: {
-    width: 70,
-    height: 70,
-    borderRadius: 12,
-    backgroundColor: '#F5F5F5',
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: 8,
+    backgroundColor: '#F0F0F0',
   },
   itemDetails: {
     flex: 1,
+    marginLeft: 12,
     justifyContent: 'space-between',
   },
   itemName: {
@@ -474,23 +457,25 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: '#FFF',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 30,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.1,
-    shadowRadius: 12,
+    shadowRadius: 8,
     elevation: 10,
   },
   priceBreakdown: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   priceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   priceLabel: {
     fontSize: 15,
@@ -508,7 +493,7 @@ const styles = StyleSheet.create({
   },
   totalLabel: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#000',
   },
   totalValue: {
