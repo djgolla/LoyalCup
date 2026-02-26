@@ -205,7 +205,7 @@ export default function ProfileScreen() {
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>LoyalCup v1.0.0</Text>
-          <Text style={styles.footerSubtext}>© 2024 All rights reserved</Text>
+          <Text style={styles.footerSubtext}>© 2026 All rights reserved</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
