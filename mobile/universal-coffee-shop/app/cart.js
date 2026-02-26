@@ -1,26 +1,77 @@
-// cart screen
+// cart screen - STARBUCKS STYLE + LOYALTY REDEMPTION
 // universal-coffee-shop/app/cart.js
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, Image, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context'; 
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCart } from '../context/CartContext';
 import { supabase } from '../lib/supabase';
-import { awardPointsForOrder } from '../services/loyaltyService'; 
+import { awardPointsForOrder, getGlobalPoints, getShopPoints, redeemPoints } from '../services/loyaltyService';
 
 export default function CartScreen() {
   const router = useRouter();
-  const { cart, removeItem, clearCart, updateQuantity, getTotalPrice } = useCart();
+  const { cart, removeItem, clearCart, updateQuantity } = useCart();
+  const [user, setUser] = useState(null);
+  const [globalPoints, setGlobalPoints] = useState(null);
+  const [shopPoints, setShopPoints] = useState({});
+  const [pointsToRedeem, setPointsToRedeem] = useState(0);
+  const [showPointsSelector, setShowPointsSelector] = useState(false);
 
   // Group items by shop
   const itemsByShop = cart.reduce((acc, item) => {
     const shopName = item.shopName || 'Unknown Shop';
-    if (!acc[shopName]) {
-      acc[shopName] = [];
+    const shopId = item.shopId;
+    if (!acc[shopId]) {
+      acc[shopId] = { shopName, shopId, items: [] };
     }
-    acc[shopName].push(item);
+    acc[shopId].items.push(item);
     return acc;
   }, {});
+
+  useEffect(() => {
+    loadUserAndPoints();
+  }, []);
+
+  const loadUserAndPoints = async () => {
+    try {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (currentUser) {
+        setUser(currentUser);
+        
+        // Load global points
+        const global = await getGlobalPoints(currentUser.id);
+        setGlobalPoints(global);
+
+        // Load shop-specific points for shops in cart
+        const shopIds = Object.keys(itemsByShop);
+        const shopPointsData = {};
+        for (const shopId of shopIds) {
+          const points = await getShopPoints(currentUser.id, shopId);
+          shopPointsData[shopId] = points;
+        }
+        setShopPoints(shopPointsData);
+      }
+    } catch (error) {
+      console.error('Failed to load points:', error);
+    }
+  };
+
+  // CALCULATE TOTALS (used by getMaxRedeemablePoints)
+  const calculateTotals = () => {
+    const subtotal = cart.reduce((sum, item) => {
+      const price = parseFloat(item.price) || 0;
+      const quantity = item.quantity || 1;
+      return sum + (price * quantity);
+    }, 0);
+
+    const tax = subtotal * 0.08;
+    const serviceFee = 0.99;
+    const discount = pointsToRedeem * 0.01;
+    const total = Math.max(0, subtotal + tax + serviceFee - discount);
+
+    return { subtotal, tax, serviceFee, discount, total };
+  };
 
   const handleCheckout = async () => {
     if (cart.length === 0) {
@@ -37,12 +88,10 @@ export default function CartScreen() {
         return;
       }
 
-      // Group items by shop and create orders
-      const shopOrders = Object.entries(itemsByShop);
+      // Process each shop's order
+      const shopOrders = Object.values(itemsByShop);
       
-      for (const [shopName, items] of shopOrders) {
-        const shopId = items[0].shopId;
-        
+      for (const { shopId, shopName, items } of shopOrders) {
         // Calculate totals
         const subtotal = items.reduce((sum, item) => {
           const price = parseFloat(item.price) || 0;
@@ -52,9 +101,26 @@ export default function CartScreen() {
         
         const tax = subtotal * 0.08;
         const serviceFee = 0.99;
-        const total = subtotal + tax + serviceFee;
+        let total = subtotal + tax + serviceFee;
+        let discount = 0;
 
-        // Create order with correct column names
+        // Apply points redemption if selected
+        if (pointsToRedeem > 0) {
+          const redeemResult = await redeemPoints(
+            user.id,
+            shopId,
+            pointsToRedeem,
+            'global' // or 'shop' based on selection
+          );
+
+          if (redeemResult.success) {
+            discount = redeemResult.discountAmount;
+            total = Math.max(0, total - discount);
+            console.log(`💰 Redeemed ${pointsToRedeem} points for $${discount.toFixed(2)} off`);
+          }
+        }
+
+        // Create order
         const { data: order, error: orderError } = await supabase
           .from('orders')
           .insert({
@@ -64,10 +130,12 @@ export default function CartScreen() {
             subtotal: subtotal,
             tax: tax,
             total: total,
-            loyalty_points_earned: Math.floor(total), // 1 point per dollar
+            loyalty_points_earned: Math.floor(total), // Will be recalculated by awardPointsForOrder
             metadata: {
               service_fee: serviceFee,
-              item_count: items.reduce((sum, item) => sum + (item.quantity || 1), 0)
+              item_count: items.reduce((sum, item) => sum + (item.quantity || 1), 0),
+              points_redeemed: pointsToRedeem,
+              discount_amount: discount,
             }
           })
           .select()
@@ -80,6 +148,7 @@ export default function CartScreen() {
 
         console.log('Order created:', order);
 
+        // Award loyalty points
         const pointsResult = await awardPointsForOrder(
           order.id,
           user.id,
@@ -93,7 +162,7 @@ export default function CartScreen() {
           console.error('Failed to award points:', pointsResult.error);
         }
 
-        // Now create order items in order_items table
+        // Create order items
         const orderItems = items.map(item => {
           const unitPrice = parseFloat(item.price) || 0;
           const quantity = item.quantity || 1;
@@ -101,7 +170,7 @@ export default function CartScreen() {
           
           return {
             order_id: order.id,
-            menu_item_id: item.id.split(':')[1], // Remove shop prefix from id
+            menu_item_id: item.id.split(':')[1],
             quantity: quantity,
             unit_price: unitPrice,
             total_price: totalPrice,
@@ -118,23 +187,25 @@ export default function CartScreen() {
         }
       }
 
+      // Clear cart and show success
+      clearCart();
+      setPointsToRedeem(0); // Reset points
+      
+      const message = pointsToRedeem > 0 
+        ? `Order placed! You saved $${(pointsToRedeem * 0.01).toFixed(2)} with points!`
+        : 'Order placed! You earned loyalty points!';
+
       Alert.alert(
         'Order Placed! 🎉',
-        `Your order has been sent to the shop. You earned loyalty points!`,
+        message,
         [
           {
             text: 'View Rewards',
-            onPress: () => {
-              clearCart();
-              router.push('/rewards');
-            }
+            onPress: () => router.push('/rewards')
           },
           {
             text: 'Continue Shopping',
-            onPress: () => {
-              clearCart();
-              router.back();
-            }
+            onPress: () => router.back()
           }
         ]
       );
@@ -167,20 +238,29 @@ export default function CartScreen() {
     }
   };
 
-  // Calculate totals
-  const subtotal = cart.reduce((sum, item) => {
-    const price = parseFloat(item.price) || 0;
-    const quantity = item.quantity || 1;
-    return sum + (price * quantity);
-  }, 0);
+  const getAvailablePoints = () => {
+    return globalPoints?.current_balance || 0;
+  };
 
-  const tax = subtotal * 0.08;
-  const serviceFee = 0.99;
-  const total = subtotal + tax + serviceFee;
+  const getMaxRedeemablePoints = () => {
+    const available = getAvailablePoints();
+    const { total } = calculateTotals(); // 
+    const maxPointsForOrder = Math.floor(total * 100); // Can't redeem more than order value
+    return Math.min(available, maxPointsForOrder);
+  };
+
+  const handleSelectPoints = (points) => {
+    const max = getMaxRedeemablePoints();
+    const selected = Math.min(Math.max(0, points), max);
+    setPointsToRedeem(selected);
+  };
+
+  // Get current totals for display
+  const { subtotal, tax, serviceFee, discount, total } = calculateTotals();
 
   if (cart.length === 0) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
           <TouchableOpacity 
             style={styles.headerButton}
@@ -206,7 +286,7 @@ export default function CartScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
@@ -222,100 +302,158 @@ export default function CartScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Cart Items */}
-      <>
-        <ScrollView 
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}>
-          
-          {Object.entries(itemsByShop).map(([shopName, items]) => (
-            <View key={shopName} style={styles.shopSection}>
-              <Text style={styles.shopName}>{shopName}</Text>
-              
-              {items.map((item) => (
-                <View key={item.id} style={styles.cartItem}>
-                  {/* Item Image */}
-                  {item.image_url && (
-                    <Image 
-                      source={{ uri: item.image_url }} 
-                      style={styles.itemImage}
-                    />
-                  )}
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}>
+        
+        {Object.values(itemsByShop).map(({ shopId, shopName, items }) => (
+          <View key={shopId} style={styles.shopSection}>
+            <Text style={styles.shopName}>{shopName}</Text>
+            
+            {items.map((item) => (
+              <View key={item.id} style={styles.cartItem}>
+                {item.image_url && (
+                  <Image 
+                    source={{ uri: item.image_url }} 
+                    style={styles.itemImage}
+                  />
+                )}
 
-                  {/* Item Details */}
-                  <View style={styles.itemDetails}>
-                    <Text style={styles.itemName}>{item.name}</Text>
-                    <Text style={styles.itemPrice}>
-                      ${(parseFloat(item.price) * (item.quantity || 1)).toFixed(2)}
-                    </Text>
+                <View style={styles.itemDetails}>
+                  <Text style={styles.itemName}>{item.name}</Text>
+                  <Text style={styles.itemPrice}>
+                    ${(parseFloat(item.price) * (item.quantity || 1)).toFixed(2)}
+                  </Text>
 
-                    {/* Quantity Controls */}
-                    <View style={styles.quantityContainer}>
-                      <TouchableOpacity 
-                        style={styles.quantityButton}
-                        onPress={() => handleUpdateQuantity(item.id, -1)}>
-                        <Feather name="minus" size={16} color="#000" />
-                      </TouchableOpacity>
-                      
-                      <Text style={styles.quantityText}>{item.quantity || 1}</Text>
-                      
-                      <TouchableOpacity 
-                        style={styles.quantityButton}
-                        onPress={() => handleUpdateQuantity(item.id, 1)}>
-                        <Feather name="plus" size={16} color="#000" />
-                      </TouchableOpacity>
-                    </View>
+                  <View style={styles.quantityContainer}>
+                    <TouchableOpacity 
+                      style={styles.quantityButton}
+                      onPress={() => handleUpdateQuantity(item.id, -1)}>
+                      <Feather name="minus" size={16} color="#000" />
+                    </TouchableOpacity>
+                    
+                    <Text style={styles.quantityText}>{item.quantity || 1}</Text>
+                    
+                    <TouchableOpacity 
+                      style={styles.quantityButton}
+                      onPress={() => handleUpdateQuantity(item.id, 1)}>
+                      <Feather name="plus" size={16} color="#000" />
+                    </TouchableOpacity>
                   </View>
-
-                  <TouchableOpacity 
-                    style={styles.removeButton}
-                    onPress={() => handleRemoveItem(item.id)}>
-                    <Feather name="trash-2" size={18} color="#FF3B30" />
-                  </TouchableOpacity>
                 </View>
-              ))}
-            </View>
-          ))}
 
-          <View style={{ height: 200 }} />
-        </ScrollView>
-
-        {/* Bottom Checkout Card */}
-        <View style={styles.checkoutCard}>
-          {/* Price Breakdown */}
-          <View style={styles.priceBreakdown}>
-            <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>Subtotal</Text>
-              <Text style={styles.priceValue}>${subtotal.toFixed(2)}</Text>
-            </View>
-            <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>Tax (8%)</Text>
-              <Text style={styles.priceValue}>${tax.toFixed(2)}</Text>
-            </View>
-            <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>Service Fee</Text>
-              <Text style={styles.priceValue}>${serviceFee.toFixed(2)}</Text>
-            </View>
-            
-            <View style={styles.divider} />
-            
-            <View style={styles.priceRow}>
-              <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>${total.toFixed(2)}</Text>
-            </View>
+                <TouchableOpacity 
+                  style={styles.removeButton}
+                  onPress={() => handleRemoveItem(item.id)}>
+                  <Feather name="trash-2" size={18} color="#FF3B30" />
+                </TouchableOpacity>
+              </View>
+            ))}
           </View>
+        ))}
 
-          {/* Checkout Button */}
+        <View style={{ height: 300 }} />
+      </ScrollView>
+
+      {/* Bottom Checkout Card */}
+      <View style={styles.checkoutCard}>
+        {/* Points Redemption */}
+        {getAvailablePoints() > 0 && (
           <TouchableOpacity 
-            style={styles.checkoutButton}
-            onPress={handleCheckout}
-            activeOpacity={0.8}>
-            <Text style={styles.checkoutButtonText}>Place Order</Text>
-            <Feather name="arrow-right" size={20} color="#FFF" />
+            style={styles.pointsRedemption}
+            onPress={() => setShowPointsSelector(!showPointsSelector)}>
+            <View style={styles.pointsRedemptionLeft}>
+              <Feather name="award" size={20} color="#00704A" />
+              <View>
+                <Text style={styles.pointsRedemptionTitle}>Use Points</Text>
+                <Text style={styles.pointsRedemptionSubtitle}>
+                  {pointsToRedeem > 0 ? `${pointsToRedeem} points (-$${discount.toFixed(2)})` : `${getAvailablePoints()} available`}
+                </Text>
+              </View>
+            </View>
+            <Feather name={showPointsSelector ? "chevron-up" : "chevron-down"} size={20} color="#666" />
           </TouchableOpacity>
+        )}
+
+        {/* Points Selector */}
+        {showPointsSelector && (
+          <View style={styles.pointsSelector}>
+            <View style={styles.pointsSelectorHeader}>
+              <Text style={styles.pointsSelectorTitle}>Redeem Points</Text>
+              <TouchableOpacity onPress={() => handleSelectPoints(0)}>
+                <Text style={styles.pointsClearButton}>Clear</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.pointsSliderContainer}>
+              <TouchableOpacity 
+                style={styles.pointsQuickButton}
+                onPress={() => handleSelectPoints(Math.min(100, getMaxRedeemablePoints()))}>
+                <Text style={styles.pointsQuickButtonText}>100</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.pointsQuickButton}
+                onPress={() => handleSelectPoints(Math.min(250, getMaxRedeemablePoints()))}>
+                <Text style={styles.pointsQuickButtonText}>250</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.pointsQuickButton}
+                onPress={() => handleSelectPoints(Math.min(500, getMaxRedeemablePoints()))}>
+                <Text style={styles.pointsQuickButtonText}>500</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.pointsQuickButton}
+                onPress={() => handleSelectPoints(getMaxRedeemablePoints())}>
+                <Text style={styles.pointsQuickButtonText}>Max</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.pointsDiscountPreview}>
+              {pointsToRedeem} points = ${discount.toFixed(2)} off
+            </Text>
+          </View>
+        )}
+
+        {/* Price Breakdown */}
+        <View style={styles.priceBreakdown}>
+          <View style={styles.priceRow}>
+            <Text style={styles.priceLabel}>Subtotal</Text>
+            <Text style={styles.priceValue}>${subtotal.toFixed(2)}</Text>
+          </View>
+          <View style={styles.priceRow}>
+            <Text style={styles.priceLabel}>Tax (8%)</Text>
+            <Text style={styles.priceValue}>${tax.toFixed(2)}</Text>
+          </View>
+          <View style={styles.priceRow}>
+            <Text style={styles.priceLabel}>Service Fee</Text>
+            <Text style={styles.priceValue}>${serviceFee.toFixed(2)}</Text>
+          </View>
+          
+          {pointsToRedeem > 0 && (
+            <View style={styles.priceRow}>
+              <Text style={[styles.priceLabel, styles.discountLabel]}>Points Discount</Text>
+              <Text style={[styles.priceValue, styles.discountValue]}>-${discount.toFixed(2)}</Text>
+            </View>
+          )}
+          
+          <View style={styles.divider} />
+          
+          <View style={styles.priceRow}>
+            <Text style={styles.totalLabel}>Total</Text>
+            <Text style={styles.totalValue}>${total.toFixed(2)}</Text>
+          </View>
         </View>
-      </>
+
+        {/* Checkout Button */}
+        <TouchableOpacity 
+          style={styles.checkoutButton}
+          onPress={handleCheckout}
+          activeOpacity={0.8}>
+          <Text style={styles.checkoutButtonText}>Place Order</Text>
+          <Feather name="arrow-right" size={20} color="#FFF" />
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
@@ -330,8 +468,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 50,
-    paddingBottom: 16,
+    paddingVertical: 16,
     backgroundColor: '#FFF',
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
@@ -458,7 +595,7 @@ const styles = StyleSheet.create({
     right: 0,
     backgroundColor: '#FFF',
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 16,
     paddingBottom: 30,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
@@ -467,6 +604,79 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 10,
+  },
+  pointsRedemption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#E8F5E9',
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  pointsRedemptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  pointsRedemptionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#00704A',
+  },
+  pointsRedemptionSubtitle: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 2,
+  },
+  pointsSelector: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#F9F9F9',
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  pointsSelectorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  pointsSelectorTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+  },
+  pointsClearButton: {
+    fontSize: 14,
+    color: '#FF3B30',
+    fontWeight: '600',
+  },
+  pointsSliderContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  pointsQuickButton: {
+    flex: 1,
+    paddingVertical: 10,
+    backgroundColor: '#FFF',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#00704A',
+    alignItems: 'center',
+  },
+  pointsQuickButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#00704A',
+  },
+  pointsDiscountPreview: {
+    fontSize: 14,
+    color: '#00704A',
+    fontWeight: '600',
+    textAlign: 'center',
   },
   priceBreakdown: {
     marginBottom: 16,
@@ -485,6 +695,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#000',
+  },
+  discountLabel: {
+    color: '#00704A',
+    fontWeight: '600',
+  },
+  discountValue: {
+    color: '#00704A',
+    fontWeight: 'bold',
   },
   divider: {
     height: 1,
