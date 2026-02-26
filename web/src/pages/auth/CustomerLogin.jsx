@@ -17,7 +17,6 @@ export default function CustomerLogin() {
       const { user } = await login(email, password);
       toast.success("Welcome back!");
       
-      // Route based on user role
       const userRole = user?.user_metadata?.role || 'customer';
       
       if (userRole === 'admin') {
@@ -27,7 +26,6 @@ export default function CustomerLogin() {
       } else if (userRole === 'shop_worker') {
         navigate('/worker');
       } else {
-        // Check for redirect query parameter
         const params = new URLSearchParams(location.search);
         const redirect = params.get('redirect');
         
@@ -48,9 +46,9 @@ export default function CustomerLogin() {
     <div className="w-full max-w-md">
       <form
         onSubmit={handleSubmit}
-        className="bg-white dark:bg-neutral-900 p-8 rounded-xl shadow-lg border border-gray-200 dark: border-neutral-800"
+        className="bg-white dark:bg-neutral-900 p-8 rounded-xl shadow-lg border border-gray-200 dark:border-neutral-800"
       >
-        <h1 className="text-2xl font-bold text-gray-900 dark: text-white mb-6 text-center">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 text-center">
           Sign In to LoyalCup
         </h1>
 
@@ -76,7 +74,7 @@ export default function CustomerLogin() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-2 bg-gray-100 dark:bg-neutral-800 rounded-lg outline-none focus: ring-2 focus:ring-amber-700"
+            className="w-full px-4 py-2 bg-gray-100 dark:bg-neutral-800 rounded-lg outline-none focus:ring-2 focus:ring-amber-700"
             placeholder="••••••••"
             required
           />
