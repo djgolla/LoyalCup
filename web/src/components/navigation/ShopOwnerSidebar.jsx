@@ -54,8 +54,7 @@ export default function ShopOwnerSidebar() {
 
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         <NavLink
-          to="/shop-owner"
-          end
+          to="/shop-owner/dashboard"
           className={({ isActive }) =>
             `${linkClasses} ${
               isActive
@@ -149,7 +148,7 @@ export default function ShopOwnerSidebar() {
           }
         >
           <Award size={20} />
-          Loyalty
+          Loyalty Program
         </NavLink>
 
         <NavLink
@@ -179,26 +178,12 @@ export default function ShopOwnerSidebar() {
           <SettingsIcon size={20} />
           Shop Settings
         </NavLink>
-
-        <NavLink
-          to="/profile"
-          className={({ isActive }) =>
-            `${linkClasses} ${
-              isActive
-                ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700"
-                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
-            }`
-          }
-        >
-          <UserCircle size={20} />
-          Profile
-        </NavLink>
       </nav>
 
       <div className="p-4 border-t border-gray-200 dark:border-neutral-800">
         <button
           onClick={handleLogout}
-          className={`${linkClasses} w-full text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20`}
+          className="w-full flex items-center gap-3 px-4 py-3 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg transition-colors duration-200"
         >
           <LogOut size={20} />
           Logout
