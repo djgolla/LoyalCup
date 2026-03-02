@@ -1,212 +1,526 @@
-// ShopSettings.jsx
-// Shop information and settings
-
-import { useState, useEffect } from "react";
-import { toast } from "sonner";
-import { useShop } from "../../context/ShopContext";
-import ImageUploader from "../../components/shop-owner/ImageUploader";
-import Loading from "../../components/Loading";
-import supabase from "../../lib/supabase";
+import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { 
+  Store, MapPin, Phone, Clock, Image as ImageIcon,
+  Save, Upload, X, Check, Globe, Mail, DollarSign
+} from 'lucide-react';
+import { useShop } from '../../context/ShopContext';
+import supabase from '../../lib/supabase';
+import { toast } from 'sonner';
 
 export default function ShopSettings() {
-  const { shop, shopId, loading: shopLoading, refreshShop } = useShop();
-  const [shopData, setShopData] = useState({
-    name: "",
-    description: "",
-    address: "",
-    city: "",
-    state: "",
-    phone: "",
-    logo_url: "",
-    banner_url: "",
-  });
+  const { shop, shopId, loadShop } = useShop();
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    address: '',
+    city: '',
+    state: '',
+    zip_code: '',
+    phone: '',
+    email: '',
+    website: '',
+    logo_url: '',
+    cover_image_url: '',
+    hours: {
+      monday: { open: '09:00', close: '17:00', closed: false },
+      tuesday: { open: '09:00', close: '17:00', closed: false },
+      wednesday: { open: '09:00', close: '17:00', closed: false },
+      thursday: { open: '09:00', close: '17:00', closed: false },
+      friday: { open: '09:00', close: '17:00', closed: false },
+      saturday: { open: '10:00', close: '16:00', closed: false },
+      sunday: { open: '10:00', close: '16:00', closed: false },
+    },
+  });
 
   useEffect(() => {
     if (shop) {
-      setShopData({
-        name: shop.name || "",
-        description: shop.description || "",
-        address: shop.address || "",
-        city: shop.city || "",
-        state: shop.state || "",
-        phone: shop.phone || "",
-        logo_url: shop.logo_url || "",
-        banner_url: shop.banner_url || "",
+      setFormData({
+        name: shop.name || '',
+        description: shop.description || '',
+        address: shop.address || '',
+        city: shop.city || '',
+        state: shop.state || '',
+        zip_code: shop.zip_code || '',
+        phone: shop.phone || '',
+        email: shop.email || '',
+        website: shop.website || '',
+        logo_url: shop.logo_url || '',
+        cover_image_url: shop.cover_image_url || '',
+        hours: shop.hours || formData.hours,
       });
     }
   }, [shop]);
 
-  const handleSave = async (e) => {
-    e.preventDefault();
-    if (!shopId) {
-      toast.error("Shop not found");
-      return;
-    }
+  const handleImageUpload = async (file, type) => {
+    if (!file) return;
 
-    setLoading(true);
     try {
+      setUploading(true);
+
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${shopId}/${type}-${Math.random()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('shop-images')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('shop-images')
+        .getPublicUrl(fileName);
+
+      setFormData({ 
+        ...formData, 
+        [type === 'logo' ? 'logo_url' : 'cover_image_url']: publicUrl 
+      });
+      
+      toast.success('Image uploaded!');
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast.error('Failed to upload image');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e, type) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleImageUpload(e.dataTransfer.files[0], type);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    try {
+      setLoading(true);
+
       const { error } = await supabase
-        .from("shops")
+        .from('shops')
         .update({
-          name: shopData.name,
-          description: shopData.description,
-          address: shopData.address,
-          city: shopData.city,
-          state: shopData.state,
-          phone: shopData.phone,
-          logo_url: shopData.logo_url,
-          banner_url: shopData.banner_url,
+          name: formData.name,
+          description: formData.description,
+          address: formData.address,
+          city: formData.city,
+          state: formData.state,
+          zip_code: formData.zip_code,
+          phone: formData.phone,
+          email: formData.email,
+          website: formData.website,
+          logo_url: formData.logo_url,
+          cover_image_url: formData.cover_image_url,
+          hours: formData.hours,
         })
-        .eq("id", shopId);
+        .eq('id', shopId);
 
       if (error) throw error;
 
-      toast.success("Shop settings saved successfully!");
-      refreshShop();
+      toast.success('Settings saved!');
+      loadShop();
     } catch (error) {
-      console.error("Failed to save shop settings:", error);
-      toast.error("Failed to save shop settings");
+      console.error('Failed to save settings:', error);
+      toast.error('Failed to save settings');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLogoUpload = (file, preview) => {
-    setShopData({ ...shopData, logo_url: preview });
+  const handleHoursChange = (day, field, value) => {
+    setFormData({
+      ...formData,
+      hours: {
+        ...formData.hours,
+        [day]: {
+          ...formData.hours[day],
+          [field]: value
+        }
+      }
+    });
   };
 
-  const handleBannerUpload = (file, preview) => {
-    setShopData({ ...shopData, banner_url: preview });
-  };
-
-  if (shopLoading) {
-    return <Loading />;
-  }
-
-  if (!shop || !shopId) {
-    return (
-      <div className="text-center py-12">
-        <div className="text-6xl mb-4">🏪</div>
-        <h3 className="text-xl font-semibold mb-2">No Shop Found</h3>
-        <p className="text-gray-600 dark:text-gray-400">
-          You don't have a shop assigned to your account yet.
-        </p>
-      </div>
-    );
-  }
+  const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Shop Settings</h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-1">
-          Manage your shop information and branding
+    <div className="space-y-6 pb-8">
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <h1 className="text-4xl font-black text-gray-900 dark:text-white mb-2">
+          Shop Settings
+        </h1>
+        <p className="text-gray-600 dark:text-gray-400">
+          Manage your shop information and preferences
         </p>
-      </div>
+      </motion.div>
 
-      <form onSubmit={handleSave} className="space-y-6">
-        
-        {/* Branding */}
-        <div className="bg-white dark:bg-neutral-900 p-6 rounded-xl border border-gray-200 dark:border-neutral-800 shadow-md">
-          <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Branding</h2>
-          
+      <form onSubmit={handleSubmit} className="space-y-8">
+        {/* Shop Images */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border-2 border-gray-200 dark:border-neutral-800 shadow-lg"
+        >
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+            <ImageIcon className="w-6 h-6 text-amber-600" />
+            Shop Images
+          </h2>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <ImageUploader
-              onUpload={handleLogoUpload}
-              currentImage={shopData.logo_url}
-              label="Shop Logo"
-              shopId={shopId}
-            />
-            <ImageUploader
-              onUpload={handleBannerUpload}
-              currentImage={shopData.banner_url}
-              label="Shop Banner"
-              shopId={shopId}
-            />
-          </div>
-        </div>
-
-        {/* Basic Info */}
-        <div className="bg-white dark:bg-neutral-900 p-6 rounded-xl border border-gray-200 dark:border-neutral-800 shadow-md">
-          <h2 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Basic Information</h2>
-          
-          <div className="space-y-4">
+            {/* Logo */}
             <div>
-              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Shop Name *</label>
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
+                Logo
+              </label>
+              <div
+                onDragEnter={handleDrag}
+                onDragLeave={handleDrag}
+                onDragOver={handleDrag}
+                onDrop={(e) => handleDrop(e, 'logo')}
+                className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition ${
+                  dragActive 
+                    ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20' 
+                    : 'border-gray-300 dark:border-neutral-700'
+                }`}
+              >
+                {formData.logo_url ? (
+                  <div className="relative">
+                    <img 
+                      src={formData.logo_url} 
+                      alt="Logo" 
+                      className="w-32 h-32 object-cover rounded-xl mx-auto"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, logo_url: '' })}
+                      className="absolute top-0 right-0 p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600 dark:text-gray-400 mb-2 text-sm">
+                      {uploading ? 'Uploading...' : 'Drop logo here'}
+                    </p>
+                    <label className="inline-block px-4 py-2 bg-amber-500 text-white rounded-xl font-semibold cursor-pointer hover:bg-amber-600 transition text-sm">
+                      Choose File
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleImageUpload(e.target.files[0], 'logo')}
+                        className="hidden"
+                        disabled={uploading}
+                      />
+                    </label>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Cover Image */}
+            <div>
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
+                Cover Image
+              </label>
+              <div
+                onDragEnter={handleDrag}
+                onDragLeave={handleDrag}
+                onDragOver={handleDrag}
+                onDrop={(e) => handleDrop(e, 'cover')}
+                className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition ${
+                  dragActive 
+                    ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20' 
+                    : 'border-gray-300 dark:border-neutral-700'
+                }`}
+              >
+                {formData.cover_image_url ? (
+                  <div className="relative">
+                    <img 
+                      src={formData.cover_image_url} 
+                      alt="Cover" 
+                      className="w-full h-32 object-cover rounded-xl"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, cover_image_url: '' })}
+                      className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600 dark:text-gray-400 mb-2 text-sm">
+                      {uploading ? 'Uploading...' : 'Drop cover image here'}
+                    </p>
+                    <label className="inline-block px-4 py-2 bg-amber-500 text-white rounded-xl font-semibold cursor-pointer hover:bg-amber-600 transition text-sm">
+                      Choose File
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleImageUpload(e.target.files[0], 'cover')}
+                        className="hidden"
+                        disabled={uploading}
+                      />
+                    </label>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Basic Information */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border-2 border-gray-200 dark:border-neutral-800 shadow-lg"
+        >
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+            <Store className="w-6 h-6 text-amber-600" />
+            Basic Information
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
+                Shop Name *
+              </label>
               <input
                 type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
                 required
-                className="w-full px-3 py-2 bg-gray-100 dark:bg-neutral-800 text-gray-900 dark:text-white rounded-lg outline-none focus:ring-2 focus:ring-amber-500"
-                value={shopData.name}
-                onChange={(e) => setShopData({ ...shopData, name: e.target.value })}
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
+                Description
+              </label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition resize-none"
+                rows="3"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Description</label>
-              <textarea
-                className="w-full px-3 py-2 bg-gray-100 dark:bg-neutral-800 text-gray-900 dark:text-white rounded-lg outline-none focus:ring-2 focus:ring-amber-500 resize-none"
-                rows="3"
-                value={shopData.description}
-                onChange={(e) => setShopData({ ...shopData, description: e.target.value })}
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
+                Phone
+              </label>
+              <input
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Phone</label>
-                <input
-                  type="tel"
-                  className="w-full px-3 py-2 bg-gray-100 dark:bg-neutral-800 text-gray-900 dark:text-white rounded-lg outline-none focus:ring-2 focus:ring-amber-500"
-                  value={shopData.phone}
-                  onChange={(e) => setShopData({ ...shopData, phone: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Address</label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 bg-gray-100 dark:bg-neutral-800 text-gray-900 dark:text-white rounded-lg outline-none focus:ring-2 focus:ring-amber-500"
-                  value={shopData.address}
-                  onChange={(e) => setShopData({ ...shopData, address: e.target.value })}
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
+                Email
+              </label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
+              />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">City</label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 bg-gray-100 dark:bg-neutral-800 text-gray-900 dark:text-white rounded-lg outline-none focus:ring-2 focus:ring-amber-500"
-                  value={shopData.city}
-                  onChange={(e) => setShopData({ ...shopData, city: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">State</label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 bg-gray-100 dark:bg-neutral-800 text-gray-900 dark:text-white rounded-lg outline-none focus:ring-2 focus:ring-amber-500"
-                  value={shopData.state}
-                  onChange={(e) => setShopData({ ...shopData, state: e.target.value })}
-                />
-              </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
+                Website
+              </label>
+              <input
+                type="url"
+                value={formData.website}
+                onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
+                placeholder="https://..."
+              />
             </div>
           </div>
-        </div>
+        </motion.div>
+
+        {/* Location */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border-2 border-gray-200 dark:border-neutral-800 shadow-lg"
+        >
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+            <MapPin className="w-6 h-6 text-amber-600" />
+            Location
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
+                Address
+              </label>
+              <input
+                type="text"
+                value={formData.address}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
+                City
+              </label>
+              <input
+                type="text"
+                value={formData.city}
+                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
+                State
+              </label>
+              <input
+                type="text"
+                value={formData.state}
+                onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
+                ZIP Code
+              </label>
+              <input
+                type="text"
+                value={formData.zip_code}
+                onChange={(e) => setFormData({ ...formData, zip_code: e.target.value })}
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
+              />
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Business Hours */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border-2 border-gray-200 dark:border-neutral-800 shadow-lg"
+        >
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+            <Clock className="w-6 h-6 text-amber-600" />
+            Business Hours
+          </h2>
+
+          <div className="space-y-4">
+            {days.map((day) => (
+              <div key={day} className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-neutral-800 rounded-xl">
+                <div className="w-32">
+                  <p className="font-bold text-gray-900 dark:text-white capitalize">{day}</p>
+                </div>
+                
+                {formData.hours[day].closed ? (
+                  <div className="flex-1">
+                    <span className="text-red-600 font-semibold">Closed</span>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex items-center gap-4">
+                    <input
+                      type="time"
+                      value={formData.hours[day].open}
+                      onChange={(e) => handleHoursChange(day, 'open', e.target.value)}
+                      className="px-3 py-2 bg-white dark:bg-neutral-900 border-2 border-gray-200 dark:border-neutral-700 rounded-lg focus:outline-none focus:border-amber-500 transition"
+                    />
+                    <span className="text-gray-600 dark:text-gray-400">to</span>
+                    <input
+                      type="time"
+                      value={formData.hours[day].close}
+                      onChange={(e) => handleHoursChange(day, 'close', e.target.value)}
+                      className="px-3 py-2 bg-white dark:bg-neutral-900 border-2 border-gray-200 dark:border-neutral-700 rounded-lg focus:outline-none focus:border-amber-500 transition"
+                    />
+                  </div>
+                )}
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.hours[day].closed}
+                    onChange={(e) => handleHoursChange(day, 'closed', e.target.checked)}
+                    className="w-5 h-5 text-amber-600 rounded focus:ring-2 focus:ring-amber-500"
+                  />
+                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Closed</span>
+                </label>
+              </div>
+            ))}
+          </div>
+        </motion.div>
 
         {/* Save Button */}
-        <div className="flex justify-end">
-          <button
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          className="flex justify-end"
+        >
+          <motion.button
             type="submit"
             disabled={loading}
-            className="px-6 py-2 bg-amber-700 text-white rounded-lg hover:bg-amber-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl font-bold shadow-lg hover:shadow-xl transition disabled:opacity-50"
           >
-            {loading ? "Saving..." : "Save Changes"}
-          </button>
-        </div>
+            {loading ? (
+              <>
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                >
+                  <Save className="w-5 h-5" />
+                </motion.div>
+                Saving...
+              </>
+            ) : (
+              <>
+                <Check className="w-5 h-5" />
+                Save Settings
+              </>
+            )}
+          </motion.button>
+        </motion.div>
       </form>
     </div>
   );

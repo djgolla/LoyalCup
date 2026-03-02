@@ -1,578 +1,814 @@
-// MenuBuilder.jsx
-// THE MAIN FEATURE - Visual menu builder with drag & drop
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Plus, Edit2, Trash2, Search, Coffee, DollarSign, 
+  Eye, EyeOff, Upload, X, Check, Sparkles, Grid, 
+  List, Tag, Zap
+} from 'lucide-react';
+import { useShop } from '../../context/ShopContext';
+import supabase from '../../lib/supabase';
+import { toast } from 'sonner';
 
-import { useEffect, useState } from "react";
-import { Plus, Search, FolderTree, GripVertical, Pencil, Trash2 } from "lucide-react";
-import { toast } from "sonner";
-import MenuItemCard from "../../components/shop-owner/MenuItemCard";
-import MenuItemEditor from "../../components/shop-owner/MenuItemEditor";
-import Loading from "../../components/Loading";
-import Modal from "../../components/Modal";
-import { useShop } from "../../context/ShopContext";
-import supabase from "../../lib/supabase";
+const MenuItemCard = ({ item, onEdit, onDelete, onToggle, delay }) => (
+  <motion.div
+    initial={{ opacity: 0, scale: 0.9 }}
+    animate={{ opacity: 1, scale: 1 }}
+    exit={{ opacity: 0, scale: 0.9 }}
+    transition={{ duration: 0.3, delay }}
+    whileHover={{ y: -8 }}
+    className={`relative group bg-white dark:bg-neutral-900 rounded-2xl overflow-hidden border-2 ${
+      item.is_available 
+        ? 'border-gray-200 dark:border-neutral-800 hover:border-amber-500' 
+        : 'border-gray-300 dark:border-neutral-700 opacity-60'
+    } shadow-lg hover:shadow-xl transition-all`}
+  >
+    <div className="absolute top-4 right-4 z-10 flex gap-2">
+      <motion.button
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.9 }}
+        onClick={() => onToggle(item)}
+        className={`p-2 rounded-full shadow-lg ${
+          item.is_available 
+            ? 'bg-green-500 hover:bg-green-600' 
+            : 'bg-gray-400 hover:bg-gray-500'
+        }`}
+      >
+        {item.is_available ? (
+          <Eye className="w-4 h-4 text-white" />
+        ) : (
+          <EyeOff className="w-4 h-4 text-white" />
+        )}
+      </motion.button>
+    </div>
+
+    {item.image_url ? (
+      <div className="h-48 overflow-hidden bg-gradient-to-br from-amber-100 to-orange-100">
+        <img 
+          src={item.image_url} 
+          alt={item.name}
+          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+        />
+      </div>
+    ) : (
+      <div className="h-48 bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/20 dark:to-orange-900/20 flex items-center justify-center">
+        <Coffee className="w-16 h-16 text-amber-300 dark:text-amber-700" />
+      </div>
+    )}
+
+    <div className="p-5">
+      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1 line-clamp-1">
+        {item.name}
+      </h3>
+      {item.description && (
+        <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mb-3">
+          {item.description}
+        </p>
+      )}
+
+      <div className="flex items-center gap-2 mb-3">
+        {item.category_name && (
+          <span className="px-2 py-1 bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400 rounded-lg text-xs font-bold">
+            {item.category_name}
+          </span>
+        )}
+        {item.sizes && item.sizes.length > 0 && (
+          <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-lg text-xs font-bold">
+            {item.sizes.length} sizes
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <DollarSign className="w-5 h-5 text-green-600" />
+          <span className="text-2xl font-black text-green-600">
+            {parseFloat(item.base_price || 0).toFixed(2)}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => onEdit(item)}
+          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-semibold transition"
+        >
+          <Edit2 className="w-4 h-4" />
+          Edit
+        </motion.button>
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => onDelete(item)}
+          className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl transition"
+        >
+          <Trash2 className="w-4 h-4" />
+        </motion.button>
+      </div>
+    </div>
+  </motion.div>
+);
+
+const MenuItemModal = ({ item, onClose, onSave, categories }) => {
+  const { shopId } = useShop();
+  const [formData, setFormData] = useState({
+    name: item?.name || '',
+    description: item?.description || '',
+    base_price: item?.base_price || '',
+    category_id: item?.category_id || '',
+    image_url: item?.image_url || '',
+    is_available: item?.is_available ?? true,
+    sizes: item?.sizes || [],
+    addons: item?.addons || [],
+  });
+  const [uploading, setUploading] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+
+  const [newSize, setNewSize] = useState({ name: '', price: '' });
+  const [newAddon, setNewAddon] = useState({ name: '', price: '' });
+
+  const handleImageUpload = async (file) => {
+    if (!file) return;
+
+    try {
+      setUploading(true);
+
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${shopId}/${Math.random()}.${fileExt}`;
+
+      const { error: uploadError, data } = await supabase.storage
+        .from('menu-items')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('menu-items')
+        .getPublicUrl(fileName);
+
+      setFormData({ ...formData, image_url: publicUrl });
+      toast.success('Image uploaded!');
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast.error('Failed to upload image');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleImageUpload(e.dataTransfer.files[0]);
+    }
+  };
+
+  const addSize = () => {
+    if (!newSize.name || !newSize.price) return;
+    setFormData({
+      ...formData,
+      sizes: [...formData.sizes, { ...newSize, price: parseFloat(newSize.price) }]
+    });
+    setNewSize({ name: '', price: '' });
+  };
+
+  const removeSize = (index) => {
+    setFormData({
+      ...formData,
+      sizes: formData.sizes.filter((_, i) => i !== index)
+    });
+  };
+
+  const addAddon = () => {
+    if (!newAddon.name || !newAddon.price) return;
+    setFormData({
+      ...formData,
+      addons: [...formData.addons, { ...newAddon, price: parseFloat(newAddon.price) }]
+    });
+    setNewAddon({ name: '', price: '' });
+  };
+
+  const removeAddon = (index) => {
+    setFormData({
+      ...formData,
+      addons: formData.addons.filter((_, i) => i !== index)
+    });
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSave(formData);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.9, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.9, y: 20 }}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white dark:bg-neutral-900 rounded-3xl shadow-2xl max-w-3xl w-full my-8"
+      >
+        <div className="sticky top-0 bg-white dark:bg-neutral-900 border-b border-gray-200 dark:border-neutral-800 p-6 flex items-center justify-between rounded-t-3xl">
+          <h2 className="text-2xl font-black text-gray-900 dark:text-white">
+            {item ? 'Edit Menu Item' : 'Add Menu Item'}
+          </h2>
+          <motion.button
+            whileHover={{ scale: 1.1, rotate: 90 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-full transition"
+          >
+            <X className="w-6 h-6" />
+          </motion.button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-6 max-h-[calc(90vh-100px)] overflow-y-auto">
+          {/* Image Upload */}
+          <div>
+            <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
+              Item Image
+            </label>
+            <div
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
+              onDrop={handleDrop}
+              className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition ${
+                dragActive 
+                  ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20' 
+                  : 'border-gray-300 dark:border-neutral-700'
+              }`}
+            >
+              {formData.image_url ? (
+                <div className="relative">
+                  <img 
+                    src={formData.image_url} 
+                    alt="Preview" 
+                    className="w-full h-48 object-cover rounded-xl"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, image_url: '' })}
+                    className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600 dark:text-gray-400 mb-2">
+                    {uploading ? 'Uploading...' : 'Drag & drop image here'}
+                  </p>
+                  <p className="text-sm text-gray-500 mb-4">or</p>
+                  <label className="inline-block px-6 py-3 bg-amber-500 text-white rounded-xl font-semibold cursor-pointer hover:bg-amber-600 transition">
+                    Choose File
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleImageUpload(e.target.files[0])}
+                      className="hidden"
+                      disabled={uploading}
+                    />
+                  </label>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Basic Info */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
+                Item Name *
+              </label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
+                placeholder="e.g., Caramel Latte"
+                required
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
+                Description
+              </label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition resize-none"
+                rows="3"
+                placeholder="Describe your item..."
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
+                Base Price *
+              </label>
+              <div className="relative">
+                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.base_price}
+                  onChange={(e) => setFormData({ ...formData, base_price: e.target.value })}
+                  className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
+                  placeholder="0.00"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
+                Category *
+              </label>
+              <select
+                value={formData.category_id}
+                onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
+                required
+              >
+                <option value="">Select category</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Sizes */}
+          <div>
+            <label className="block text-sm font-bold text-gray-900 dark:text-white mb-3">
+              Size Options (Optional)
+            </label>
+            <div className="space-y-2 mb-3">
+              {formData.sizes.map((size, i) => (
+                <div key={i} className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-neutral-800 rounded-xl">
+                  <Tag className="w-4 h-4 text-gray-400" />
+                  <span className="flex-1 font-semibold text-gray-900 dark:text-white">{size.name}</span>
+                  <span className="text-green-600 font-bold">+${size.price.toFixed(2)}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeSize(i)}
+                    className="p-1 hover:bg-red-100 dark:hover:bg-red-900/20 rounded text-red-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newSize.name}
+                onChange={(e) => setNewSize({ ...newSize, name: e.target.value })}
+                placeholder="Size name (e.g., Large)"
+                className="flex-1 px-4 py-2 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
+              />
+              <input
+                type="number"
+                step="0.01"
+                value={newSize.price}
+                onChange={(e) => setNewSize({ ...newSize, price: e.target.value })}
+                placeholder="Price"
+                className="w-24 px-4 py-2 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
+              />
+              <button
+                type="button"
+                onClick={addSize}
+                className="px-4 py-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Add-ons */}
+          <div>
+            <label className="block text-sm font-bold text-gray-900 dark:text-white mb-3">
+              Add-ons / Extras (Optional)
+            </label>
+            <div className="space-y-2 mb-3">
+              {formData.addons.map((addon, i) => (
+                <div key={i} className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-neutral-800 rounded-xl">
+                  <Sparkles className="w-4 h-4 text-gray-400" />
+                  <span className="flex-1 font-semibold text-gray-900 dark:text-white">{addon.name}</span>
+                  <span className="text-green-600 font-bold">+${addon.price.toFixed(2)}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeAddon(i)}
+                    className="p-1 hover:bg-red-100 dark:hover:bg-red-900/20 rounded text-red-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newAddon.name}
+                onChange={(e) => setNewAddon({ ...newAddon, name: e.target.value })}
+                placeholder="Add-on name (e.g., Extra Shot)"
+                className="flex-1 px-4 py-2 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
+              />
+              <input
+                type="number"
+                step="0.01"
+                value={newAddon.price}
+                onChange={(e) => setNewAddon({ ...newAddon, price: e.target.value })}
+                placeholder="Price"
+                className="w-24 px-4 py-2 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
+              />
+              <button
+                type="button"
+                onClick={addAddon}
+                className="px-4 py-2 bg-purple-500 text-white rounded-xl hover:bg-purple-600 transition"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Available Toggle */}
+          <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-neutral-800 rounded-xl">
+            <input
+              type="checkbox"
+              id="is_available"
+              checked={formData.is_available}
+              onChange={(e) => setFormData({ ...formData, is_available: e.target.checked })}
+              className="w-5 h-5 text-amber-600 rounded focus:ring-2 focus:ring-amber-500"
+            />
+            <label htmlFor="is_available" className="text-sm font-semibold text-gray-900 dark:text-white cursor-pointer">
+              Available for customers to order
+            </label>
+          </div>
+
+          {/* Buttons */}
+          <div className="flex gap-3 pt-4 sticky bottom-0 bg-white dark:bg-neutral-900 pb-2">
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={onClose}
+              className="flex-1 px-6 py-3 bg-gray-200 dark:bg-neutral-800 text-gray-900 dark:text-white rounded-xl font-bold hover:bg-gray-300 dark:hover:bg-neutral-700 transition"
+            >
+              Cancel
+            </motion.button>
+            <motion.button
+              type="submit"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="flex-1 px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl font-bold hover:from-amber-600 hover:to-orange-600 transition flex items-center justify-center gap-2"
+            >
+              <Check className="w-5 h-5" />
+              {item ? 'Update Item' : 'Add Item'}
+            </motion.button>
+          </div>
+        </form>
+      </motion.div>
+    </motion.div>
+  );
+};
 
 export default function MenuBuilder() {
-  const { shopId, loading: shopLoading } = useShop();
+  const { shopId } = useShop();
   const [menuItems, setMenuItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("all");
-  
-  // Editor state
-  const [editorOpen, setEditorOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [viewMode, setViewMode] = useState('grid');
+  const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
-  
-  // Category editor state
-  const [categoryEditorOpen, setCategoryEditorOpen] = useState(false);
-  const [editingCategory, setEditingCategory] = useState(null);
-  const [categoryName, setCategoryName] = useState("");
 
   useEffect(() => {
     if (shopId) {
-      loadMenuData();
+      loadData();
     }
   }, [shopId]);
 
-  const loadMenuData = async () => {
+  const loadData = async () => {
     if (!shopId) return;
-    
-    setLoading(true);
+
     try {
+      setLoading(true);
+
       // Load categories
-      const { data: categoriesData, error: categoriesError } = await supabase
-        .from('menu_categories')
+      const { data: categoriesData, error: catError } = await supabase
+        .from('categories')
         .select('*')
         .eq('shop_id', shopId)
-        .order('display_order', { ascending: true });
+        .order('name');
 
-      if (categoriesError) throw categoriesError;
+      if (catError) {
+        console.error('Categories error:', catError);
+        throw catError;
+      }
 
-      // Load menu items
+      // Load menu items WITHOUT join first
       const { data: itemsData, error: itemsError } = await supabase
         .from('menu_items')
         .select('*')
         .eq('shop_id', shopId)
         .order('created_at', { ascending: false });
 
-      if (itemsError) throw itemsError;
+      if (itemsError) {
+        console.error('Menu items error:', itemsError);
+        throw itemsError;
+      }
+
+      console.log('Loaded items:', itemsData);
+      console.log('Loaded categories:', categoriesData);
+
+      // Manually map category names
+      const itemsWithCategories = itemsData?.map(item => {
+        const category = categoriesData?.find(cat => cat.id === item.category_id);
+        return {
+          ...item,
+          category_name: category?.name,
+          sizes: item.sizes || [],
+          addons: item.addons || [],
+        };
+      }) || [];
 
       setCategories(categoriesData || []);
-      setMenuItems(itemsData || []);
+      setMenuItems(itemsWithCategories);
     } catch (error) {
-      console.error("Failed to load menu data:", error);
-      toast.error("Failed to load menu data");
+      console.error('Failed to load data:', error);
+      toast.error('Failed to load menu items: ' + error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Category Management
-  const handleAddCategory = () => {
-    setEditingCategory(null);
-    setCategoryName("");
-    setCategoryEditorOpen(true);
-  };
-
-  const handleEditCategory = (category) => {
-    setEditingCategory(category);
-    setCategoryName(category.name);
-    setCategoryEditorOpen(true);
-  };
-
-  const handleSaveCategory = async (e) => {
-    e.preventDefault();
-    if (!shopId || !categoryName.trim()) return;
-
-    try {
-      if (editingCategory) {
-        // Update existing category
-        const { error } = await supabase
-          .from('menu_categories')
-          .update({ name: categoryName.trim() })
-          .eq('id', editingCategory.id)
-          .eq('shop_id', shopId);
-
-        if (error) throw error;
-        toast.success("Category updated");
-      } else {
-        // Create new category
-        const maxOrder = categories.length > 0 
-          ? Math.max(...categories.map(c => c.display_order || 0)) 
-          : 0;
-
-        const { error } = await supabase
-          .from('menu_categories')
-          .insert({
-            shop_id: shopId,
-            name: categoryName.trim(),
-            display_order: maxOrder + 1,
-          });
-
-        if (error) throw error;
-        toast.success("Category created");
-      }
-
-      setCategoryEditorOpen(false);
-      loadMenuData();
-    } catch (error) {
-      console.error("Failed to save category:", error);
-      toast.error("Failed to save category");
-    }
-  };
-
-  const handleDeleteCategory = async (category) => {
-    if (!confirm(`Delete category "${category.name}"? Items in this category will remain but be uncategorized.`)) return;
-
-    try {
-      const { error } = await supabase
-        .from('menu_categories')
-        .delete()
-        .eq('id', category.id)
-        .eq('shop_id', shopId);
-
-      if (error) throw error;
-      toast.success("Category deleted");
-      
-      if (selectedCategory === category.id) {
-        setSelectedCategory("all");
-      }
-      
-      loadMenuData();
-    } catch (error) {
-      console.error("Failed to delete category:", error);
-      toast.error("Failed to delete category");
-    }
-  };
-
-  // Menu Item Management
-  const handleAddNew = () => {
-    setEditingItem(null);
-    setEditorOpen(true);
-  };
-
-  const handleEdit = (item) => {
-    setEditingItem(item);
-    setEditorOpen(true);
-  };
-
-  const handleSave = async (itemData) => {
-    if (!shopId) {
-      toast.error("Shop not found");
-      return;
-    }
-
+  const handleSave = async (formData) => {
     try {
       if (editingItem) {
-        // Update existing item
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('menu_items')
           .update({
-            name: itemData.name,
-            description: itemData.description,
-            category_id: itemData.category_id,
-            base_price: itemData.base_price,
-            is_available: itemData.is_available,
-            image_url: itemData.image_url,
+            name: formData.name,
+            description: formData.description,
+            base_price: parseFloat(formData.base_price),
+            category_id: formData.category_id,
+            image_url: formData.image_url,
+            is_available: formData.is_available,
+            sizes: formData.sizes,
+            addons: formData.addons,
           })
-          .eq('id', editingItem.id)
-          .eq('shop_id', shopId)
-          .select()
-          .single();
+          .eq('id', editingItem.id);
 
         if (error) throw error;
-
-        setMenuItems(menuItems.map(item => 
-          item.id === editingItem.id ? data : item
-        ));
-        toast.success("Item updated successfully");
+        toast.success('Item updated successfully!');
       } else {
-        // Create new item
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('menu_items')
-          .insert({
-            shop_id: shopId,
-            name: itemData.name,
-            description: itemData.description,
-            category_id: itemData.category_id,
-            base_price: itemData.base_price,
-            is_available: itemData.is_available,
-            image_url: itemData.image_url,
-          })
-          .select()
-          .single();
+          .insert([{ 
+            ...formData, 
+            base_price: parseFloat(formData.base_price),
+            shop_id: shopId 
+          }]);
 
         if (error) throw error;
-
-        setMenuItems([data, ...menuItems]);
-        toast.success("Item added successfully");
+        toast.success('Item added successfully!');
       }
-      setEditorOpen(false);
+
+      setShowModal(false);
+      setEditingItem(null);
+      loadData();
     } catch (error) {
-      console.error("Failed to save item:", error);
-      toast.error("Failed to save item: " + (error.message || "Unknown error"));
+      console.error('Failed to save item:', error);
+      toast.error('Failed to save item: ' + error.message);
     }
   };
 
   const handleDelete = async (item) => {
     if (!confirm(`Delete "${item.name}"?`)) return;
-    
-    if (!shopId) {
-      toast.error("Shop not found");
-      return;
-    }
 
     try {
       const { error } = await supabase
         .from('menu_items')
         .delete()
-        .eq('id', item.id)
-        .eq('shop_id', shopId);
+        .eq('id', item.id);
 
       if (error) throw error;
-
-      setMenuItems(menuItems.filter(i => i.id !== item.id));
-      toast.success("Item deleted");
+      toast.success('Item deleted!');
+      loadData();
     } catch (error) {
-      console.error("Failed to delete item:", error);
-      toast.error("Failed to delete item");
+      console.error('Failed to delete:', error);
+      toast.error('Failed to delete item');
     }
   };
 
-  const handleToggleAvailability = async (item) => {
-    if (!shopId) {
-      toast.error("Shop not found");
-      return;
-    }
-
+  const handleToggle = async (item) => {
     try {
-      const newAvailability = !item.is_available;
-      
       const { error } = await supabase
         .from('menu_items')
-        .update({ is_available: newAvailability })
-        .eq('id', item.id)
-        .eq('shop_id', shopId);
+        .update({ is_available: !item.is_available })
+        .eq('id', item.id);
 
       if (error) throw error;
-
-      setMenuItems(menuItems.map(i => 
-        i.id === item.id ? { ...i, is_available: newAvailability } : i
-      ));
-      toast.success(newAvailability ? "Item marked available" : "Item marked unavailable");
+      toast.success(item.is_available ? 'Item hidden' : 'Item visible');
+      loadData();
     } catch (error) {
-      console.error("Failed to toggle availability:", error);
-      toast.error("Failed to update availability");
+      console.error('Failed to toggle:', error);
+      toast.error('Failed to update item');
     }
   };
 
-  // Filter items
   const filteredItems = menuItems.filter(item => {
     const matchesSearch = item.name?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === "all" || item.category_id === selectedCategory;
+    const matchesCategory = selectedCategory === 'all' || item.category_id === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
-  // Group items by category
-  const itemsByCategory = {};
-  categories.forEach(cat => {
-    itemsByCategory[cat.id] = {
-      category: cat,
-      items: filteredItems.filter(item => item.category_id === cat.id)
-    };
-  });
-
-  // Uncategorized items
-  const uncategorizedItems = filteredItems.filter(item => !item.category_id || !categories.find(c => c.id === item.category_id));
-
-  if (shopLoading || loading) return <Loading />;
-
-  if (!shopId) {
+  if (loading) {
     return (
-      <div className="text-center py-12">
-        <div className="text-6xl mb-4">🏪</div>
-        <h3 className="text-xl font-semibold mb-2 text-gray-900 dark:text-white">No Shop Found</h3>
-        <p className="text-gray-600 dark:text-gray-400">
-          You don't have a shop assigned yet.
-        </p>
+      <div className="flex items-center justify-center h-screen">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+        >
+          <Coffee className="w-12 h-12 text-amber-600" />
+        </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-[calc(100vh-6rem)] gap-6">
-      
-      {/* Left Sidebar - Categories */}
-      <div className="w-64 flex-shrink-0 bg-white dark:bg-neutral-900 rounded-xl border border-gray-200 dark:border-neutral-800 p-4 overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-            <FolderTree size={20} />
-            Categories
-          </h2>
-          <button
-            onClick={handleAddCategory}
-            className="p-1.5 bg-amber-700 text-white rounded-lg hover:bg-amber-800 transition"
-            title="Add Category"
-          >
-            <Plus size={16} />
-          </button>
+    <div className="space-y-6">
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col md:flex-row md:items-center justify-between gap-4"
+      >
+        <div>
+          <h1 className="text-4xl font-black text-gray-900 dark:text-white mb-2">
+            Menu Builder
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            {filteredItems.length} items
+          </p>
         </div>
-
-        {/* All Items */}
-        <button
-          onClick={() => setSelectedCategory("all")}
-          className={`w-full text-left px-3 py-2 rounded-lg transition mb-2 ${
-            selectedCategory === "all"
-              ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
-              : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
-          }`}
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => {
+            setEditingItem(null);
+            setShowModal(true);
+          }}
+          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl font-bold shadow-lg hover:shadow-xl transition"
         >
-          All Items ({menuItems.length})
-        </button>
+          <Plus className="w-5 h-5" />
+          Add Item
+        </motion.button>
+      </motion.div>
 
-        {/* Category List */}
-        <div className="space-y-1">
-          {categories.map((category) => {
-            const itemCount = menuItems.filter(item => item.category_id === category.id).length;
-            return (
-              <div
-                key={category.id}
-                className={`group flex items-center gap-2 px-3 py-2 rounded-lg transition ${
-                  selectedCategory === category.id
-                    ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
-                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
-                }`}
-              >
-                <GripVertical size={14} className="text-gray-400 cursor-grab" />
-                <button
-                  onClick={() => setSelectedCategory(category.id)}
-                  className="flex-1 text-left"
-                >
-                  {category.name} ({itemCount})
-                </button>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
-                  <button
-                    onClick={() => handleEditCategory(category)}
-                    className="p-1 hover:bg-blue-100 dark:hover:bg-blue-900/20 rounded"
-                    title="Edit"
-                  >
-                    <Pencil size={12} className="text-blue-600" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteCategory(category)}
-                    className="p-1 hover:bg-red-100 dark:hover:bg-red-900/20 rounded"
-                    title="Delete"
-                  >
-                    <Trash2 size={12} className="text-red-600" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {categories.length === 0 && (
-          <div className="text-center py-8">
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
-              No categories yet
-            </p>
-            <button
-              onClick={handleAddCategory}
-              className="text-sm px-3 py-1.5 bg-amber-700 text-white rounded-lg hover:bg-amber-800 transition"
-            >
-              Add First Category
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 overflow-y-auto space-y-6">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Menu Builder</h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              {selectedCategory === "all" 
-                ? `${filteredItems.length} total items` 
-                : `${filteredItems.length} items in ${categories.find(c => c.id === selectedCategory)?.name || 'category'}`
-              }
-            </p>
-          </div>
-          <button
-            onClick={handleAddNew}
-            className="flex items-center gap-2 px-4 py-2 bg-amber-700 text-white rounded-lg hover:bg-amber-800 transition shadow-md"
-          >
-            <Plus size={20} />
-            Add New Item
-          </button>
-        </div>
-
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+      <div className="flex flex-col md:flex-row gap-4">
+        <div className="flex-1 relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
-            placeholder="Search menu items..."
-            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 rounded-lg outline-none focus:ring-2 focus:ring-amber-500 text-gray-900 dark:text-white"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search menu items..."
+            className="w-full pl-12 pr-4 py-3 bg-white dark:bg-neutral-900 border-2 border-gray-200 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-amber-500 transition"
           />
         </div>
 
-        {/* Menu Items Grid */}
-        {selectedCategory === "all" ? (
-          // Show all categories
-          <div className="space-y-8">
-            {categories.map(category => {
-              const categoryItems = itemsByCategory[category.id]?.items || [];
-              if (categoryItems.length === 0) return null;
-              
-              return (
-                <div key={category.id}>
-                  <h2 className="text-xl font-semibold mb-4 flex items-center gap-2 text-gray-900 dark:text-white">
-                    {category.name}
-                    <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
-                      ({categoryItems.length} items)
-                    </span>
-                  </h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {categoryItems.map(item => (
-                      <MenuItemCard
-                        key={item.id}
-                        item={item}
-                        onEdit={handleEdit}
-                        onDelete={handleDelete}
-                        onToggleAvailability={handleToggleAvailability}
-                      />
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
+        <select
+          value={selectedCategory}
+          onChange={(e) => setSelectedCategory(e.target.value)}
+          className="px-4 py-3 bg-white dark:bg-neutral-900 border-2 border-gray-200 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-amber-500 transition"
+        >
+          <option value="all">All Categories</option>
+          {categories.map((cat) => (
+            <option key={cat.id} value={cat.id}>
+              {cat.name}
+            </option>
+          ))}
+        </select>
 
-            {/* Uncategorized items */}
-            {uncategorizedItems.length > 0 && (
-              <div>
-                <h2 className="text-xl font-semibold mb-4 flex items-center gap-2 text-gray-900 dark:text-white">
-                  Uncategorized
-                  <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
-                    ({uncategorizedItems.length} items)
-                  </span>
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  {uncategorizedItems.map(item => (
-                    <MenuItemCard
-                      key={item.id}
-                      item={item}
-                      onEdit={handleEdit}
-                      onDelete={handleDelete}
-                      onToggleAvailability={handleToggleAvailability}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            {/* Empty state */}
-            {filteredItems.length === 0 && (
-              <div className="text-center py-12 bg-white dark:bg-neutral-900 rounded-xl border border-gray-200 dark:border-neutral-800">
-                <div className="text-6xl mb-4">☕</div>
-                <h3 className="text-xl font-semibold mb-2 text-gray-900 dark:text-white">No menu items yet</h3>
-                <p className="text-gray-600 dark:text-gray-400 mb-4">
-                  Get started by adding your first menu item
-                </p>
-                <button
-                  onClick={handleAddNew}
-                  className="px-4 py-2 bg-amber-700 text-white rounded-lg hover:bg-amber-800 transition"
-                >
-                  Add First Item
-                </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          // Show selected category only
-          <div>
-            {filteredItems.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {filteredItems.map(item => (
-                  <MenuItemCard
-                    key={item.id}
-                    item={item}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                    onToggleAvailability={handleToggleAvailability}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12 bg-white dark:bg-neutral-900 rounded-xl border border-gray-200 dark:border-neutral-800">
-                <div className="text-6xl mb-4">☕</div>
-                <h3 className="text-xl font-semibold mb-2 text-gray-900 dark:text-white">No items in this category</h3>
-                <p className="text-gray-600 dark:text-gray-400 mb-4">
-                  {searchQuery ? "Try adjusting your search" : "Add items to this category to get started"}
-                </p>
-                <button
-                  onClick={handleAddNew}
-                  className="px-4 py-2 bg-amber-700 text-white rounded-lg hover:bg-amber-800 transition"
-                >
-                  Add Item
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+        <div className="flex gap-2">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setViewMode('grid')}
+            className={`p-3 rounded-xl transition ${
+              viewMode === 'grid'
+                ? 'bg-amber-500 text-white'
+                : 'bg-white dark:bg-neutral-900 border-2 border-gray-200 dark:border-neutral-800'
+            }`}
+          >
+            <Grid className="w-5 h-5" />
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setViewMode('list')}
+            className={`p-3 rounded-xl transition ${
+              viewMode === 'list'
+                ? 'bg-amber-500 text-white'
+                : 'bg-white dark:bg-neutral-900 border-2 border-gray-200 dark:border-neutral-800'
+            }`}
+          >
+            <List className="w-5 h-5" />
+          </motion.button>
+        </div>
       </div>
 
-      {/* Item Editor Modal */}
-      <MenuItemEditor
-        item={editingItem}
-        categories={categories}
-        customizations={[]}
-        open={editorOpen}
-        onClose={() => setEditorOpen(false)}
-        onSave={handleSave}
-        shopId={shopId}
-      />
+      {filteredItems.length === 0 ? (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center py-20"
+        >
+          <Sparkles className="w-24 h-24 text-gray-300 dark:text-neutral-700 mx-auto mb-4" />
+          <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+            {searchQuery ? 'No items found' : 'No items yet'}
+          </h3>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">
+            {searchQuery ? 'Try a different search' : 'Start building your menu by adding your first item'}
+          </p>
+          {!searchQuery && (
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setShowModal(true)}
+              className="px-8 py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl font-bold shadow-lg"
+            >
+              Add First Item
+            </motion.button>
+          )}
+        </motion.div>
+      ) : (
+        <motion.div
+          layout
+          className={viewMode === 'grid' 
+            ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'
+            : 'space-y-4'
+          }
+        >
+          <AnimatePresence>
+            {filteredItems.map((item, i) => (
+              <MenuItemCard
+                key={item.id}
+                item={item}
+                onEdit={(item) => {
+                  setEditingItem(item);
+                  setShowModal(true);
+                }}
+                onDelete={handleDelete}
+                onToggle={handleToggle}
+                delay={i * 0.05}
+              />
+            ))}
+          </AnimatePresence>
+        </motion.div>
+      )}
 
-      {/* Category Editor Modal */}
-      <Modal open={categoryEditorOpen} onClose={() => setCategoryEditorOpen(false)}>
-        <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-          {editingCategory ? "Edit Category" : "Add Category"}
-        </h2>
-        <form onSubmit={handleSaveCategory} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-              Category Name *
-            </label>
-            <input
-              type="text"
-              required
-              className="w-full px-3 py-2 bg-gray-100 dark:bg-neutral-800 text-gray-900 dark:text-white rounded-lg outline-none focus:ring-2 focus:ring-amber-500"
-              value={categoryName}
-              onChange={(e) => setCategoryName(e.target.value)}
-              placeholder="e.g., Hot Drinks"
-            />
-          </div>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => setCategoryEditorOpen(false)}
-              className="flex-1 px-4 py-2 bg-gray-200 dark:bg-neutral-800 text-gray-900 dark:text-white rounded-lg hover:bg-gray-300 dark:hover:bg-neutral-700 transition"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="flex-1 px-4 py-2 bg-amber-700 text-white rounded-lg hover:bg-amber-800 transition"
-            >
-              {editingCategory ? "Save Changes" : "Create Category"}
-            </button>
-          </div>
-        </form>
-      </Modal>
+      <AnimatePresence>
+        {showModal && (
+          <MenuItemModal
+            item={editingItem}
+            categories={categories}
+            onClose={() => {
+              setShowModal(false);
+              setEditingItem(null);
+            }}
+            onSave={handleSave}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
