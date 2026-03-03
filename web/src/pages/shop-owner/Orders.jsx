@@ -3,13 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Clock, CheckCircle, XCircle, Package, DollarSign,
   User, Phone, Calendar, Filter, Search, Zap,
-  ShoppingBag, Eye, AlertCircle
+  ShoppingBag, Eye, AlertCircle, Coffee, X
 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import supabase from '../../lib/supabase';
 import { toast } from 'sonner';
 
-const OrderCard = ({ order, onUpdateStatus, onViewDetails, delay }) => {
+const OrderCard = ({ order, onViewDetails, delay }) => {
   const statusConfig = {
     pending: {
       color: 'from-yellow-500 to-yellow-600',
@@ -58,6 +58,16 @@ const OrderCard = ({ order, onUpdateStatus, onViewDetails, delay }) => {
   const config = statusConfig[order.status] || statusConfig.pending;
   const StatusIcon = config.icon;
 
+  // Generate simple order number from created_at
+  const getOrderNumber = (date, id) => {
+    const d = new Date(date);
+    const dateStr = `${d.getMonth() + 1}${d.getDate()}${d.getHours()}${d.getMinutes()}`;
+    const idPart = id.slice(0, 4);
+    return `${dateStr}${idPart}`.toUpperCase();
+  };
+
+  const itemCount = order.items?.length || 0;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -74,7 +84,7 @@ const OrderCard = ({ order, onUpdateStatus, onViewDetails, delay }) => {
           </div>
           <div>
             <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-              Order #{order.id.slice(0, 8)}
+              #{getOrderNumber(order.created_at, order.id)}
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">
               {new Date(order.created_at).toLocaleString()}
@@ -103,6 +113,12 @@ const OrderCard = ({ order, onUpdateStatus, onViewDetails, delay }) => {
             <span className="text-gray-700 dark:text-gray-300">{order.customer_phone}</span>
           </div>
         )}
+        {itemCount > 0 && (
+          <div className="flex items-center gap-2 text-sm">
+            <Coffee className="w-4 h-4 text-gray-400" />
+            <span className="text-gray-700 dark:text-gray-300">{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-neutral-800">
@@ -113,32 +129,15 @@ const OrderCard = ({ order, onUpdateStatus, onViewDetails, delay }) => {
           </span>
         </div>
 
-        <div className="flex gap-2">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => onViewDetails(order)}
-            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-semibold transition flex items-center gap-2"
-          >
-            <Eye className="w-4 h-4" />
-            View
-          </motion.button>
-          
-          {order.status !== 'completed' && order.status !== 'cancelled' && (
-            <select
-              value={order.status}
-              onChange={(e) => onUpdateStatus(order.id, e.target.value)}
-              className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-semibold transition cursor-pointer"
-            >
-              <option value="pending">Pending</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="preparing">Preparing</option>
-              <option value="ready">Ready</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          )}
-        </div>
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => onViewDetails(order)}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-semibold transition"
+        >
+          <Eye className="w-4 h-4" />
+          View Details
+        </motion.button>
       </div>
     </motion.div>
   );
@@ -146,6 +145,13 @@ const OrderCard = ({ order, onUpdateStatus, onViewDetails, delay }) => {
 
 const OrderDetailsModal = ({ order, onClose }) => {
   if (!order) return null;
+
+  const getOrderNumber = (date, id) => {
+    const d = new Date(date);
+    const dateStr = `${d.getMonth() + 1}${d.getDate()}${d.getHours()}${d.getMinutes()}`;
+    const idPart = id.slice(0, 4);
+    return `${dateStr}${idPart}`.toUpperCase();
+  };
 
   return (
     <motion.div
@@ -172,7 +178,7 @@ const OrderDetailsModal = ({ order, onClose }) => {
             onClick={onClose}
             className="p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-full transition"
           >
-            <XCircle className="w-6 h-6" />
+            <X className="w-6 h-6" />
           </motion.button>
         </div>
 
@@ -183,18 +189,23 @@ const OrderDetailsModal = ({ order, onClose }) => {
             </h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 bg-gray-50 dark:bg-neutral-800 rounded-xl">
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Order ID</p>
-                <p className="font-bold text-gray-900 dark:text-white">#{order.id.slice(0, 8)}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Order Number</p>
+                <p className="font-bold text-gray-900 dark:text-white text-lg">
+                  #{getOrderNumber(order.created_at, order.id)}
+                </p>
               </div>
               <div className="p-4 bg-gray-50 dark:bg-neutral-800 rounded-xl">
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Date</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Date & Time</p>
                 <p className="font-bold text-gray-900 dark:text-white">
                   {new Date(order.created_at).toLocaleDateString()}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {new Date(order.created_at).toLocaleTimeString()}
                 </p>
               </div>
               <div className="p-4 bg-gray-50 dark:bg-neutral-800 rounded-xl">
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Customer</p>
-                <p className="font-bold text-gray-900 dark:text-white">{order.customer_name || 'N/A'}</p>
+                <p className="font-bold text-gray-900 dark:text-white">{order.customer_name || 'Guest'}</p>
               </div>
               <div className="p-4 bg-gray-50 dark:bg-neutral-800 rounded-xl">
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Phone</p>
@@ -207,27 +218,47 @@ const OrderDetailsModal = ({ order, onClose }) => {
             <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3">
               Order Items
             </h3>
-            <div className="space-y-3">
-              {order.items?.map((item, i) => (
-                <div key={i} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-neutral-800 rounded-xl">
-                  <div className="flex-1">
-                    <p className="font-bold text-gray-900 dark:text-white">{item.name}</p>
-                    {item.size && (
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Size: {item.size}</p>
+            {order.items && order.items.length > 0 ? (
+              <div className="space-y-3">
+                {order.items.map((item, i) => (
+                  <div key={i} className="flex items-start gap-4 p-4 bg-gray-50 dark:bg-neutral-800 rounded-xl">
+                    {item.image_url ? (
+                      <img 
+                        src={item.image_url} 
+                        alt={item.name}
+                        className="w-16 h-16 rounded-lg object-cover"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/20 dark:to-orange-900/20 rounded-lg flex items-center justify-center">
+                        <Coffee className="w-8 h-8 text-amber-600" />
+                      </div>
                     )}
-                    {item.addons && item.addons.length > 0 && (
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Add-ons: {item.addons.join(', ')}
-                      </p>
-                    )}
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <p className="font-bold text-gray-900 dark:text-white">
+                            {item.quantity}x {item.name}
+                          </p>
+                          {item.size && (
+                            <p className="text-sm text-gray-600 dark:text-gray-400">Size: {item.size}</p>
+                          )}
+                          {item.addons && item.addons.length > 0 && (
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              Add-ons: {item.addons.join(', ')}
+                            </p>
+                          )}
+                        </div>
+                        <p className="font-bold text-green-600 text-lg">
+                          ${(item.price * item.quantity).toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Qty: {item.quantity}</p>
-                    <p className="font-bold text-green-600">${item.price.toFixed(2)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-center text-gray-500 py-8">No items in this order</p>
+            )}
           </div>
 
           <div className="pt-4 border-t border-gray-200 dark:border-neutral-800">
@@ -303,6 +334,7 @@ export default function Orders() {
 
       if (error) throw error;
 
+      console.log('Loaded orders:', data);
       setOrders(data || []);
     } catch (error) {
       console.error('Failed to load orders:', error);
@@ -312,28 +344,20 @@ export default function Orders() {
     }
   };
 
-  const handleUpdateStatus = async (orderId, newStatus) => {
-    try {
-      const { error } = await supabase
-        .from('orders')
-        .update({ status: newStatus })
-        .eq('id', orderId);
-
-      if (error) throw error;
-      
-      toast.success('Order status updated!');
-      loadOrders();
-    } catch (error) {
-      console.error('Failed to update status:', error);
-      toast.error('Failed to update order status');
-    }
-  };
-
   const filteredOrders = orders.filter(order => {
     const matchesStatus = filterStatus === 'all' || order.status === filterStatus;
+    
+    // Only filter by search if there's actually a search query
+    if (!searchQuery) {
+      return matchesStatus;
+    }
+    
+    const searchLower = searchQuery.toLowerCase();
     const matchesSearch = 
-      order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.customer_name?.toLowerCase().includes(searchQuery.toLowerCase());
+      order.customer_name?.toLowerCase().includes(searchLower) ||
+      order.customer_phone?.includes(searchQuery) ||
+      order.id.toLowerCase().includes(searchLower);
+    
     return matchesStatus && matchesSearch;
   });
 
@@ -371,7 +395,7 @@ export default function Orders() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by order ID or customer..."
+            placeholder="Search by customer name or phone..."
             className="w-full pl-12 pr-4 py-3 bg-white dark:bg-neutral-900 border-2 border-gray-200 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-amber-500 transition"
           />
         </div>
@@ -414,7 +438,6 @@ export default function Orders() {
               <OrderCard
                 key={order.id}
                 order={order}
-                onUpdateStatus={handleUpdateStatus}
                 onViewDetails={setSelectedOrder}
                 delay={i * 0.05}
               />

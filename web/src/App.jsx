@@ -64,6 +64,7 @@ import { AccentProvider } from "./context/AccentContext";
 import { AuthProvider } from "./context/AuthContext";
 import { CartProvider } from "./context/CartContext";
 import { ShopProvider } from "./context/ShopContext";
+import { StripeProvider } from "./context/StripeContext";
 
 export default function App() {
 
@@ -72,107 +73,109 @@ export default function App() {
       <AccentProvider>
         <AuthProvider>
           <ShopProvider>
-            <CartProvider>
-              <BrowserRouter>
-              <Routes>
-                {/* auth pages */}
-                <Route element={<AuthLayout />}>
-                  <Route path="/login" element={<CustomerLogin />} />
-                  <Route path="/register" element={<Register />} />
-                  <Route path="/application-pending" element={<ApplicationPending />} />
-                </Route>
+            <StripeProvider>
+              <CartProvider>
+                <BrowserRouter>
+                <Routes>
+                  {/* auth pages */}
+                  <Route element={<AuthLayout />}>
+                    <Route path="/login" element={<CustomerLogin />} />
+                    <Route path="/register" element={<Register />} />
+                    <Route path="/application-pending" element={<ApplicationPending />} />
+                  </Route>
 
-                {/* admin login (separate, hidden) */}
-                <Route path="/admin" element={<AdminLogin />} />
+                  {/* admin login (separate, hidden) */}
+                  <Route path="/admin" element={<AdminLogin />} />
 
-                {/* protected shop application */}
-                <Route
-                  element={
-                    <ProtectedRoute>
-                      <AuthLayout />
-                    </ProtectedRoute>
-                  }
-                >
-                  <Route path="/shop-application" element={<ShopApplication />} />
-                </Route>
+                  {/* protected shop application */}
+                  <Route
+                    element={
+                      <ProtectedRoute>
+                        <AuthLayout />
+                      </ProtectedRoute>
+                    }
+                  >
+                    <Route path="/shop-application" element={<ShopApplication />} />
+                  </Route>
 
-                {/* public customer pages */}
-                <Route element={<MainLayout />}>
-                  <Route path="/" element={<Home />} />
-                  <Route path="/shops" element={<ShopList />} />
-                  <Route path="/shops/:id" element={<ShopDetail />} />
-                  {/* info pages */}
-                  <Route path="/contact" element={<Contact />} />
-                  <Route path="/privacy" element={<Privacy />} />
-                  <Route path="/terms" element={<Terms />} />
-                  <Route path="/about" element={<About />} />
-                </Route>
+                  {/* public customer pages */}
+                  <Route element={<MainLayout />}>
+                    <Route path="/" element={<Home />} />
+                    <Route path="/shops" element={<ShopList />} />
+                    <Route path="/shops/:id" element={<ShopDetail />} />
+                    {/* info pages */}
+                    <Route path="/contact" element={<Contact />} />
+                    <Route path="/privacy" element={<Privacy />} />
+                    <Route path="/terms" element={<Terms />} />
+                    <Route path="/about" element={<About />} />
+                  </Route>
 
-                {/* protected customer pages */}
-                <Route
-                  element={
-                    <ProtectedRoute>
-                      <MainLayout />
-                    </ProtectedRoute>
-                  }
-                >
-                  <Route path="/rewards" element={<Rewards />} />
-                  <Route path="/profile" element={<Profile />} />
-                  <Route path="/profile/edit" element={<EditProfile />} />
-                </Route>
+                  {/* protected customer pages */}
+                  <Route
+                    element={
+                      <ProtectedRoute>
+                        <MainLayout />
+                      </ProtectedRoute>
+                    }
+                  >
+                    <Route path="/rewards" element={<Rewards />} />
+                    <Route path="/profile" element={<Profile />} />
+                    <Route path="/profile/edit" element={<EditProfile />} />
+                  </Route>
 
-                {/* shop owner pages */}
-                <Route
-                  element={
-                    <RoleGuard roles={["shop_owner", "admin"]}>
-                      <ShopOwnerLayout />
-                    </RoleGuard>
-                  }
-                >
-                  <Route path="/shop-owner/dashboard" element={<ShopOwnerDashboard />} />
-                  <Route path="/shop-owner/menu" element={<MenuBuilder />} />
-                  <Route path="/shop-owner/categories" element={<Categories />} />
-                  <Route path="/shop-owner/customizations" element={<Customizations />} />
-                  <Route path="/shop-owner/orders" element={<ShopOwnerOrders />} />
-                  <Route path="/shop-owner/analytics" element={<ShopOwnerAnalytics />} />
-                  <Route path="/shop-owner/loyalty" element={<LoyaltySettings />} />
-                  <Route path="/shop-owner/workers" element={<Workers />} />
-                  <Route path="/shop-owner/settings" element={<ShopSettings />} />
-                </Route>
+                  {/* shop owner pages */}
+                  <Route
+                    element={
+                      <RoleGuard roles={["shop_owner", "admin"]}>
+                        <ShopOwnerLayout />
+                      </RoleGuard>
+                    }
+                  >
+                    <Route path="/shop-owner/dashboard" element={<ShopOwnerDashboard />} />
+                    <Route path="/shop-owner/menu" element={<MenuBuilder />} />
+                    <Route path="/shop-owner/categories" element={<Categories />} />
+                    <Route path="/shop-owner/customizations" element={<Customizations />} />
+                    <Route path="/shop-owner/orders" element={<ShopOwnerOrders />} />
+                    <Route path="/shop-owner/analytics" element={<ShopOwnerAnalytics />} />
+                    <Route path="/shop-owner/loyalty" element={<LoyaltySettings />} />
+                    <Route path="/shop-owner/workers" element={<Workers />} />
+                    <Route path="/shop-owner/settings" element={<ShopSettings />} />
+                  </Route>
 
-                {/* worker pages */}
-                <Route
-                  element={
-                    <RoleGuard roles={["shop_worker", "admin"]}>
-                      <WorkerLayout />
-                    </RoleGuard>
-                  }
-                >
-                  <Route path="/worker" element={<OrderQueue />} />
-                  <Route path="/worker/summary" element={<DailySummary />} />
-                </Route>
+                  {/* worker pages */}
+                  <Route
+                    element={
+                      <RoleGuard roles={["shop_worker", "admin"]}>
+                        <WorkerLayout />
+                      </RoleGuard>
+                    }
+                  >
+                    <Route path="/worker" element={<OrderQueue />} />
+                    <Route path="/worker/summary" element={<DailySummary />} />
+                  </Route>
 
-                {/* admin pages */}
-                <Route
-                  element={
-                    <RoleGuard roles={["admin"]}>
-                      <AdminLayout />
-                    </RoleGuard>
-                  }
-                >
-                  <Route path="/admin/dashboard" element={<AdminDashboard />} />
-                  <Route path="/admin/shops" element={<ShopManagement />} />
-                  <Route path="/admin/users" element={<Users />} />
-                  <Route path="/admin/analytics" element={<AdminAnalytics />} />
-                  <Route path="/admin/settings" element={<AdminSettings />} />
-                  <Route path="/admin/audit-log" element={<AuditLog />} />
-                </Route>
+                  {/* admin pages */}
+                  <Route
+                    element={
+                      <RoleGuard roles={["admin"]}>
+                        <AdminLayout />
+                      </RoleGuard>
+                    }
+                  >
+                    <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                    <Route path="/admin/shops" element={<ShopManagement />} />
+                    <Route path="/admin/users" element={<Users />} />
+                    <Route path="/admin/analytics" element={<AdminAnalytics />} />
+                    <Route path="/admin/settings" element={<AdminSettings />} />
+                    <Route path="/admin/audit-log" element={<AuditLog />} />
+                  </Route>
 
-                {/* 404 */}
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </BrowserRouter>
-          </CartProvider>
+                  {/* 404 */}
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </BrowserRouter>
+            </CartProvider>
+          </StripeProvider>
         </ShopProvider>
       </AuthProvider>
     </AccentProvider>
