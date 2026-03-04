@@ -10,6 +10,7 @@ from app.middleware.rate_limit import limiter, rate_limit_handler
 from app.utils.logging import setup_logging, get_logger
 from app.database import get_supabase
 import time
+from app.routes import auth, users, shops, menu, orders, loyalty, admin, payments
 
 # Setup structured logging
 setup_logging(level="INFO" if settings.environment == "production" else "DEBUG")
@@ -86,7 +87,7 @@ app.include_router(menu.router)
 app.include_router(orders.router)
 app.include_router(loyalty.router)
 app.include_router(admin.router)
-
+app.include_router(payments.router)
 
 @app.get("/")
 async def root():

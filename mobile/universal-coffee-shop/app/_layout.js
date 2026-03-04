@@ -5,6 +5,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { StripeProvider } from '@stripe/stripe-react-native';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { CartProvider } from '../context/CartContext';
 
@@ -70,11 +71,13 @@ export default function RootLayout() {
   // Render the layout wrapped in providers
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthProvider>
-        <CartProvider>
-          <RootLayoutNav />
-        </CartProvider>
-      </AuthProvider>
+      <StripeProvider publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY}>
+        <AuthProvider>
+          <CartProvider>
+            <RootLayoutNav />
+          </CartProvider>
+        </AuthProvider>
+      </StripeProvider>
     </GestureHandlerRootView>
   );
 }

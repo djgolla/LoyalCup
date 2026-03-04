@@ -4,17 +4,93 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useStripe } from '@stripe/stripe-react-native';
 import { useCart } from '../context/CartContext';
 import { orderService } from '../services/orderService';
 
 export default function CheckoutScreen() {
   const router = useRouter();
   const { items, getTotal, clearCart } = useCart();
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const [loading, setLoading] = useState(false);
 
   const handlePlaceOrder = async () => {
+    console.log('🔥 PAY NOW CLICKED');
     setLoading(true);
+    
     try {
+      const subtotal = getTotal();
+      const tax = subtotal * 0.08;
+      const total = subtotal + tax;
+
+      console.log('💰 Total:', total);
+      console.log('📦 Items:', items);
+
+      // 1. Create payment intent on backend
+      console.log('🌐 Calling API:', `${process.env.EXPO_PUBLIC_API_URL}/api/v1/payments/create-payment-intent`);
+      
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/v1/payments/create-payment-intent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          shop_id: items[0]?.shopId || 'default-shop',
+          items: items.map(item => ({
+            menu_item_id: item.id,
+            quantity: item.quantity,
+            price: item.price,
+            name: item.name,
+          })),
+          total: total
+        })
+      });
+
+      console.log('📡 Response status:', response.status);
+      const data = await response.json();
+      console.log('📄 Response data:', data);
+
+      const { client_secret } = data;
+
+      if (!client_secret) {
+        throw new Error('No client_secret returned from server');
+      }
+
+      console.log('🔑 Got client_secret');
+
+      // 2. Initialize payment sheet
+      console.log('🎨 Initializing payment sheet...');
+      const { error: initError } = await initPaymentSheet({
+        merchantDisplayName: 'LoyalCup',
+        paymentIntentClientSecret: client_secret,
+        defaultBillingDetails: {
+          name: 'Customer Name',
+        }
+      });
+
+      if (initError) {
+        console.error('❌ Init error:', initError);
+        Alert.alert('Error', initError.message);
+        setLoading(false);
+        return;
+      }
+
+      console.log('✅ Payment sheet initialized');
+
+      // 3. Present payment sheet
+      console.log('📱 Presenting payment sheet...');
+      const { error: presentError } = await presentPaymentSheet();
+
+      if (presentError) {
+        console.log('❌ Payment cancelled:', presentError.message);
+        Alert.alert('Payment cancelled', presentError.message);
+        setLoading(false);
+        return;
+      }
+
+      console.log('✅ Payment successful!');
+
+      // 4. Payment successful - create order
       const orderData = {
         items: items.map(item => ({
           id: item.id,
@@ -23,7 +99,7 @@ export default function CheckoutScreen() {
           quantity: item.quantity,
           shopId: item.shopId,
         })),
-        total: getTotal(),
+        total: total,
         status: 'pending',
       };
 
@@ -33,12 +109,12 @@ export default function CheckoutScreen() {
       
       Alert.alert(
         'Order Placed!',
-        'Your order has been placed successfully.',
+        'Your payment was successful and order has been placed.',
         [{ text: 'OK', onPress: () => router.replace(`/order/${order.id}`) }]
       );
     } catch (error) {
-      console.error('Failed to place order:', error);
-      Alert.alert('Error', 'Failed to place order. Please try again.');
+      console.error('💥 Error:', error);
+      Alert.alert('Error', `Failed to complete payment: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -107,7 +183,7 @@ export default function CheckoutScreen() {
             <ActivityIndicator color="#FFF" />
           ) : (
             <>
-              <Text style={styles.placeOrderButtonText}>PLACE ORDER</Text>
+              <Text style={styles.placeOrderButtonText}>PAY NOW</Text>
               <Text style={styles.placeOrderTotal}>${total.toFixed(2)}</Text>
             </>
           )}

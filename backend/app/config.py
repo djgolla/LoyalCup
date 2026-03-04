@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     # Redis configuration (for rate limiting and caching)
     redis_url: str = Field(default="redis://localhost:6379", description="Redis connection URL")
     
+    # Stripe configuration
+    stripe_secret_key: str = Field(default="", description="Stripe secret key")
+    stripe_webhook_secret: str = Field(default="", description="Stripe webhook secret")
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
