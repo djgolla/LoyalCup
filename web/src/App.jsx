@@ -36,6 +36,7 @@ import ShopOwnerAnalytics from "./pages/shop-owner/Analytics";
 import LoyaltySettings from "./pages/shop-owner/LoyaltySettings";
 import Workers from "./pages/shop-owner/Workers";
 import ShopSettings from "./pages/shop-owner/ShopSettings";
+import ShopSetup from "./pages/shop-owner/ShopSetup";
 
 // worker pages
 import OrderQueue from "./pages/worker/OrderQueue";
@@ -140,6 +141,7 @@ export default function App() {
                     <Route path="/shop-owner/loyalty" element={<LoyaltySettings />} />
                     <Route path="/shop-owner/workers" element={<Workers />} />
                     <Route path="/shop-owner/settings" element={<ShopSettings />} />
+                    <Route path="/shop-owner/setup" element={<ShopSetup />} />
                   </Route>
 
                   {/* worker pages */}
@@ -167,18 +169,18 @@ export default function App() {
                     <Route path="/admin/users" element={<Users />} />
                     <Route path="/admin/analytics" element={<AdminAnalytics />} />
                     <Route path="/admin/settings" element={<AdminSettings />} />
-                    <Route path="/admin/audit-log" element={<AuditLog />} />
+                    <Route path="/admin/audit" element={<AuditLog />} />
                   </Route>
 
                   {/* 404 */}
                   <Route path="*" element={<NotFound />} />
                 </Routes>
-              </BrowserRouter>
-            </CartProvider>
-          </StripeProvider>
-        </ShopProvider>
-      </AuthProvider>
-    </AccentProvider>
-  </ThemeProvider>
+                </BrowserRouter>
+              </CartProvider>
+            </StripeProvider>
+          </ShopProvider>
+        </AuthProvider>
+      </AccentProvider>
+    </ThemeProvider>
   );
 }

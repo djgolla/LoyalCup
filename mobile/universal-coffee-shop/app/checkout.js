@@ -1,169 +1,141 @@
-// checkout screen
-// universal-coffee-shop/app/checkout.js
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useStripe } from '@stripe/stripe-react-native';
 import { useCart } from '../context/CartContext';
 import { orderService } from '../services/orderService';
 
 export default function CheckoutScreen() {
   const router = useRouter();
   const { items, getTotal, clearCart } = useCart();
-  const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const [loading, setLoading] = useState(false);
 
   const handlePlaceOrder = async () => {
+    if (items.length === 0) {
+      Alert.alert('Error', 'Your cart is empty');
+      return;
+    }
+
     setLoading(true);
     try {
-      const subtotal = getTotal();
-      const tax = subtotal * 0.08;
-      const total = subtotal + tax;
+      // Get the shop ID from the first item (assuming all items are from same shop)
+      const shopId = items[0].shopId;
 
-      // 1. Create payment intent on backend
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/v1/payments/create-payment-intent`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // TODO: Add real auth token from your auth context
-          // 'Authorization': `Bearer ${authToken}`
-        },
-        body: JSON.stringify({
-          shop_id: items[0]?.shopId || 'default-shop',
-          items: items.map(item => ({
-            menu_item_id: item.id,
-            quantity: item.quantity,
-            price: item.price,
-            name: item.name,
-          })),
-          total: total
-        })
-      });
+      // Create order
+      const order = await orderService.createOrder(shopId, items);
 
-      const { client_secret } = await response.json();
-
-      // 2. Initialize payment sheet
-      const { error: initError } = await initPaymentSheet({
-        merchantDisplayName: 'LoyalCup',
-        paymentIntentClientSecret: client_secret,
-        defaultBillingDetails: {
-          name: 'Customer Name', // TODO: Add real customer name
-        }
-      });
-
-      if (initError) {
-        Alert.alert('Error', initError.message);
-        setLoading(false);
-        return;
-      }
-
-      // 3. Present payment sheet
-      const { error: presentError } = await presentPaymentSheet();
-
-      if (presentError) {
-        Alert.alert('Payment cancelled', presentError.message);
-        setLoading(false);
-        return;
-      }
-
-      // 4. Payment successful - create order
-      const orderData = {
-        items: items.map(item => ({
-          id: item.id,
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-          shopId: item.shopId,
-        })),
-        total: total,
-        status: 'pending',
-      };
-
-      const order = await orderService.createOrder(orderData);
-      
-      clearCart();
-      
       Alert.alert(
-        'Order Placed!',
-        'Your payment was successful and order has been placed.',
-        [{ text: 'OK', onPress: () => router.replace(`/order/${order.id}`) }]
+        'Order Placed! 🎉',
+        `Your order #${order.id.substring(0, 8)} has been placed successfully!`,
+        [
+          {
+            text: 'View Order',
+            onPress: () => {
+              clearCart();
+              router.push(`/order/${order.id}`);
+            }
+          }
+        ]
       );
     } catch (error) {
       console.error('Failed to place order:', error);
-      Alert.alert('Error', 'Failed to complete payment. Please try again.');
+      Alert.alert('Error', 'Failed to place order. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   const subtotal = getTotal();
-  const tax = subtotal * 0.08;
+  const tax = subtotal * 0.08; // 8% tax
   const total = subtotal + tax;
+
+  if (items.length === 0) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Feather name="arrow-left" size={24} color="#000" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>CHECKOUT</Text>
+          <View style={styles.backButton} />
+        </View>
+        <View style={styles.emptyContainer}>
+          <Feather name="shopping-bag" size={64} color="#CCC" />
+          <Text style={styles.emptyText}>Your cart is empty</Text>
+          <TouchableOpacity 
+            style={styles.shopButton}
+            onPress={() => router.push('/')}>
+            <Text style={styles.shopButtonText}>Start Shopping</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => router.back()}>
-          <Feather name="arrow-left" size={24} color="black" />
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Feather name="arrow-left" size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>CHECKOUT</Text>
         <View style={styles.backButton} />
       </View>
 
       <ScrollView style={styles.content}>
+        {/* Order Summary */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>ORDER SUMMARY</Text>
-          {items.map(item => (
-            <View key={item.id} style={styles.orderItem}>
-              <Text style={styles.itemName}>
-                {item.quantity}x {item.name}
-              </Text>
-              <Text style={styles.itemPrice}>
-                ${(item.price * item.quantity).toFixed(2)}
-              </Text>
+          <Text style={styles.sectionTitle}>Order Summary</Text>
+          {items.map((item, index) => (
+            <View key={index} style={styles.orderItem}>
+              <View style={styles.itemInfo}>
+                <Text style={styles.itemName}>{item.name}</Text>
+                <Text style={styles.itemQuantity}>Qty: {item.quantity}</Text>
+              </View>
+              <Text style={styles.itemPrice}>${(item.price * item.quantity).toFixed(2)}</Text>
             </View>
           ))}
         </View>
 
+        {/* Price Breakdown */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>PAYMENT</Text>
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Subtotal</Text>
-            <Text style={styles.totalValue}>${subtotal.toFixed(2)}</Text>
+          <Text style={styles.sectionTitle}>Price Details</Text>
+          <View style={styles.priceRow}>
+            <Text style={styles.priceLabel}>Subtotal</Text>
+            <Text style={styles.priceValue}>${subtotal.toFixed(2)}</Text>
           </View>
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Tax (8%)</Text>
-            <Text style={styles.totalValue}>${tax.toFixed(2)}</Text>
+          <View style={styles.priceRow}>
+            <Text style={styles.priceLabel}>Tax (8%)</Text>
+            <Text style={styles.priceValue}>${tax.toFixed(2)}</Text>
           </View>
-          <View style={[styles.totalRow, styles.grandTotal]}>
-            <Text style={styles.grandTotalLabel}>Total</Text>
-            <Text style={styles.grandTotalValue}>${total.toFixed(2)}</Text>
+          <View style={[styles.priceRow, styles.totalRow]}>
+            <Text style={styles.totalLabel}>Total</Text>
+            <Text style={styles.totalValue}>${total.toFixed(2)}</Text>
           </View>
         </View>
 
+        {/* Payment Info */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>DELIVERY INFO</Text>
-          <Text style={styles.infoText}>Pick up in store</Text>
-          <Text style={styles.infoSubtext}>Ready in 10-15 minutes</Text>
+          <Text style={styles.sectionTitle}>Payment Method</Text>
+          <View style={styles.paymentMethod}>
+            <Feather name="credit-card" size={24} color="#00704A" />
+            <Text style={styles.paymentText}>Pay in-store</Text>
+          </View>
+          <Text style={styles.paymentNote}>
+            💡 You'll pay when you pick up your order
+          </Text>
         </View>
       </ScrollView>
 
+      {/* Place Order Button */}
       <View style={styles.footer}>
-        <TouchableOpacity 
-          style={[styles.placeOrderButton, loading && styles.buttonDisabled]}
+        <TouchableOpacity
+          style={[styles.placeOrderButton, loading && styles.placeOrderButtonDisabled]}
           onPress={handlePlaceOrder}
           disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="#FFF" />
-          ) : (
-            <>
-              <Text style={styles.placeOrderButtonText}>PAY NOW</Text>
-              <Text style={styles.placeOrderTotal}>${total.toFixed(2)}</Text>
-            </>
-          )}
+          <Text style={styles.placeOrderButtonText}>
+            {loading ? 'Placing Order...' : `Place Order • $${total.toFixed(2)}`}
+          </Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -173,115 +145,155 @@ export default function CheckoutScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F5F5F5',
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    justifyContent: 'space-between',
+    padding: 16,
+    backgroundColor: '#FFF',
     borderBottomWidth: 2,
     borderBottomColor: '#000',
   },
   backButton: {
     width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontFamily: 'Anton-Regular',
   },
   content: {
     flex: 1,
   },
   section: {
+    backgroundColor: '#FFF',
     padding: 20,
+    marginVertical: 8,
+    borderTopWidth: 2,
     borderBottomWidth: 2,
-    borderBottomColor: '#E0E0E0',
+    borderColor: '#000',
   },
   sectionTitle: {
     fontSize: 18,
     fontFamily: 'Anton-Regular',
-    marginBottom: 15,
+    marginBottom: 16,
   },
   orderItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEE',
+  },
+  itemInfo: {
+    flex: 1,
   },
   itemName: {
     fontSize: 16,
-    flex: 1,
+    fontWeight: '600',
+    marginBottom: 4,
   },
-  itemPrice: {
-    fontSize: 16,
-    fontFamily: 'Anton-Regular',
-  },
-  totalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  totalLabel: {
-    fontSize: 16,
-  },
-  totalValue: {
-    fontSize: 16,
-  },
-  grandTotal: {
-    marginTop: 10,
-    paddingTop: 15,
-    borderTopWidth: 2,
-    borderTopColor: '#000',
-  },
-  grandTotalLabel: {
-    fontSize: 20,
-    fontFamily: 'Anton-Regular',
-  },
-  grandTotalValue: {
-    fontSize: 20,
-    fontFamily: 'Anton-Regular',
-  },
-  infoText: {
-    fontSize: 16,
-    fontFamily: 'Anton-Regular',
-    marginBottom: 5,
-  },
-  infoSubtext: {
+  itemQuantity: {
     fontSize: 14,
     color: '#666',
   },
+  itemPrice: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  priceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  priceLabel: {
+    fontSize: 16,
+    color: '#666',
+  },
+  priceValue: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  totalRow: {
+    borderTopWidth: 2,
+    borderTopColor: '#000',
+    marginTop: 8,
+    paddingTop: 16,
+  },
+  totalLabel: {
+    fontSize: 20,
+    fontFamily: 'Anton-Regular',
+  },
+  totalValue: {
+    fontSize: 20,
+    fontFamily: 'Anton-Regular',
+  },
+  paymentMethod: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    backgroundColor: '#F0F0F0',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#000',
+  },
+  paymentText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  paymentNote: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 12,
+  },
   footer: {
-    padding: 20,
+    padding: 16,
+    backgroundColor: '#FFF',
     borderTopWidth: 2,
     borderTopColor: '#000',
   },
   placeOrderButton: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    backgroundColor: '#00704A',
+    padding: 18,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#000',
     alignItems: 'center',
-    width: '100%',
-    height: 50,
-    backgroundColor: '#000',
-    borderRadius: 25,
-    paddingHorizontal: 25,
+  },
+  placeOrderButtonDisabled: {
+    opacity: 0.6,
   },
   placeOrderButtonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontFamily: 'Anton-Regular',
-  },
-  placeOrderTotal: {
     color: '#FFF',
     fontSize: 18,
     fontFamily: 'Anton-Regular',
   },
-  buttonDisabled: {
-    opacity: 0.6,
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  emptyText: {
+    fontSize: 18,
+    color: '#666',
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  shopButton: {
+    backgroundColor: '#00704A',
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#000',
+  },
+  shopButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontFamily: 'Anton-Regular',
   },
 });

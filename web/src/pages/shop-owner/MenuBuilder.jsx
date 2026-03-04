@@ -138,13 +138,13 @@ const MenuItemModal = ({ item, onClose, onSave, categories }) => {
       const fileName = `${shopId}/${Math.random()}.${fileExt}`;
 
       const { error: uploadError, data } = await supabase.storage
-        .from('menu-items')
+        .from('shop-images')
         .upload(fileName, file);
 
       if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage
-        .from('menu-items')
+        .from('shop-images')
         .getPublicUrl(fileName);
 
       setFormData({ ...formData, image_url: publicUrl });
@@ -524,7 +524,7 @@ export default function MenuBuilder() {
 
       // Load categories
       const { data: categoriesData, error: catError } = await supabase
-        .from('categories')
+        .from('menu_categories')  // ← FIXED!
         .select('*')
         .eq('shop_id', shopId)
         .order('name');

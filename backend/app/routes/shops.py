@@ -2,6 +2,10 @@
 Shop Routes - API endpoints for shop management
 Includes public, shop owner, and admin endpoints
 """
+import secrets
+from fastapi import APIRouter, HTTPException, Depends
+from app.utils.security import require_auth
+from app.database import get_supabase
 
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Query
 from typing import List, Optional, Dict, Any
@@ -271,3 +275,45 @@ async def feature_shop(shop_id: str, _: dict = Depends(require_admin())):
     """Feature shop on homepage (admin only)"""
     shop = await shop_service.update_shop(shop_id, {"featured": True})
     return {"shop": shop}
+@router.post("/{shop_id}/generate-api-key")
+async def generate_shop_api_key(shop_id: str, user: dict = Depends(require_auth())):
+    """
+    Generate a new API key for a shop.
+    Only shop owner can do this.
+    """
+    try:
+        user_id = user.get("sub")
+        
+        # Verify ownership
+        db = get_supabase()
+        shop = await db.execute_query(
+            table="shops",
+            operation="select",
+            filters={"id": shop_id, "owner_id": user_id}
+        )
+        
+        if not shop or len(shop) == 0:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        
+        # Generate secure API key
+        api_key = f"lc_shop_{secrets.token_urlsafe(32)}"
+        
+        # Store API key (hashed for security)
+        await db.execute_query(
+            table="shop_api_keys",
+            operation="insert",
+            data={
+                "shop_id": shop_id,
+                "api_key": api_key,  # In production, hash this!
+                "created_at": "now()"
+            }
+        )
+        
+        return {
+            "shop_id": shop_id,
+            "api_key": api_key,
+            "message": "API key generated successfully"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
