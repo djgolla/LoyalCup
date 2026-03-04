@@ -1,1 +1,4 @@
 backend/.env
+node_modules/
+shop-desktop/node_modules/
+**/node_modules/
