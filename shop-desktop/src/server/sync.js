@@ -1,11 +1,10 @@
 require('dotenv').config();
-
 const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
 const { getConfig, setConfig, createOrder } = require('./database');
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'YOUR_SUPABASE_URL';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -63,33 +62,40 @@ function subscribeToOrders() {
 
           if (error) throw error;
 
+          console.log('Full order data:', order);
+
+          // Transform order items into the format expected by local database
+          const items = order.order_items?.map(item => ({
+            id: item.id,
+            name: item.menu_items?.name || 'Unknown Item',
+            quantity: item.quantity,
+            price: item.unit_price
+          })) || [];
+
           // Transform order data for local database
           const localOrder = {
             id: order.id,
             shop_id: order.shop_id,
             customer_id: order.customer_id,
             customer_name: order.customer_name || 'Guest',
-            items: JSON.stringify(order.order_items.map(item => ({
-              id: item.id,
-              name: item.menu_items?.name || 'Unknown',
-              quantity: item.quantity,
-              price: item.unit_price
-            }))),
+            items: items, // ← PASS AS ARRAY, NOT STRING! database.js will stringify it
             total: order.total,
             status: order.status,
             payment_status: order.payment_status || 'pending',
             created_at: order.created_at,
-            updated_at: order.updated_at,
-            synced: 1
+            updated_at: order.updated_at
           };
 
+          console.log('Saving order to local database:', localOrder);
+          
           await createOrder(localOrder);
-          console.log('Order saved to local database');
+          console.log('✅ Order saved to local database successfully!');
 
           // Notify frontend (via polling)
           broadcastNewOrder(localOrder);
         } catch (error) {
-          console.error('Failed to process new order:', error);
+          console.error('❌ Failed to process new order:', error);
+          console.error('Error details:', error.message);
         }
       }
     )
