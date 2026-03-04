@@ -1,0 +1,52 @@
+{
+  "name": "loyalcup-shop",
+  "version": "1.0.0",
+  "description": "LoyalCup Shop Management System",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "dev": "concurrently \"npm run dev:server\" \"wait-on http://localhost:3456 && electron .\"",
+    "dev:server": "node src/server/server.js"
+  },
+  "build": {
+    "appId": "com.loyalcup.shop",
+    "productName": "LoyalCup Shop",
+    "files": [
+      "src/**/*",
+      "public/**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "public/icon.png"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "public/icon.png"
+    }
+  },
+  "keywords": [
+    "loyalcup",
+    "pos",
+    "coffee"
+  ],
+  "author": "LoyalCup",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^40.7.0"
+  },
+  "dependencies": {
+    "axios": "^1.13.6",
+    "concurrently": "^9.2.1",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "sqlite3": "^5.1.7",
+    "wait-on": "^9.0.4",
+    "ws": "^8.19.0"
+  }
+}
