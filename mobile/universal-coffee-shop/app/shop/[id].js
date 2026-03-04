@@ -38,12 +38,13 @@ export default function ShopDetailScreen() {
       setShop(shopData);
 
       const { data: categoriesData, error: categoriesError } = await supabase
-        .from('menu_categories')
+        .from('categories')
         .select('*')
         .eq('shop_id', id)
         .order('display_order', { ascending: true });
 
       if (categoriesError) throw categoriesError;
+      console.log('Categories loaded:', categoriesData);
       setCategories(categoriesData || []);
 
       const { data: itemsData, error: itemsError } = await supabase
@@ -54,6 +55,7 @@ export default function ShopDetailScreen() {
         .order('display_order', { ascending: true });
 
       if (itemsError) throw itemsError;
+      console.log('Menu items loaded:', itemsData);
       setMenuItems(itemsData || []);
     } catch (error) {
       console.error('Failed to load shop data:', error);

@@ -49,7 +49,7 @@ export const shopService = {
   getMenu: async (shopId) => {
     try {
       const { data: categories, error: catError } = await supabase
-        .from('menu_categories')
+        .from('categories')  // ← FIXED: Changed from 'menu_categories'
         .select('*')
         .eq('shop_id', shopId)
         .order('display_order')

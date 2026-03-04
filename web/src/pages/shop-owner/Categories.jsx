@@ -169,7 +169,7 @@ export default function Categories() {
       setLoading(true);
 
       const { data, error } = await supabase
-        .from('menu_categories')  // ← FIXED: Was 'categories'
+        .from('categories')  // ← FIXED BACK TO 'categories'
         .select('*')
         .eq('shop_id', shopId)
         .order('display_order', { ascending: true });
@@ -189,7 +189,7 @@ export default function Categories() {
     try {
       if (editingCategory) {
         const { error } = await supabase
-          .from('menu_categories')  // ← FIXED: Was 'categories'
+          .from('categories')  // ← FIXED BACK TO 'categories'
           .update(formData)
           .eq('id', editingCategory.id);
 
@@ -197,7 +197,7 @@ export default function Categories() {
         toast.success('Category updated!');
       } else {
         const { error } = await supabase
-          .from('menu_categories')  // ← FIXED: Was 'categories'
+          .from('categories')  // ← FIXED BACK TO 'categories'
           .insert([{ 
             ...formData, 
             shop_id: shopId,
@@ -222,7 +222,7 @@ export default function Categories() {
 
     try {
       const { error } = await supabase
-        .from('menu_categories')  // ← FIXED: Was 'categories'
+        .from('categories')  // ← FIXED BACK TO 'categories'
         .delete()
         .eq('id', category.id);
 

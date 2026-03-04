@@ -524,7 +524,7 @@ export default function MenuBuilder() {
 
       // Load categories
       const { data: categoriesData, error: catError } = await supabase
-        .from('menu_categories')  // ← FIXED!
+        .from('categories')  // ← FIXED!
         .select('*')
         .eq('shop_id', shopId)
         .order('name');

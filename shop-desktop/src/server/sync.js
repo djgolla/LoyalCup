@@ -1,83 +1,109 @@
+require('dotenv').config();
+
 const axios = require('axios');
-const WebSocket = require('ws');
+const { createClient } = require('@supabase/supabase-js');
 const { getConfig, setConfig, createOrder } = require('./database');
 
-const CLOUD_API_URL = process.env.CLOUD_API_URL || 'http://localhost:8000/api/v1';
+const SUPABASE_URL = process.env.SUPABASE_URL || 'YOUR_SUPABASE_URL';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY';
 
-let ws = null;
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 let shopId = null;
-let apiKey = null;
+let realtimeChannel = null;
 
 // Initialize sync
 async function initSync() {
   shopId = await getConfig('shop_id');
-  apiKey = await getConfig('api_key');
 
-  if (!shopId || !apiKey) {
+  if (!shopId) {
     console.log('Shop not configured yet. Waiting for setup...');
     return;
   }
 
   console.log(`Initializing sync for shop: ${shopId}`);
   
-  // Start WebSocket connection for real-time orders
-  connectWebSocket();
-  
-  // Sync menu items from cloud
-  await syncMenuItems();
+  // Start Supabase Realtime subscription for orders
+  subscribeToOrders();
 }
 
-// WebSocket connection for real-time orders
-function connectWebSocket() {
-  const wsUrl = CLOUD_API_URL.replace('http', 'ws') + `/ws/shop/${shopId}`;
-  
-  ws = new WebSocket(wsUrl);
+// Subscribe to real-time orders using Supabase
+function subscribeToOrders() {
+  if (realtimeChannel) {
+    supabase.removeChannel(realtimeChannel);
+  }
 
-  ws.on('open', () => {
-    console.log('WebSocket connected to cloud backend');
-  });
+  console.log(`Subscribing to orders for shop: ${shopId}`);
 
-  ws.on('message', async (data) => {
-    try {
-      const message = JSON.parse(data);
-      
-      if (message.type === 'new_order') {
-        console.log('New order received:', message.order.id);
-        await createOrder(message.order);
-        
-        // Notify frontend (via server-sent events or polling)
-        broadcastNewOrder(message.order);
+  realtimeChannel = supabase
+    .channel('desktop-orders')
+    .on('postgres_changes', 
+      { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'orders',
+        filter: `shop_id=eq.${shopId}`
+      }, 
+      async (payload) => {
+        try {
+          console.log('New order received:', payload.new.id);
+          
+          // Fetch full order with items
+          const { data: order, error } = await supabase
+            .from('orders')
+            .select(`
+              *,
+              order_items (
+                *,
+                menu_items (name, base_price)
+              )
+            `)
+            .eq('id', payload.new.id)
+            .single();
+
+          if (error) throw error;
+
+          // Transform order data for local database
+          const localOrder = {
+            id: order.id,
+            shop_id: order.shop_id,
+            customer_id: order.customer_id,
+            customer_name: order.customer_name || 'Guest',
+            items: JSON.stringify(order.order_items.map(item => ({
+              id: item.id,
+              name: item.menu_items?.name || 'Unknown',
+              quantity: item.quantity,
+              price: item.unit_price
+            }))),
+            total: order.total,
+            status: order.status,
+            payment_status: order.payment_status || 'pending',
+            created_at: order.created_at,
+            updated_at: order.updated_at,
+            synced: 1
+          };
+
+          await createOrder(localOrder);
+          console.log('Order saved to local database');
+
+          // Notify frontend (via polling)
+          broadcastNewOrder(localOrder);
+        } catch (error) {
+          console.error('Failed to process new order:', error);
+        }
       }
-    } catch (error) {
-      console.error('Failed to process WebSocket message:', error);
-    }
-  });
-
-  ws.on('error', (error) => {
-    console.error('WebSocket error:', error);
-  });
-
-  ws.on('close', () => {
-    console.log('WebSocket disconnected. Reconnecting in 5s...');
-    setTimeout(connectWebSocket, 5000);
-  });
-}
-
-// Sync menu items from cloud
-async function syncMenuItems() {
-  try {
-    const response = await axios.get(`${CLOUD_API_URL}/shops/${shopId}/items`, {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`
+    )
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('✅ Subscribed to order updates!');
+      } else if (status === 'CLOSED') {
+        console.log('❌ Subscription closed. Reconnecting...');
+        setTimeout(subscribeToOrders, 5000);
+      } else if (status === 'CHANNEL_ERROR') {
+        console.error('❌ Channel error. Reconnecting...');
+        setTimeout(subscribeToOrders, 5000);
       }
     });
-
-    // Store menu items in local database
-    // TODO: Implement menu item storage
-    console.log('Menu items synced:', response.data.items.length);
-  } catch (error) {
-    console.error('Failed to sync menu items:', error.message);
-  }
 }
 
 // Broadcast new order to connected clients
@@ -87,19 +113,20 @@ function broadcastNewOrder(order) {
   console.log('Broadcasting new order to clients:', order.id);
 }
 
-// Update order status back to cloud
+// Update order status back to Supabase
 async function syncOrderStatus(orderId, status) {
   try {
-    await axios.patch(
-      `${CLOUD_API_URL}/orders/${orderId}`,
-      { status },
-      {
-        headers: {
-          'Authorization': `Bearer ${apiKey}`
-        }
-      }
-    );
-    console.log(`Order ${orderId} status synced to cloud: ${status}`);
+    const { error } = await supabase
+      .from('orders')
+      .update({ 
+        status,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', orderId);
+
+    if (error) throw error;
+
+    console.log(`Order ${orderId} status synced to Supabase: ${status}`);
   } catch (error) {
     console.error('Failed to sync order status:', error.message);
   }
