@@ -96,19 +96,7 @@ export default function ShopOwnerSidebar() {
           Categories
         </NavLink>
 
-        <NavLink
-          to="/shop-owner/customizations"
-          className={({ isActive }) =>
-            `${linkClasses} ${
-              isActive
-                ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700"
-                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
-            }`
-          }
-        >
-          <SettingsIcon size={20} />
-          Customizations
-        </NavLink>
+
 
         <NavLink
           to="/shop-owner/orders"
