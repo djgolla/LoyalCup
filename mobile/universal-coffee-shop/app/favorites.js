@@ -1,7 +1,7 @@
 // Favorites/saved shops screen
 // universal-coffee-shop/app/favorites.js
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, ActivityIndicator, Image } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, ActivityIndicator, Image, RefreshControl } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
@@ -12,6 +12,7 @@ export default function FavoritesScreen() {
   const { user } = useAuth();
   const [favorites, setFavorites] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadFavorites();
@@ -30,6 +31,12 @@ export default function FavoritesScreen() {
     }
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadFavorites();
+    setRefreshing(false);
+  };
+
   const removeFavorite = async (shopId) => {
     try {
       const updated = favorites.filter(shop => shop.id !== shopId);
@@ -44,7 +51,8 @@ export default function FavoritesScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#000" />
+          <ActivityIndicator size="large" color="#00704A" />
+          <Text style={styles.loadingText}>Loading favorites...</Text>
         </View>
       </SafeAreaView>
     );
@@ -52,74 +60,80 @@ export default function FavoritesScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView}>
-        <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => router.back()}>
-            <Feather name="arrow-left" size={24} color="black" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>FAVORITES</Text>
-          <View style={styles.backButton} />
-        </View>
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => router.back()}>
+          <Feather name="arrow-left" size={24} color="#000" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Favorites</Text>
+        <View style={styles.backButton} />
+      </View>
 
-        {favorites.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Feather name="heart" size={64} color="#E0E0E0" />
-            <Text style={styles.emptyTitle}>No Favorites Yet</Text>
-            <Text style={styles.emptyText}>
-              Start adding your favorite coffee shops to see them here
-            </Text>
+      {favorites.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Feather name="heart" size={64} color="#CCC" />
+          <Text style={styles.emptyTitle}>No Favorites Yet</Text>
+          <Text style={styles.emptyText}>
+            Start adding your favorite coffee shops to see them here
+          </Text>
+          <TouchableOpacity 
+            style={styles.exploreButton}
+            onPress={() => router.back()}>
+            <Text style={styles.exploreButtonText}>Explore Shops</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          }>
+          {favorites.map((shop) => (
             <TouchableOpacity 
-              style={styles.exploreButton}
-              onPress={() => router.push('/home')}>
-              <Text style={styles.exploreButtonText}>EXPLORE SHOPS</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.content}>
-            {favorites.map((shop) => (
-              <TouchableOpacity 
-                key={shop.id}
-                style={styles.shopCard}
-                onPress={() => router.push(`/shop/${shop.id}`)}>
-                <View style={styles.shopImageContainer}>
-                  {shop.logo_url ? (
-                    <Image 
-                      source={{ uri: shop.logo_url }} 
-                      style={styles.shopImage}
-                    />
-                  ) : (
-                    <View style={styles.placeholderImage}>
-                      <Feather name="coffee" size={32} color="#666" />
-                    </View>
-                  )}
-                </View>
-                
-                <View style={styles.shopInfo}>
-                  <Text style={styles.shopName}>{shop.name}</Text>
+              key={shop.id}
+              style={styles.shopCard}
+              onPress={() => router.push(`/shop/${shop.id}`)}
+              activeOpacity={0.7}>
+              <View style={styles.shopImageContainer}>
+                {shop.logo_url ? (
+                  <Image 
+                    source={{ uri: shop.logo_url }} 
+                    style={styles.shopImage}
+                  />
+                ) : (
+                  <View style={styles.placeholderImage}>
+                    <Feather name="coffee" size={32} color="#00704A" />
+                  </View>
+                )}
+              </View>
+              
+              <View style={styles.shopInfo}>
+                <Text style={styles.shopName}>{shop.name}</Text>
+                {shop.address && (
                   <View style={styles.shopDetails}>
                     <Feather name="map-pin" size={14} color="#666" />
-                    <Text style={styles.shopAddress}>{shop.address || 'No address'}</Text>
+                    <Text style={styles.shopAddress}>{shop.address}</Text>
                   </View>
-                  {shop.distance && (
-                    <Text style={styles.shopDistance}>{shop.distance}</Text>
-                  )}
-                </View>
+                )}
+                {shop.distance && (
+                  <Text style={styles.shopDistance}>{shop.distance}</Text>
+                )}
+              </View>
 
-                <TouchableOpacity
-                  style={styles.favoriteButton}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    removeFavorite(shop.id);
-                  }}>
-                  <Feather name="heart" size={24} color="#FF0000" fill="#FF0000" />
-                </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.favoriteButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  removeFavorite(shop.id);
+                }}>
+                <Feather name="heart" size={24} color="#FF3B30" fill="#FF3B30" />
               </TouchableOpacity>
-            ))}
-          </View>
-        )}
-      </ScrollView>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
@@ -127,85 +141,90 @@ export default function FavoritesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  scrollView: {
-    flex: 1,
+    backgroundColor: '#FAFAFA',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 2,
-    borderBottomColor: '#000',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
   backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 8,
   },
   headerTitle: {
-    fontSize: 24,
-    fontFamily: 'Anton-Regular',
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#000',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    padding: 16,
   },
   emptyState: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 40,
-    paddingTop: 100,
   },
   emptyTitle: {
-    fontSize: 24,
-    fontFamily: 'Anton-Regular',
-    marginTop: 20,
-    marginBottom: 10,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#000',
+    marginTop: 16,
+    marginBottom: 8,
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#666',
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 24,
   },
   exploreButton: {
-    paddingHorizontal: 30,
-    paddingVertical: 15,
-    backgroundColor: '#000',
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    backgroundColor: '#00704A',
     borderRadius: 25,
   },
   exploreButtonText: {
     color: '#FFF',
-    fontFamily: 'Anton-Regular',
     fontSize: 16,
-  },
-  content: {
-    padding: 20,
+    fontWeight: '600',
   },
   shopCard: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 15,
-    padding: 15,
-    marginBottom: 15,
-    borderWidth: 2,
-    borderColor: '#000',
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 12,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   shopImageContainer: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: '#000',
   },
   shopImage: {
     width: '100%',
@@ -214,35 +233,37 @@ const styles = StyleSheet.create({
   placeholderImage: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#F0F0F0',
+    backgroundColor: '#E8F5E9',
     justifyContent: 'center',
     alignItems: 'center',
   },
   shopInfo: {
     flex: 1,
-    marginLeft: 15,
+    marginLeft: 12,
   },
   shopName: {
-    fontSize: 18,
-    fontFamily: 'Anton-Regular',
-    marginBottom: 5,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+    marginBottom: 4,
   },
   shopDetails: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    marginBottom: 3,
+    gap: 4,
+    marginBottom: 2,
   },
   shopAddress: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#666',
+    flex: 1,
   },
   shopDistance: {
     fontSize: 12,
-    color: '#8B4513',
-    fontFamily: 'Anton-Regular',
+    color: '#00704A',
+    fontWeight: '600',
   },
   favoriteButton: {
-    padding: 10,
+    padding: 8,
   },
 });

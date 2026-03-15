@@ -36,9 +36,9 @@ export default function OrderHistoryScreen() {
   const getStatusColor = (status) => {
     switch (status) {
       case 'completed':
-        return '#4CAF50';
+        return '#00704A';
       case 'ready':
-        return '#2196F3';
+        return '#4CAF50';
       case 'preparing':
         return '#FF9800';
       case 'cancelled':
@@ -51,7 +51,8 @@ export default function OrderHistoryScreen() {
   const renderOrderCard = ({ item }) => (
     <TouchableOpacity 
       style={styles.orderCard}
-      onPress={() => router.push(`/order/${item.id}`)}>
+      onPress={() => router.push(`/order/${item.id}`)}
+      activeOpacity={0.7}>
       <View style={styles.orderHeader}>
         <Text style={styles.orderNumber}>Order #{item.id}</Text>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
@@ -78,7 +79,7 @@ export default function OrderHistoryScreen() {
 
       <View style={styles.orderFooter}>
         <Text style={styles.orderTotal}>${item.total?.toFixed(2) || '0.00'}</Text>
-        <Feather name="chevron-right" size={24} color="black" />
+        <Feather name="chevron-right" size={20} color="#00704A" />
       </View>
     </TouchableOpacity>
   );
@@ -90,7 +91,7 @@ export default function OrderHistoryScreen() {
       <TouchableOpacity 
         style={styles.shopButton}
         onPress={() => router.back()}>
-        <Text style={styles.shopButtonText}>START SHOPPING</Text>
+        <Text style={styles.shopButtonText}>Start Shopping</Text>
       </TouchableOpacity>
     </View>
   );
@@ -99,7 +100,8 @@ export default function OrderHistoryScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#000" />
+          <ActivityIndicator size="large" color="#00704A" />
+          <Text style={styles.loadingText}>Loading orders...</Text>
         </View>
       </SafeAreaView>
     );
@@ -111,9 +113,9 @@ export default function OrderHistoryScreen() {
         <TouchableOpacity 
           style={styles.backButton}
           onPress={() => router.back()}>
-          <Feather name="arrow-left" size={24} color="black" />
+          <Feather name="arrow-left" size={24} color="#000" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>ORDER HISTORY</Text>
+        <Text style={styles.headerTitle}>Order History</Text>
         <View style={styles.backButton} />
       </View>
 
@@ -123,6 +125,7 @@ export default function OrderHistoryScreen() {
         renderItem={renderOrderCard}
         ListEmptyComponent={renderEmptyList}
         contentContainerStyle={orders.length === 0 ? styles.emptyListContent : styles.listContent}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
@@ -134,45 +137,53 @@ export default function OrderHistoryScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAFAFA',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 2,
-    borderBottomColor: '#000',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
   backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 8,
   },
   headerTitle: {
-    fontSize: 24,
-    fontFamily: 'Anton-Regular',
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#000',
   },
   listContent: {
-    padding: 20,
+    padding: 16,
+    paddingBottom: 24,
   },
   emptyListContent: {
     flex: 1,
   },
   orderCard: {
-    padding: 15,
-    marginBottom: 15,
-    borderWidth: 2,
-    borderColor: '#000',
-    borderRadius: 15,
+    padding: 16,
+    marginBottom: 12,
     backgroundColor: '#FFF',
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   orderHeader: {
     flexDirection: 'row',
@@ -182,20 +193,23 @@ const styles = StyleSheet.create({
   },
   orderNumber: {
     fontSize: 18,
-    fontFamily: 'Anton-Regular',
+    fontWeight: '700',
+    color: '#000',
+    flex: 1,
   },
   statusBadge: {
     paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderRadius: 12,
   },
   statusText: {
     color: '#FFF',
-    fontSize: 12,
-    fontFamily: 'Anton-Regular',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   orderDate: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#666',
     marginBottom: 12,
   },
@@ -204,11 +218,12 @@ const styles = StyleSheet.create({
   },
   orderItemText: {
     fontSize: 14,
+    color: '#000',
     marginBottom: 4,
   },
   moreItemsText: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 13,
+    color: '#999',
     fontStyle: 'italic',
   },
   orderFooter: {
@@ -217,11 +232,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: '#F0F0F0',
   },
   orderTotal: {
     fontSize: 20,
-    fontFamily: 'Anton-Regular',
+    fontWeight: '700',
+    color: '#00704A',
   },
   emptyContainer: {
     flex: 1,
@@ -231,19 +247,20 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 20,
-    fontFamily: 'Anton-Regular',
-    marginTop: 20,
-    marginBottom: 30,
+    fontWeight: '600',
+    color: '#000',
+    marginTop: 16,
+    marginBottom: 24,
   },
   shopButton: {
-    paddingHorizontal: 30,
-    paddingVertical: 15,
-    backgroundColor: '#000',
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    backgroundColor: '#00704A',
     borderRadius: 25,
   },
   shopButtonText: {
     color: '#FFF',
     fontSize: 16,
-    fontFamily: 'Anton-Regular',
+    fontWeight: '600',
   },
 });

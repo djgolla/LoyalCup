@@ -62,7 +62,7 @@ export default function RewardsScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#000" />
+          <ActivityIndicator size="large" color="#00704A" />
           <Text style={styles.loadingText}>Loading rewards...</Text>
         </View>
       </SafeAreaView>
@@ -74,7 +74,7 @@ export default function RewardsScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Feather name="arrow-left" size={24} color="black" />
+          <Feather name="arrow-left" size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Rewards</Text>
         <View style={{ width: 24 }} />
@@ -88,7 +88,10 @@ export default function RewardsScreen() {
       >
         {/* Points Card */}
         <View style={styles.pointsCard}>
-          <Text style={styles.pointsLabel}>TOTAL POINTS</Text>
+          <View style={styles.pointsHeader}>
+            <Feather name="award" size={24} color="#FFF" />
+            <Text style={styles.pointsLabel}>LOYALTY POINTS</Text>
+          </View>
           <Text style={styles.pointsValue}>{getTotalPoints()}</Text>
           <Text style={styles.pointsSubtext}>Keep earning to unlock more rewards!</Text>
         </View>
@@ -184,7 +187,7 @@ export default function RewardsScreen() {
                     <Feather 
                       name={transaction.type === 'earned' ? 'arrow-down-right' : 'arrow-up-right'} 
                       size={20} 
-                      color={transaction.type === 'earned' ? '#22C55E' : '#EF4444'} 
+                      color={transaction.type === 'earned' ? '#00704A' : '#EF4444'} 
                     />
                   </View>
                   <View style={styles.transactionInfo}>
@@ -219,7 +222,7 @@ export default function RewardsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAFAFA',
   },
   loadingContainer: {
     flex: 1,
@@ -227,7 +230,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    marginTop: 10,
+    marginTop: 12,
     fontSize: 16,
     color: '#666',
   },
@@ -235,63 +238,81 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 2,
-    borderBottomColor: '#000',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    color: '#000',
   },
   content: {
     flex: 1,
   },
   pointsCard: {
-    backgroundColor: '#000',
-    margin: 20,
-    padding: 30,
+    backgroundColor: '#00704A',
+    margin: 16,
+    padding: 24,
     borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  pointsHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
   },
   pointsLabel: {
     color: '#FFF',
-    fontSize: 14,
-    fontWeight: 'bold',
+    fontSize: 13,
+    fontWeight: '700',
     letterSpacing: 2,
-    marginBottom: 10,
   },
   pointsValue: {
     color: '#FFF',
-    fontSize: 64,
+    fontSize: 56,
     fontWeight: 'bold',
+    marginBottom: 8,
   },
   pointsSubtext: {
-    color: '#CCC',
+    color: '#E0E0E0',
     fontSize: 14,
-    marginTop: 10,
   },
   section: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
+    paddingHorizontal: 16,
+    marginBottom: 24,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 15,
+    fontWeight: '700',
+    color: '#000',
+    marginBottom: 12,
   },
   balanceCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 15,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 10,
-    marginBottom: 10,
+    padding: 16,
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   balanceName: {
     fontSize: 16,
     fontWeight: '600',
+    color: '#000',
   },
   balanceSubtext: {
     fontSize: 12,
@@ -300,82 +321,93 @@ const styles = StyleSheet.create({
   },
   balancePoints: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#00704A',
   },
   tabs: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginBottom: 20,
-    gap: 10,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    gap: 8,
   },
   tab: {
     flex: 1,
     paddingVertical: 12,
-    borderWidth: 2,
-    borderColor: '#000',
-    borderRadius: 25,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 20,
     alignItems: 'center',
   },
   tabActive: {
-    backgroundColor: '#000',
+    backgroundColor: '#00704A',
   },
   tabText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#000',
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#666',
   },
   tabTextActive: {
     color: '#FFF',
   },
   statsGrid: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 15,
+    gap: 8,
+    marginBottom: 12,
   },
   statCard: {
     flex: 1,
     padding: 20,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 10,
+    backgroundColor: '#FFF',
+    borderRadius: 12,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   statValue: {
     fontSize: 32,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#00704A',
-    marginBottom: 5,
+    marginBottom: 4,
   },
   statLabel: {
     fontSize: 12,
     color: '#666',
+    fontWeight: '600',
   },
   infoCard: {
     flexDirection: 'row',
-    padding: 15,
+    padding: 16,
     backgroundColor: '#E8F5E9',
-    borderRadius: 10,
-    gap: 10,
+    borderRadius: 12,
+    gap: 12,
   },
   infoText: {
     flex: 1,
     fontSize: 14,
     color: '#00704A',
+    lineHeight: 20,
   },
   transactionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 15,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 10,
-    marginBottom: 10,
+    padding: 16,
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    marginBottom: 8,
     gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   transactionIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#FFF',
+    backgroundColor: '#F5F5F5',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -383,42 +415,43 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   transactionDescription: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    marginBottom: 3,
+    color: '#000',
+    marginBottom: 2,
   },
   transactionShop: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#666',
-    marginBottom: 3,
+    marginBottom: 2,
   },
   transactionDate: {
     fontSize: 12,
     color: '#999',
   },
   transactionPoints: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '700',
   },
   pointsEarned: {
-    color: '#22C55E',
+    color: '#00704A',
   },
   pointsSpent: {
     color: '#EF4444',
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 60,
   },
   emptyText: {
     fontSize: 16,
-    color: '#666',
-    marginTop: 15,
     fontWeight: '600',
+    color: '#000',
+    marginTop: 16,
+    marginBottom: 4,
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#999',
-    marginTop: 5,
+    color: '#666',
   },
 });

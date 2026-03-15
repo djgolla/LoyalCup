@@ -1,34 +1,34 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from app.database import get_supabase
+from supabase import Client
+
+router = APIRouter(prefix="/admin", tags=["Admin"])
+
 @router.patch("/shops/{shop_id}/approve")
-async def approve_shop(shop_id: str, admin: dict = Depends(require_admin)):
-    """Approve a pending shop and generate API key"""
+async def approve_shop(
+    shop_id: str,
+    supabase: Client = Depends(get_supabase)
+):
+    """Approve a shop (admin only)"""
     try:
-        db = get_supabase()
+        response = supabase.table("shops")\
+            .update({"is_approved": True})\
+            .eq("id", shop_id)\
+            .execute()
         
-        # Update shop status
-        await db.execute_query(
-            table="shops",
-            operation="update",
-            data={"status": "active"},
-            filters={"id": shop_id}
-        )
+        return {"message": "Shop approved", "shop": response.data[0]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/shops/pending")
+async def get_pending_shops(supabase: Client = Depends(get_supabase)):
+    """Get all shops pending approval"""
+    try:
+        response = supabase.table("shops")\
+            .select("*")\
+            .eq("is_approved", False)\
+            .execute()
         
-        # Generate API key
-        api_key = f"lc_shop_{secrets.token_urlsafe(32)}"
-        await db.execute_query(
-            table="shop_api_keys",
-            operation="insert",
-            data={
-                "shop_id": shop_id,
-                "api_key": api_key
-            }
-        )
-        
-        # TODO: Send email to shop owner with credentials
-        
-        return {
-            "success": True,
-            "message": "Shop approved and API key generated"
-        }
-        
+        return {"shops": response.data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -6,7 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import supabase from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -169,134 +169,140 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView}>
-        <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => router.back()}>
-            <Feather name="arrow-left" size={24} color="black" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>SETTINGS</Text>
-          <View style={styles.backButton} />
-        </View>
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => router.back()}>
+          <Feather name="arrow-left" size={24} color="#000" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Settings</Text>
+        <View style={styles.backButton} />
+      </View>
 
+      <ScrollView style={styles.scrollView}>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>NOTIFICATIONS</Text>
+          <Text style={styles.sectionTitle}>Notifications</Text>
           
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <Feather name="bell" size={20} color="black" />
+              <View style={styles.iconContainer}>
+                <Feather name="bell" size={20} color="#00704A" />
+              </View>
               <Text style={styles.settingLabel}>All Notifications</Text>
             </View>
             <Switch
               value={notificationsEnabled}
               onValueChange={handleToggleNotifications}
-              trackColor={{ false: '#E0E0E0', true: '#8B4513' }}
-              thumbColor={notificationsEnabled ? '#FFF' : '#FFF'}
+              trackColor={{ false: '#E0E0E0', true: '#00704A' }}
+              thumbColor="#FFF"
             />
           </View>
 
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <Feather name="smartphone" size={20} color="black" />
+              <View style={styles.iconContainer}>
+                <Feather name="smartphone" size={20} color="#00704A" />
+              </View>
               <Text style={styles.settingLabel}>Push Notifications</Text>
             </View>
             <Switch
               value={pushEnabled}
               onValueChange={handleTogglePush}
-              trackColor={{ false: '#E0E0E0', true: '#8B4513' }}
-              thumbColor={pushEnabled ? '#FFF' : '#FFF'}
+              trackColor={{ false: '#E0E0E0', true: '#00704A' }}
+              thumbColor="#FFF"
               disabled={!notificationsEnabled}
             />
           </View>
 
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <Feather name="mail" size={20} color="black" />
+              <View style={styles.iconContainer}>
+                <Feather name="mail" size={20} color="#00704A" />
+              </View>
               <Text style={styles.settingLabel}>Email Notifications</Text>
             </View>
             <Switch
               value={emailEnabled}
               onValueChange={handleToggleEmail}
-              trackColor={{ false: '#E0E0E0', true: '#8B4513' }}
-              thumbColor={emailEnabled ? '#FFF' : '#FFF'}
+              trackColor={{ false: '#E0E0E0', true: '#00704A' }}
+              thumbColor="#FFF"
               disabled={!notificationsEnabled}
             />
           </View>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>APPEARANCE</Text>
+          <Text style={styles.sectionTitle}>Appearance</Text>
           
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
-              <Feather name="moon" size={20} color="black" />
+              <View style={styles.iconContainer}>
+                <Feather name="moon" size={20} color="#00704A" />
+              </View>
               <Text style={styles.settingLabel}>Dark Mode</Text>
             </View>
             <Switch
               value={darkMode}
               onValueChange={handleToggleDarkMode}
-              trackColor={{ false: '#E0E0E0', true: '#8B4513' }}
-              thumbColor={darkMode ? '#FFF' : '#FFF'}
+              trackColor={{ false: '#E0E0E0', true: '#00704A' }}
+              thumbColor="#FFF"
             />
           </View>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>ACCOUNT</Text>
+          <Text style={styles.sectionTitle}>Account</Text>
           
           <TouchableOpacity 
             style={styles.settingItem}
             onPress={() => setEditProfileVisible(true)}>
             <View style={styles.settingLeft}>
-              <Feather name="user" size={20} color="black" />
+              <View style={styles.iconContainer}>
+                <Feather name="user" size={20} color="#00704A" />
+              </View>
               <Text style={styles.settingLabel}>Edit Profile</Text>
             </View>
-            <Feather name="chevron-right" size={20} color="black" />
+            <Feather name="chevron-right" size={20} color="#CCC" />
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={styles.settingItem}
             onPress={() => setChangePasswordVisible(true)}>
             <View style={styles.settingLeft}>
-              <Feather name="lock" size={20} color="black" />
+              <View style={styles.iconContainer}>
+                <Feather name="lock" size={20} color="#00704A" />
+              </View>
               <Text style={styles.settingLabel}>Change Password</Text>
             </View>
-            <Feather name="chevron-right" size={20} color="black" />
+            <Feather name="chevron-right" size={20} color="#CCC" />
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={styles.settingItem}
             onPress={handlePrivacy}>
             <View style={styles.settingLeft}>
-              <Feather name="shield" size={20} color="black" />
+              <View style={styles.iconContainer}>
+                <Feather name="shield" size={20} color="#00704A" />
+              </View>
               <Text style={styles.settingLabel}>Privacy</Text>
             </View>
-            <Feather name="chevron-right" size={20} color="black" />
+            <Feather name="chevron-right" size={20} color="#CCC" />
           </TouchableOpacity>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>SUPPORT</Text>
+          <Text style={styles.sectionTitle}>Support</Text>
           
           <TouchableOpacity 
             style={styles.settingItem}
-            onPress={() => router.push('/help')}>
+            onPress={() => router.push('/support')}>
             <View style={styles.settingLeft}>
-              <Feather name="help-circle" size={20} color="black" />
+              <View style={styles.iconContainer}>
+                <Feather name="help-circle" size={20} color="#00704A" />
+              </View>
               <Text style={styles.settingLabel}>Help & Support</Text>
             </View>
-            <Feather name="chevron-right" size={20} color="black" />
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.settingItem}
-            onPress={() => router.push('/about')}>
-            <View style={styles.settingLeft}>
-              <Feather name="info" size={20} color="black" />
-              <Text style={styles.settingLabel}>About</Text>
-            </View>
-            <Feather name="chevron-right" size={20} color="black" />
+            <Feather name="chevron-right" size={20} color="#CCC" />
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -309,7 +315,7 @@ export default function SettingsScreen() {
         onRequestClose={() => setEditProfileVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>EDIT PROFILE</Text>
+            <Text style={styles.modalTitle}>Edit Profile</Text>
             
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Full Name</Text>
@@ -358,7 +364,7 @@ export default function SettingsScreen() {
         onRequestClose={() => setChangePasswordVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>CHANGE PASSWORD</Text>
+            <Text style={styles.modalTitle}>Change Password</Text>
             
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>New Password</Text>
@@ -411,57 +417,73 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  scrollView: {
-    flex: 1,
+    backgroundColor: '#FAFAFA',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 2,
-    borderBottomColor: '#000',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
   backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 8,
   },
   headerTitle: {
-    fontSize: 24,
-    fontFamily: 'Anton-Regular',
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#000',
+  },
+  scrollView: {
+    flex: 1,
   },
   section: {
-    marginTop: 30,
-    paddingHorizontal: 20,
+    marginTop: 24,
+    paddingHorizontal: 16,
   },
   sectionTitle: {
-    fontSize: 12,
-    fontFamily: 'Anton-Regular',
+    fontSize: 13,
+    fontWeight: '600',
     color: '#666',
-    marginBottom: 15,
-    letterSpacing: 1,
+    marginBottom: 12,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   settingItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   settingLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 15,
+    gap: 12,
+  },
+  iconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#E8F5E9',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   settingLabel: {
     fontSize: 16,
-    fontFamily: 'Anton-Regular',
+    fontWeight: '600',
+    color: '#000',
   },
   modalOverlay: {
     flex: 1,
@@ -471,32 +493,34 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#FFF',
-    borderRadius: 10,
-    padding: 20,
+    borderRadius: 16,
+    padding: 24,
     width: '85%',
     maxWidth: 400,
   },
   modalTitle: {
     fontSize: 20,
-    fontFamily: 'Anton-Regular',
+    fontWeight: '700',
+    color: '#000',
     marginBottom: 20,
     textAlign: 'center',
   },
   inputGroup: {
-    marginBottom: 15,
+    marginBottom: 16,
   },
   inputLabel: {
     fontSize: 14,
-    fontFamily: 'Anton-Regular',
-    marginBottom: 5,
+    fontWeight: '600',
+    marginBottom: 8,
     color: '#666',
   },
   input: {
-    borderWidth: 2,
-    borderColor: '#000',
-    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 12,
     padding: 12,
     fontSize: 16,
+    backgroundColor: '#FFF',
   },
   inputDisabled: {
     backgroundColor: '#F5F5F5',
@@ -505,33 +529,33 @@ const styles = StyleSheet.create({
   helperText: {
     fontSize: 12,
     color: '#999',
-    marginTop: 5,
+    marginTop: 4,
   },
   modalButtons: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     marginTop: 20,
   },
   modalButton: {
     flex: 1,
-    padding: 15,
-    borderRadius: 8,
+    padding: 14,
+    borderRadius: 12,
     alignItems: 'center',
   },
   cancelButton: {
-    backgroundColor: '#E0E0E0',
+    backgroundColor: '#F5F5F5',
   },
   saveButton: {
-    backgroundColor: '#8B4513',
+    backgroundColor: '#00704A',
   },
   cancelButtonText: {
-    fontFamily: 'Anton-Regular',
     fontSize: 16,
+    fontWeight: '600',
     color: '#000',
   },
   saveButtonText: {
-    fontFamily: 'Anton-Regular',
     fontSize: 16,
+    fontWeight: '600',
     color: '#FFF',
   },
 });

@@ -46,7 +46,8 @@ export default function OrderTrackingScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#000" />
+          <ActivityIndicator size="large" color="#00704A" />
+          <Text style={styles.loadingText}>Loading order...</Text>
         </View>
       </SafeAreaView>
     );
@@ -55,18 +56,22 @@ export default function OrderTrackingScreen() {
   const currentStatusIndex = getStatusIndex(order?.status || 'pending');
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
-          onPress={() => router.replace('/home')}>
-          <Feather name="arrow-left" size={24} color="black" />
+          onPress={() => router.back()}>
+          <Feather name="arrow-left" size={24} color="#000" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>ORDER TRACKING</Text>
+        <Text style={styles.headerTitle}>Order Tracking</Text>
         <View style={styles.backButton} />
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView 
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}>
+        
         <View style={styles.orderInfo}>
           <Text style={styles.orderNumber}>Order #{order?.id || 'N/A'}</Text>
           <Text style={styles.orderDate}>
@@ -84,7 +89,7 @@ export default function OrderTrackingScreen() {
                 ]}>
                   <Feather 
                     name={status.icon} 
-                    size={24} 
+                    size={22} 
                     color={index <= currentStatusIndex ? '#FFF' : '#CCC'} 
                   />
                 </View>
@@ -108,7 +113,7 @@ export default function OrderTrackingScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>ORDER ITEMS</Text>
+          <Text style={styles.sectionTitle}>Order Items</Text>
           {order?.items?.map((item, index) => (
             <View key={index} style={styles.orderItem}>
               <Text style={styles.itemName}>
@@ -121,7 +126,7 @@ export default function OrderTrackingScreen() {
           ))}
         </View>
 
-        <View style={styles.section}>
+        <View style={styles.totalSection}>
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Total</Text>
             <Text style={styles.totalValue}>${order?.total?.toFixed(2) || '0.00'}</Text>
@@ -135,101 +140,117 @@ export default function OrderTrackingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAFAFA',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 2,
-    borderBottomColor: '#000',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
   backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 8,
   },
   headerTitle: {
-    fontSize: 24,
-    fontFamily: 'Anton-Regular',
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#000',
   },
   content: {
     flex: 1,
   },
+  scrollContent: {
+    paddingBottom: 24,
+  },
   orderInfo: {
     alignItems: 'center',
-    padding: 20,
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    backgroundColor: '#FFF',
+    marginBottom: 16,
   },
   orderNumber: {
-    fontSize: 24,
-    fontFamily: 'Anton-Regular',
-    marginBottom: 5,
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#000',
+    marginBottom: 4,
   },
   orderDate: {
     fontSize: 14,
     color: '#666',
   },
   statusContainer: {
-    padding: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    backgroundColor: '#FFF',
+    marginBottom: 16,
   },
   statusItem: {
     flexDirection: 'row',
-    marginBottom: 30,
+    marginBottom: 24,
   },
   statusIconContainer: {
     alignItems: 'center',
-    marginRight: 20,
+    marginRight: 16,
   },
   statusIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#F0F0F0',
     justifyContent: 'center',
     alignItems: 'center',
   },
   statusIconActive: {
-    backgroundColor: '#000',
+    backgroundColor: '#00704A',
   },
   statusLine: {
     width: 2,
-    flex: 1,
+    height: 24,
     backgroundColor: '#E0E0E0',
-    marginTop: 5,
+    marginTop: 4,
   },
   statusLineActive: {
-    backgroundColor: '#000',
+    backgroundColor: '#00704A',
   },
   statusTextContainer: {
     flex: 1,
     justifyContent: 'center',
   },
   statusLabel: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#999',
   },
   statusLabelActive: {
-    fontSize: 18,
-    fontFamily: 'Anton-Regular',
+    fontSize: 16,
+    fontWeight: '600',
     color: '#000',
   },
   section: {
-    padding: 20,
-    borderTopWidth: 2,
-    borderTopColor: '#E0E0E0',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#FFF',
+    marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Anton-Regular',
-    marginBottom: 15,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#000',
+    marginBottom: 12,
   },
   orderItem: {
     flexDirection: 'row',
@@ -238,12 +259,19 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   itemName: {
-    fontSize: 16,
+    fontSize: 15,
+    color: '#000',
     flex: 1,
   },
   itemPrice: {
-    fontSize: 16,
-    fontFamily: 'Anton-Regular',
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#00704A',
+  },
+  totalSection: {
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    backgroundColor: '#FFF',
   },
   totalRow: {
     flexDirection: 'row',
@@ -251,11 +279,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   totalLabel: {
-    fontSize: 20,
-    fontFamily: 'Anton-Regular',
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#000',
   },
   totalValue: {
-    fontSize: 20,
-    fontFamily: 'Anton-Regular',
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#00704A',
   },
 });
