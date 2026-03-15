@@ -4,13 +4,14 @@ from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
-from app.routes import auth, users, shops, menu, orders, loyalty, admin
+import time
+
 from app.config import settings
 from app.middleware.rate_limit import limiter, rate_limit_handler
 from app.utils.logging import setup_logging, get_logger
 from app.database import get_supabase
-import time
-from app.routes import auth, users, shops, menu, orders, loyalty, admin, payments
+
+from app.routes import auth, users, shops, menu, orders, loyalty, admin, payments, pos
 
 # Setup structured logging
 setup_logging(level="INFO" if settings.environment == "production" else "DEBUG")
@@ -56,13 +57,13 @@ app.add_middleware(
 async def log_requests(request: Request, call_next):
     """Log all requests with timing information."""
     start_time = time.time()
-    
+
     # Process request
     response = await call_next(request)
-    
+
     # Calculate duration
     duration = time.time() - start_time
-    
+
     # Log request
     logger.info(
         f"{request.method} {request.url.path} - {response.status_code} - {duration:.3f}s",
@@ -76,7 +77,7 @@ async def log_requests(request: Request, call_next):
             }
         }
     )
-    
+
     return response
 
 # Include all routers
@@ -86,8 +87,9 @@ app.include_router(shops.router)
 app.include_router(menu.router)
 app.include_router(orders.router)
 app.include_router(loyalty.router)
-app.include_router(admin.router)
+app.include_router(admin.router)      # if this breaks, comment it out temporarily
 app.include_router(payments.router)
+app.include_router(pos.router)
 
 @app.get("/")
 async def root():
@@ -99,7 +101,6 @@ async def root():
         "environment": settings.environment,
         "documentation": "/api/docs"
     }
-
 
 @app.get("/health")
 async def health_check():
@@ -114,39 +115,29 @@ async def health_check():
         "version": settings.api_version,
         "checks": {}
     }
-    
+
     # Check database connectivity
     try:
         supabase = get_supabase()
         # Simple query to check if database is accessible
-        result = supabase.table("profiles").select("id").limit(1).execute()
+        supabase.table("profiles").select("id").limit(1).execute()
         health_status["checks"]["database"] = "healthy"
     except Exception as e:
         health_status["checks"]["database"] = f"unhealthy: {str(e)}"
         health_status["status"] = "degraded"
         logger.error(f"Database health check failed: {e}")
-    
+
     # Check rate limiter
-    if settings.rate_limit_enabled:
-        health_status["checks"]["rate_limiter"] = "enabled"
-    else:
-        health_status["checks"]["rate_limiter"] = "disabled"
-    
+    health_status["checks"]["rate_limiter"] = "enabled" if settings.rate_limit_enabled else "disabled"
+
     # Check email service
-    if settings.sendgrid_api_key:
-        health_status["checks"]["email_service"] = "configured"
-    else:
-        health_status["checks"]["email_service"] = "not_configured"
-    
+    health_status["checks"]["email_service"] = "configured" if settings.sendgrid_api_key else "not_configured"
+
     # Check error tracking
-    if settings.sentry_dsn:
-        health_status["checks"]["error_tracking"] = "enabled"
-    else:
-        health_status["checks"]["error_tracking"] = "disabled"
-    
+    health_status["checks"]["error_tracking"] = "enabled" if settings.sentry_dsn else "disabled"
+
     status_code = 200 if health_status["status"] == "healthy" else 503
     return JSONResponse(content=health_status, status_code=status_code)
-
 
 @app.get("/api/health/ready")
 async def readiness_check():
@@ -155,7 +146,6 @@ async def readiness_check():
     Returns 200 only when the service is ready to accept traffic.
     """
     try:
-        # Check if database is ready
         supabase = get_supabase()
         supabase.table("profiles").select("id").limit(1).execute()
         return {"status": "ready"}
@@ -165,7 +155,6 @@ async def readiness_check():
             content={"status": "not_ready", "error": str(e)},
             status_code=503
         )
-
 
 @app.get("/api/health/live")
 async def liveness_check():
