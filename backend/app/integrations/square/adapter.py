@@ -2,6 +2,8 @@ import os
 import httpx
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode
+import base64
+import json
 
 from app.integrations.pos.base import (
     POSAdapter, POSCatalogSnapshot, POSCatalogCategory, POSCatalogItem,
@@ -12,30 +14,45 @@ SQUARE_ENV = os.getenv("SQUARE_ENV", "sandbox")  # 'sandbox' | 'production'
 SQUARE_BASE = "https://connect.squareupsandbox.com" if SQUARE_ENV == "sandbox" else "https://connect.squareup.com"
 SQUARE_API = "https://connect.squareupsandbox.com/v2" if SQUARE_ENV == "sandbox" else "https://connect.squareup.com/v2"
 
+print("=== SQUARE ENV DIAGNOSTICS ===")
+print("SQUARE_APPLICATION_ID:", repr(os.getenv("SQUARE_APPLICATION_ID")))
+print("SQUARE_APPLICATION_SECRET:", repr(os.getenv("SQUARE_APPLICATION_SECRET")))
+print("SQUARE_ENV:", repr(SQUARE_ENV))
+print("SQUARE_BASE:", SQUARE_BASE)
+
 class SquareAdapter(POSAdapter):
     provider = "square"
 
-    def get_authorization_url(self, shop_id: str, redirect_uri: str, state: str) -> str:
+    def get_authorization_url(self, shop_id: str, redirect_uri: str, state: Optional[str] = None) -> str:
         app_id = os.getenv("SQUARE_APPLICATION_ID")
+        state_obj = {"shop_id": shop_id}
+        if state is not None:
+            state_obj["user"] = state
+        encoded_state = base64.urlsafe_b64encode(json.dumps(state_obj).encode()).decode()
+
         scopes = [
             "MERCHANT_PROFILE_READ",
-            "LOCATIONS_READ",
-            "ITEMS_READ",
-            "ORDERS_WRITE",
-            "ORDERS_READ",
         ]
         qs = urlencode({
             "client_id": app_id,
             "scope": " ".join(scopes),
             "session": "false",
-            "state": state,
+            "state": encoded_state,
             "redirect_uri": redirect_uri,
         })
-        return f"{SQUARE_BASE}/oauth2/authorize?{qs}"
+        url = f"{SQUARE_BASE}/oauth2/authorize?{qs}"
+        print("=== SQUARE AUTH URL ===")
+        print(url)
+        return url
 
     async def exchange_code_for_tokens(self, code: str, redirect_uri: str) -> Dict[str, Any]:
         app_secret = os.getenv("SQUARE_APPLICATION_SECRET")
         app_id = os.getenv("SQUARE_APPLICATION_ID")
+        print("\n=== EXCHANGING SQUARE CODE ===")
+        print("client_id:", app_id)
+        print("client_secret:", "***REDACTED***")
+        print("code:", code)
+        print("redirect_uri:", redirect_uri)
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
                 f"{SQUARE_BASE}/oauth2/token",
@@ -47,8 +64,16 @@ class SquareAdapter(POSAdapter):
                     "redirect_uri": redirect_uri,
                 },
             )
-            resp.raise_for_status()
-            return resp.json()
+            try:
+                resp.raise_for_status()
+                print("=== SQUARE TOKEN EXCHANGE SUCCESS ===")
+                print("Token response:", resp.json())
+                return resp.json()
+            except Exception as e:
+                print("\n=== SQUARE TOKEN ERROR ===")
+                print("Status:", resp.status_code)
+                print("Response:", resp.text)
+                raise
 
     async def list_locations(self, access_token: str) -> List[POSLocation]:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -61,7 +86,6 @@ class SquareAdapter(POSAdapter):
             return [POSLocation(id=l["id"], name=l.get("name") or l.get("business_name") or "Location") for l in data]
 
     async def fetch_catalog(self, access_token: str, location_id: Optional[str]) -> POSCatalogSnapshot:
-        # Square catalog is account-level; availability can be location-based. We’ll do a simple pull.
         async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(
                 f"{SQUARE_API}/catalog/search",
@@ -82,7 +106,6 @@ class SquareAdapter(POSAdapter):
                 categories.append(POSCatalogCategory(id=obj["id"], name=obj["category_data"]["name"], raw=obj))
             elif t == "ITEM":
                 item_data = obj.get("item_data", {})
-                # Take first variation price if present
                 price_cents = None
                 currency = "USD"
                 variations = item_data.get("variations") or []

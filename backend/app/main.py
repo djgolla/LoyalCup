@@ -13,6 +13,9 @@ from app.database import get_supabase
 
 from app.routes import auth, users, shops, menu, orders, loyalty, admin, payments, pos
 
+from app.routes import pos_square_callback
+
+
 # Setup structured logging
 setup_logging(level="INFO" if settings.environment == "production" else "DEBUG")
 logger = get_logger(__name__)
@@ -90,6 +93,7 @@ app.include_router(loyalty.router)
 app.include_router(admin.router)      # if this breaks, comment it out temporarily
 app.include_router(payments.router)
 app.include_router(pos.router)
+app.include_router(pos_square_callback.router)
 
 @app.get("/")
 async def root():

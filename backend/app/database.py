@@ -26,7 +26,7 @@ class SupabaseClient:
             settings.supabase_url,
             settings.supabase_anon_key
         )
-    
+
     def get_service_client(self) -> Client:
         """
         Get the Supabase client with service role key.
@@ -36,7 +36,7 @@ class SupabaseClient:
             Supabase client with service role key
         """
         return self.service_client
-    
+
     def get_anon_client(self) -> Client:
         """
         Get the Supabase client with anon key.
@@ -46,7 +46,7 @@ class SupabaseClient:
             Supabase client with anon key
         """
         return self.anon_client
-    
+
     async def execute_query(
         self,
         table: str,
@@ -57,54 +57,36 @@ class SupabaseClient:
     ) -> Any:
         """
         Execute a database query with error handling.
-        
-        Args:
-            table: Table name to query
-            operation: Operation type ('select', 'insert', 'update', 'delete')
-            data: Data to insert or update
-            filters: Filters to apply to the query
-            use_service_role: Whether to use service role key (default: True)
-            
-        Returns:
-            Query result
-            
-        Raises:
-            Exception: If query execution fails
         """
         client = self.service_client if use_service_role else self.anon_client
-        
+
         try:
             query = client.table(table)
-            
             if operation == 'select':
                 if filters:
-                    for key, value in filters.items():
-                        query = query.eq(key, value)
-                response = query.execute()
-                
+                    response = query.select("*").match(filters).execute()
+                else:
+                    response = query.select("*").execute()
             elif operation == 'insert':
                 response = query.insert(data).execute()
-                
             elif operation == 'update':
                 if filters:
-                    for key, value in filters.items():
-                        query = query.eq(key, value)
-                response = query.update(data).execute()
-                
+                    response = query.update(data).match(filters).execute()
+                else:
+                    response = query.update(data).execute()
             elif operation == 'delete':
                 if filters:
-                    for key, value in filters.items():
-                        query = query.eq(key, value)
-                response = query.delete().execute()
-                
+                    response = query.delete().match(filters).execute()
+                else:
+                    response = query.delete().execute()
             else:
                 raise ValueError(f"Unsupported operation: {operation}")
-            
+
             return response.data
-            
+
         except Exception as e:
             raise Exception(f"Database query failed: {str(e)}")
-    
+
     async def get_by_id(
         self,
         table: str,
@@ -114,15 +96,6 @@ class SupabaseClient:
     ) -> Optional[Dict[str, Any]]:
         """
         Get a single record by ID.
-        
-        Args:
-            table: Table name
-            id_value: ID value to search for
-            id_column: ID column name (default: 'id')
-            use_service_role: Whether to use service role key
-            
-        Returns:
-            Record data or None if not found
         """
         result = await self.execute_query(
             table=table,
@@ -131,7 +104,7 @@ class SupabaseClient:
             use_service_role=use_service_role
         )
         return result[0] if result else None
-    
+
     async def get_all(
         self,
         table: str,
@@ -140,14 +113,6 @@ class SupabaseClient:
     ) -> List[Dict[str, Any]]:
         """
         Get all records from a table, optionally filtered.
-        
-        Args:
-            table: Table name
-            filters: Optional filters to apply
-            use_service_role: Whether to use service role key
-            
-        Returns:
-            List of records
         """
         result = await self.execute_query(
             table=table,
