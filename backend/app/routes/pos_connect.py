@@ -1,6 +1,9 @@
 import sys
 import os
 import traceback
+import base64
+import json
+import uuid
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
 
@@ -43,6 +46,14 @@ async def pos_connect(request: Request):
                 detail="Missing SQUARE_APPLICATION_ID or SQUARE_CALLBACK_URL env vars (check Docker/host env and .env file)"
             )
 
+        # BUILD STATE PARAM (base64-encoded JSON)
+        # (You can add real user/shop info instead of "anonymous" here if you want)
+        state_data = {
+            "shop_id": str(uuid.uuid4()),
+            "user": "anonymous"
+        }
+        state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
+
         scopes = [
             "MERCHANT_PROFILE_READ",
             "PAYMENTS_READ",
@@ -59,12 +70,14 @@ async def pos_connect(request: Request):
         else:
             SQUARE_AUTH_BASE = "https://connect.squareup.com/oauth2/authorize"
 
+        # INCLUDE 'state' param, which is required by your callback!
         auth_url = (
             f"{SQUARE_AUTH_BASE}"
             f"?client_id={SQUARE_CLIENT_ID}"
             f"&scope={scopes_str}"
             f"&session=False"
             f"&redirect_uri={SQUARE_CALLBACK_URL}"
+            f"&state={state}"
         )
         print("DEBUG AUTH URL:", auth_url)
 
