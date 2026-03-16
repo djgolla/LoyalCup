@@ -15,6 +15,8 @@ from app.routes import auth, users, shops, menu, orders, loyalty, admin, payment
 
 from app.routes import pos_square_callback
 from app.routes import pos_square_set_location
+from app.routes import pos_connect
+from app.routes import pos_status
 
 # Setup structured logging
 setup_logging(level="INFO" if settings.environment == "production" else "DEBUG")
@@ -95,7 +97,8 @@ app.include_router(payments.router)
 app.include_router(pos.router)
 app.include_router(pos_square_callback.router)
 app.include_router(pos_square_set_location.router)
-
+app.include_router(pos_connect.router)
+app.include_router(pos_status.router)
 
 @app.get("/")
 async def root():

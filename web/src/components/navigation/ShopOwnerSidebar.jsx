@@ -11,7 +11,8 @@ import {
   Award,
   LogOut,
   UserCircle,
-  Download
+  Download,
+  CreditCard
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -29,13 +30,11 @@ export default function ShopOwnerSidebar() {
 
   const getStatusBadge = () => {
     if (!shop) return null;
-    
     const badges = {
       active: "bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400",
       pending: "bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400",
       suspended: "bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400",
     };
-
     return (
       <span className={`text-xs px-2 py-1 rounded-full ${badges[shop.status] || badges.pending}`}>
         {shop.status}
@@ -72,9 +71,8 @@ export default function ShopOwnerSidebar() {
           to="/shop-owner/menu"
           className={({ isActive }) =>
             `${linkClasses} ${
-              isActive
-                ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700"
-                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
+              isActive ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700" :
+              "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
             }`
           }
         >
@@ -86,9 +84,8 @@ export default function ShopOwnerSidebar() {
           to="/shop-owner/categories"
           className={({ isActive }) =>
             `${linkClasses} ${
-              isActive
-                ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700"
-                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
+              isActive ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700" :
+              "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
             }`
           }
         >
@@ -96,15 +93,12 @@ export default function ShopOwnerSidebar() {
           Categories
         </NavLink>
 
-
-
         <NavLink
           to="/shop-owner/orders"
           className={({ isActive }) =>
             `${linkClasses} ${
-              isActive
-                ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700"
-                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
+              isActive ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700" :
+              "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
             }`
           }
         >
@@ -116,9 +110,8 @@ export default function ShopOwnerSidebar() {
           to="/shop-owner/analytics"
           className={({ isActive }) =>
             `${linkClasses} ${
-              isActive
-                ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700"
-                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
+              isActive ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700" :
+              "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
             }`
           }
         >
@@ -130,9 +123,8 @@ export default function ShopOwnerSidebar() {
           to="/shop-owner/loyalty"
           className={({ isActive }) =>
             `${linkClasses} ${
-              isActive
-                ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700"
-                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
+              isActive ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700" :
+              "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
             }`
           }
         >
@@ -144,9 +136,8 @@ export default function ShopOwnerSidebar() {
           to="/shop-owner/workers"
           className={({ isActive }) =>
             `${linkClasses} ${
-              isActive
-                ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700"
-                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
+              isActive ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700" :
+              "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
             }`
           }
         >
@@ -158,9 +149,8 @@ export default function ShopOwnerSidebar() {
           to="/shop-owner/settings"
           className={({ isActive }) =>
             `${linkClasses} ${
-              isActive
-                ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700"
-                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
+              isActive ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700" :
+              "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
             }`
           }
         >
@@ -172,14 +162,27 @@ export default function ShopOwnerSidebar() {
           to="/shop-owner/setup"
           className={({ isActive }) =>
             `${linkClasses} ${
-              isActive
-                ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700"
-                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
+              isActive ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700" :
+              "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800"
             }`
           }
         >
           <Download size={20} />
           Shop Setup
+        </NavLink>
+        
+        <NavLink
+          to="/shop-owner/connect-square"
+          className={({ isActive }) =>
+            `${linkClasses} ${
+              isActive
+                ? "bg-green-100 dark:bg-green-900/30 text-green-900 dark:text-green-400"
+                : "text-gray-700 dark:text-gray-300 hover:bg-green-50 dark:hover:bg-green-900/10"
+            }`
+          }
+        >
+          <CreditCard size={20} />
+          Connect Square POS
         </NavLink>
       </nav>
 
