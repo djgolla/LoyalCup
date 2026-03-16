@@ -1,23 +1,34 @@
+import time
+import sentry_sdk
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from slowapi.errors import RateLimitExceeded
-import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
-import time
+from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
 from app.middleware.rate_limit import limiter, rate_limit_handler
 from app.utils.logging import setup_logging, get_logger
 from app.database import get_supabase
 
-from app.routes import auth, users, shops, menu, orders, loyalty, admin, payments, pos
-
-from app.routes import pos_square_callback
-from app.routes import pos_square_set_location
-from app.routes import pos_connect
-from app.routes import pos_status
-
+# ---- IMPORT ONLY THE ROUTES THAT ARE NOT CONFLICTING ----
+from app.routes import (
+    auth,
+    users,
+    shops,
+    menu,
+    orders,
+    loyalty,
+    admin,
+    payments,
+    pos_status,
+    pos_connect,
+    pos_square_callback,
+    pos_square_set_location,
+    # Do NOT import "pos" here if it contains an @router.post("/connect") endpoint!
+)
+from dotenv import load_dotenv
+load_dotenv()
 # Setup structured logging
 setup_logging(level="INFO" if settings.environment == "production" else "DEBUG")
 logger = get_logger(__name__)
@@ -60,16 +71,9 @@ app.add_middleware(
 # Request logging middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """Log all requests with timing information."""
     start_time = time.time()
-
-    # Process request
     response = await call_next(request)
-
-    # Calculate duration
     duration = time.time() - start_time
-
-    # Log request
     logger.info(
         f"{request.method} {request.url.path} - {response.status_code} - {duration:.3f}s",
         extra={
@@ -82,27 +86,24 @@ async def log_requests(request: Request, call_next):
             }
         }
     )
-
     return response
 
-# Include all routers
+# ---- REGISTER ROUTERS ----
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(shops.router)
 app.include_router(menu.router)
 app.include_router(orders.router)
 app.include_router(loyalty.router)
-app.include_router(admin.router)      # if this breaks, comment it out temporarily
+app.include_router(admin.router)
 app.include_router(payments.router)
-app.include_router(pos.router)
+app.include_router(pos_status.router)
+app.include_router(pos_connect.router)  
 app.include_router(pos_square_callback.router)
 app.include_router(pos_square_set_location.router)
-app.include_router(pos_connect.router)
-app.include_router(pos_status.router)
 
 @app.get("/")
 async def root():
-    """Root endpoint with API information."""
     return {
         "name": "LoyalCup API",
         "version": settings.api_version,
@@ -113,10 +114,6 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """
-    Comprehensive health check endpoint.
-    Checks database connectivity and returns system status.
-    """
     health_status = {
         "status": "healthy",
         "timestamp": time.time(),
@@ -124,11 +121,8 @@ async def health_check():
         "version": settings.api_version,
         "checks": {}
     }
-
-    # Check database connectivity
     try:
         supabase = get_supabase()
-        # Simple query to check if database is accessible
         supabase.table("profiles").select("id").limit(1).execute()
         health_status["checks"]["database"] = "healthy"
     except Exception as e:
@@ -136,24 +130,14 @@ async def health_check():
         health_status["status"] = "degraded"
         logger.error(f"Database health check failed: {e}")
 
-    # Check rate limiter
     health_status["checks"]["rate_limiter"] = "enabled" if settings.rate_limit_enabled else "disabled"
-
-    # Check email service
     health_status["checks"]["email_service"] = "configured" if settings.sendgrid_api_key else "not_configured"
-
-    # Check error tracking
     health_status["checks"]["error_tracking"] = "enabled" if settings.sentry_dsn else "disabled"
-
     status_code = 200 if health_status["status"] == "healthy" else 503
     return JSONResponse(content=health_status, status_code=status_code)
 
 @app.get("/api/health/ready")
 async def readiness_check():
-    """
-    Readiness check for Kubernetes/container orchestration.
-    Returns 200 only when the service is ready to accept traffic.
-    """
     try:
         supabase = get_supabase()
         supabase.table("profiles").select("id").limit(1).execute()
@@ -167,8 +151,4 @@ async def readiness_check():
 
 @app.get("/api/health/live")
 async def liveness_check():
-    """
-    Liveness check for Kubernetes/container orchestration.
-    Returns 200 if the service is running (even if degraded).
-    """
     return {"status": "alive"}
