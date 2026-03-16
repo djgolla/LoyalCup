@@ -1,8 +1,8 @@
 import sys
+import os
 import traceback
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
-from app.config import settings
 
 router = APIRouter()
 
@@ -11,26 +11,36 @@ async def pos_connect(request: Request):
     try:
         await request.body()
         provider = request.query_params.get("provider")
-        print("\n--- SQUARE DEBUG START ---")
+        print("\n--- SQUARE ENV DEBUG ---")
         print("provider:", repr(provider))
-        print("square_env:", repr(settings.square_env))
-        print("square_application_id:", repr(settings.square_application_id))
-        print("square_callback_url:", repr(settings.square_callback_url))
-        print("square_application_secret:", repr(settings.square_application_secret))
-        print("--- END SQUARE DEBUG ---\n")
+        print("os.environ['SQUARE_APPLICATION_ID']:", repr(os.environ.get("SQUARE_APPLICATION_ID")))
+        print("os.environ['square_application_id']:", repr(os.environ.get("square_application_id")))
+        print("os.environ['SQUARE_CALLBACK_URL']:", repr(os.environ.get("SQUARE_CALLBACK_URL")))
+        print("os.environ['square_callback_url']:", repr(os.environ.get("square_callback_url")))
+        print("os.environ['SQUARE_APPLICATION_SECRET']:", repr(os.environ.get("SQUARE_APPLICATION_SECRET")))
+        print("os.environ['square_application_secret']:", repr(os.environ.get("square_application_secret")))
+        print("os.environ['SQUARE_ENV']:", repr(os.environ.get("SQUARE_ENV")))
+        print("os.environ['square_env']:", repr(os.environ.get("square_env")))
+        print("--- END SQUARE ENV DEBUG ---\n")
+
+        SQUARE_CLIENT_ID = (
+            os.environ.get("SQUARE_APPLICATION_ID")
+            or os.environ.get("square_application_id")
+        )
+        SQUARE_CALLBACK_URL = (
+            os.environ.get("SQUARE_CALLBACK_URL")
+            or os.environ.get("square_callback_url")
+        )
 
         if not provider:
             raise HTTPException(status_code=400, detail="Missing provider")
         if provider != "square":
             raise HTTPException(status_code=400, detail="Unsupported provider")
 
-        SQUARE_CLIENT_ID = settings.square_application_id
-        SQUARE_CALLBACK_URL = settings.square_callback_url
-
         if not SQUARE_CLIENT_ID or not SQUARE_CALLBACK_URL:
             raise HTTPException(
                 status_code=500,
-                detail="Missing square_application_id or square_callback_url env vars"
+                detail="Missing SQUARE_APPLICATION_ID or SQUARE_CALLBACK_URL env vars (check Docker/host env and .env file)"
             )
 
         scopes = [
@@ -42,8 +52,15 @@ async def pos_connect(request: Request):
             "INVENTORY_READ"
         ]
         scopes_str = "%20".join(scopes)
+
+        # THE CRITICAL FIX: Correct sandbox and prod URLs
+        if SQUARE_CLIENT_ID.startswith("sandbox-"):
+            SQUARE_AUTH_BASE = "https://connect.squareupsandbox.com/oauth2/authorize"
+        else:
+            SQUARE_AUTH_BASE = "https://connect.squareup.com/oauth2/authorize"
+
         auth_url = (
-            f"https://connect.squareup.com/oauth2/authorize"
+            f"{SQUARE_AUTH_BASE}"
             f"?client_id={SQUARE_CLIENT_ID}"
             f"&scope={scopes_str}"
             f"&session=False"

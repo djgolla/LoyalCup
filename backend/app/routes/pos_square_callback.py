@@ -2,6 +2,7 @@ import base64
 import json
 import uuid
 from fastapi import APIRouter, Request, Depends, HTTPException
+from fastapi.responses import RedirectResponse
 from app.integrations.square.adapter import SquareAdapter
 from app.database import get_supabase
 
@@ -87,4 +88,10 @@ async def square_callback(request: Request, db=Depends(get_supabase)):
         print("DB ERROR (pos_connections):", str(e))
         raise HTTPException(status_code=500, detail=f"Database error (pos_connections): {str(e)}")
 
-    return {"status": "connected", "provider": "square"}
+    # FIX: Redirect to your frontend/app so the user sees "Connected!"
+    # Change this to match your real frontend route—add params if you want:
+    frontend_url = "http://localhost:5173/?status=square_connected"
+    return RedirectResponse(url=frontend_url)
+
+def register(app):
+    app.include_router(router)
