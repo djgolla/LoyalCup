@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List
 from pydantic_settings import BaseSettings
 from pydantic import Field, ValidationError, field_validator
 
@@ -42,4 +42,27 @@ class Settings(BaseSettings):
 
     # Email
     sendgrid_api_key: str = Field(default="")
-    sendgrid_from_email
+    sendgrid_from_email: str = Field(default="noreply@loyalcup.com")
+
+    # Cache
+    redis_url: str = Field(default="redis://localhost:6379")
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v):
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = False
+
+
+try:
+    settings = Settings()
+except ValidationError as e:
+    print("FATAL: .env CONFIGURATION INVALID")
+    print(e)
+    raise SystemExit(2)
