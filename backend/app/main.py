@@ -58,7 +58,12 @@ if settings.rate_limit_enabled:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,   # ← remove the + ["*"]
+    allow_origins=[
+        "https://loyalcupapp.com",
+        "https://www.loyalcupapp.com",
+        "http://localhost:5173",
+        "http://localhost:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
