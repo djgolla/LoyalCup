@@ -1,12 +1,36 @@
 import base64
 import json
 import uuid
+import httpx
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from app.integrations.square.adapter import SquareAdapter
 from app.database import get_supabase
 
 router = APIRouter()
+
+# Util: fetch merchant and catalog/menu data from Square API
+async def fetch_square_merchant_and_menu(access_token):
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Square-Version": "2024-03-21"
+    }
+    async with httpx.AsyncClient() as client:
+        # 1. Merchant info
+        merchant_resp = await client.get(
+            "https://connect.squareupsandbox.com/v2/merchants/me", headers=headers)
+        merchant_resp.raise_for_status()
+        merchant = merchant_resp.json()["merchant"]
+
+        # 2. Full menu/catalog (categories, items, modifiers, images, prices)
+        types = "CATEGORY,ITEM,MODIFIER_LIST,ITEM_VARIATION,IMAGE"
+        catalog_resp = await client.get(
+            f"https://connect.squareupsandbox.com/v2/catalog/list?types={types}",
+            headers=headers,
+        )
+        catalog_resp.raise_for_status()
+        catalog_objects = catalog_resp.json().get("objects", [])
+    return merchant, catalog_objects
 
 @router.get("/api/v1/pos/square/callback")
 async def square_callback(request: Request, db=Depends(get_supabase)):
@@ -15,18 +39,13 @@ async def square_callback(request: Request, db=Depends(get_supabase)):
     if not code or not state:
         raise HTTPException(status_code=400, detail="Missing auth code or state.")
 
-    print("SQUARE CALLBACK:")
-    print("code ->", code)
-    print("state ->", state)
-
-    # Decode state param
+    # Decode state param (should contain shop_id/user etc.)
     try:
         state_json = json.loads(base64.urlsafe_b64decode(state.encode()).decode())
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid state param: {str(e)}")
     shop_id_raw = state_json.get("shop_id")
     user_id = state_json.get("user")
-    # Always use/generate a real UUID for shop_id
     try:
         shop_uuid = str(uuid.UUID(shop_id_raw))
     except Exception:
@@ -34,63 +53,69 @@ async def square_callback(request: Request, db=Depends(get_supabase)):
 
     redirect_uri = str(request.url._url.split("?")[0])
 
+    # Exchange code for tokens
     adapter = SquareAdapter()
     tokens = await adapter.exchange_code_for_tokens(code, redirect_uri)
+    access_token = tokens.get("access_token")
+    if not access_token:
+        raise HTTPException(status_code=400, detail="Missing access token from Square.")
 
-    print("Square OAuth tokens:", tokens)
+    # ---- FETCH SHOP/MENU DATA FROM SQUARE ----
+    merchant, catalog_objects = await fetch_square_merchant_and_menu(access_token)
 
-    # Ensure shop exists in shops table (fill in not-null columns!)
-    try:
-        shop = await db.get_by_id(
+    # ---- UPSERT SHOP IN DB USING REAL DATA ----
+    db_shop = await db.get_by_id("shops", shop_uuid, "id")
+    shop_data = {
+        "id": shop_uuid,  # Universal shop id (should merge with user's existing shop logic)
+        "name": merchant.get("business_name") or merchant.get("name", "Square Shop"),
+        "logo_url": merchant.get("logo_url"),
+        "square_merchant_id": merchant.get("id"),
+        "square_website_url": merchant.get("website_url"),
+        # Add more fields as desired!
+    }
+    if db_shop:
+        # Update existing shop by id
+        await db.execute_query(
             table="shops",
-            id_value=shop_uuid,
-            id_column="id"
+            operation="update",
+            data=shop_data,
+            use_service_role=True,
+            id_column="id",
+            id_value=shop_uuid
         )
-        if not shop:
-            shop_insert = {
-                "id": shop_uuid,
-                "name": "Square Connected Shop",  # REQUIRED; customize as desired
-                "created_at": None,
-                "updated_at": None
-            }
-            print("Inserting new shop:", shop_insert)
-            await db.execute_query(
-                table="shops",
-                operation="insert",
-                data=shop_insert,
-                use_service_role=True
-            )
-    except Exception as e:
-        print("DB ERROR (shops):", str(e))
-        raise HTTPException(status_code=500, detail=f"Database error (shops): {str(e)}")
+    else:
+        # Insert new if not found (should not happen if user/shop is always pre-created)
+        await db.execute_query(
+            table="shops",
+            operation="insert",
+            data=shop_data,
+            use_service_role=True
+        )
 
-    # Insert POS connection
-    data = {
+    # ---- UPSERT POS CONNECTION ----
+    conn_data = {
         "shop_id": shop_uuid,
         "provider": "square",
         "status": "connected",
-        "merchant_id": tokens.get("merchant_id"),
-        "location_id": None,
-        "access_token": tokens.get("access_token"),
+        "merchant_id": merchant.get("id"),
+        "location_id": None,  # Fill from merchant/callback if you prefer
+        "access_token": access_token,
         "refresh_token": tokens.get("refresh_token"),
     }
+    await db.execute_query(
+        table="pos_connections",
+        operation="insert",
+        data=conn_data,
+        use_service_role=True
+    )
 
-    print("DB INSERT DATA ->", data)
+    # ---- SYNC MENU & MODIFIERS (CALL YOUR OWN UNIVERSAL MENU SYNC LOGIC) ----
+    # Write a function to map catalog_objects to your "categories", "items", "modifiers", etc!
+    # Example: await sync_square_catalog(shop_uuid, catalog_objects, db)
+    # TODO: Implement sync_square_catalog to map all object types to your tables
 
-    try:
-        await db.execute_query(
-            table="pos_connections",
-            operation="insert",
-            data=data,
-            use_service_role=True
-        )
-    except Exception as e:
-        print("DB ERROR (pos_connections):", str(e))
-        raise HTTPException(status_code=500, detail=f"Database error (pos_connections): {str(e)}")
-
-    # FIX: Redirect to your frontend/app so the user sees "Connected!"
-    # Change this to match your real frontend route—add params if you want:
-    frontend_url = "http://localhost:5173/?status=square_connected"
+    # Redirect to frontend with provider+status
+    frontend_url = f"http://localhost:5173/shop-owner/connect-square"
     return RedirectResponse(url=frontend_url)
 
 def register(app):

@@ -60,7 +60,8 @@ async def pos_connect(request: Request):
             "PAYMENTS_WRITE",
             "ORDERS_READ",
             "ORDERS_WRITE",
-            "INVENTORY_READ"
+            "INVENTORY_READ",
+            "ITEMS_READ"
         ]
         scopes_str = "%20".join(scopes)
 
