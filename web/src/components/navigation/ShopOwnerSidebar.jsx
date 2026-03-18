@@ -1,181 +1,101 @@
-import { NavLink } from "react-router-dom";
-import { useShop } from "../../context/ShopContext";
+import { NavLink, useNavigate } from 'react-router-dom';
+import { useShop } from '../../context/ShopContext';
+import { useAuth } from '../../context/AuthContext';
 import {
-  LayoutDashboard,
-  Menu as MenuIcon,
-  FolderTree,
-  Layers,
-  Settings as SettingsIcon,
-  ShoppingBag,
-  BarChart3,
-  Users,
-  Award,
-  LogOut,
-  Download,
-  RefreshCw,
-} from "lucide-react";
-import { useAuth } from "../../context/AuthContext";
-import { useNavigate } from "react-router-dom";
+  LayoutDashboard, Menu as MenuIcon, FolderTree, Layers,
+  Settings as SettingsIcon, ShoppingBag, BarChart3, Award,
+  LogOut, RefreshCw, Lock,
+} from 'lucide-react';
 
 export default function ShopOwnerSidebar() {
   const { shop } = useShop();
   const { logout } = useAuth();
   const navigate = useNavigate();
 
-  const linkClasses =
-    "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200 text-sm";
+  const squareConnected = !!shop?.square_merchant_id;
 
-  const activeClasses = "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-semibold";
-  const inactiveClasses =
-    "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800";
+  const base = 'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200 text-sm';
+  const active   = 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-semibold';
+  const inactive = 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800';
+  const locked   = 'text-gray-400 dark:text-neutral-600 cursor-not-allowed pointer-events-none';
 
-  const handleLogout = async () => {
-    await logout();
-    navigate("/login");
-  };
-
-  const getStatusBadge = () => {
-    if (!shop) return null;
-    const badges = {
-      active: "bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400",
-      pending: "bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400",
-      suspended: "bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400",
-    };
+  const Link = ({ to, icon: Icon, children, requiresSquare = false }) => {
+    const isLocked = requiresSquare && !squareConnected;
+    if (isLocked) {
+      return (
+        <div className={`${base} ${locked}`}>
+          <Icon size={18} />
+          <span className="flex-1">{children}</span>
+          <Lock size={13} className="opacity-50" />
+        </div>
+      );
+    }
     return (
-      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badges[shop.status] || badges.pending}`}>
-        {shop.status}
-      </span>
+      <NavLink to={to} className={({ isActive }) => `${base} ${isActive ? active : inactive}`}>
+        <Icon size={18} />
+        {children}
+      </NavLink>
     );
   };
 
-  const SectionLabel = ({ children }) => (
+  const Section = ({ children }) => (
     <p className="px-4 pt-4 pb-1 text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-neutral-500">
       {children}
     </p>
   );
 
+  const statusBadge = shop ? (
+    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+      shop.status === 'active'
+        ? 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400'
+        : 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400'
+    }`}>
+      {shop.status}
+    </span>
+  ) : null;
+
   return (
     <aside className="w-64 bg-white dark:bg-[#1f1f1f] border-r border-gray-200 dark:border-neutral-800 flex flex-col shrink-0">
-      {/* Shop header */}
+      {/* Header */}
       <div className="p-4 border-b border-gray-200 dark:border-neutral-800">
         <h1 className="text-xl font-semibold text-amber-700">Shop Owner</h1>
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-1 truncate">
-          {shop?.name || "My Coffee Shop"}
+          {shop?.name || 'My Coffee Shop'}
         </p>
-        {getStatusBadge()}
+        {statusBadge}
       </div>
 
       <nav className="flex-1 p-3 overflow-y-auto">
         {/* Overview */}
-        <NavLink
-          to="/shop-owner/dashboard"
-          className={({ isActive }) => `${linkClasses} ${isActive ? activeClasses : inactiveClasses}`}
-        >
-          <LayoutDashboard size={18} />
+        <Link to="/shop-owner/dashboard" icon={LayoutDashboard} requiresSquare>
           Dashboard
-        </NavLink>
+        </Link>
 
-        {/* ── Menu section ── */}
-        <SectionLabel>Menu</SectionLabel>
+        {/* Menu */}
+        <Section>Menu</Section>
+        <Link to="/shop-owner/menu"           icon={MenuIcon}   requiresSquare>Menu Builder</Link>
+        <Link to="/shop-owner/categories"     icon={FolderTree} requiresSquare>Categories</Link>
+        <Link to="/shop-owner/customizations" icon={Layers}     requiresSquare>Modifier Groups</Link>
 
-        <NavLink
-          to="/shop-owner/menu"
-          className={({ isActive }) => `${linkClasses} ${isActive ? activeClasses : inactiveClasses}`}
-        >
-          <MenuIcon size={18} />
-          Menu Builder
-        </NavLink>
+        {/* Operations */}
+        <Section>Operations</Section>
+        <Link to="/shop-owner/orders"    icon={ShoppingBag} requiresSquare>Orders</Link>
+        <Link to="/shop-owner/analytics" icon={BarChart3}   requiresSquare>Analytics</Link>
+        <Link to="/shop-owner/loyalty"   icon={Award}       requiresSquare>Loyalty Program</Link>
 
-        <NavLink
-          to="/shop-owner/categories"
-          className={({ isActive }) => `${linkClasses} ${isActive ? activeClasses : inactiveClasses}`}
-        >
-          <FolderTree size={18} />
-          Categories
-        </NavLink>
-
-        <NavLink
-          to="/shop-owner/customizations"
-          className={({ isActive }) => `${linkClasses} ${isActive ? activeClasses : inactiveClasses}`}
-        >
-          <Layers size={18} />
-          Modifier Groups
-        </NavLink>
-
-        {/* ── Operations section ── */}
-        <SectionLabel>Operations</SectionLabel>
-
-        <NavLink
-          to="/shop-owner/orders"
-          className={({ isActive }) => `${linkClasses} ${isActive ? activeClasses : inactiveClasses}`}
-        >
-          <ShoppingBag size={18} />
-          Orders
-        </NavLink>
-
-        <NavLink
-          to="/shop-owner/analytics"
-          className={({ isActive }) => `${linkClasses} ${isActive ? activeClasses : inactiveClasses}`}
-        >
-          <BarChart3 size={18} />
-          Analytics
-        </NavLink>
-
-        <NavLink
-          to="/shop-owner/loyalty"
-          className={({ isActive }) => `${linkClasses} ${isActive ? activeClasses : inactiveClasses}`}
-        >
-          <Award size={18} />
-          Loyalty Program
-        </NavLink>
-
-        <NavLink
-          to="/shop-owner/workers"
-          className={({ isActive }) => `${linkClasses} ${isActive ? activeClasses : inactiveClasses}`}
-        >
-          <Users size={18} />
-          Workers
-        </NavLink>
-
-        {/* ── Settings section ── */}
-        <SectionLabel>Settings</SectionLabel>
-
-        <NavLink
-          to="/shop-owner/settings"
-          className={({ isActive }) => `${linkClasses} ${isActive ? activeClasses : inactiveClasses}`}
-        >
-          <SettingsIcon size={18} />
-          Shop Settings
-        </NavLink>
-
-        <NavLink
-          to="/shop-owner/setup"
-          className={({ isActive }) => `${linkClasses} ${isActive ? activeClasses : inactiveClasses}`}
-        >
-          <Download size={18} />
-          Shop Setup
-        </NavLink>
-
-        <NavLink
-          to="/shop-owner/connect-square"
-          className={({ isActive }) =>
-            `${linkClasses} ${
-              isActive
-                ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-semibold"
-                : "text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/10"
-            }`
-          }
-        >
-          <RefreshCw size={18} />
-          POS Sync
-        </NavLink>
+        {/* Settings */}
+        <Section>Settings</Section>
+        <Link to="/shop-owner/settings"       icon={SettingsIcon}>Shop Settings</Link>
+        <Link to="/shop-owner/connect-square" icon={RefreshCw}>
+          {squareConnected ? 'POS Connected ✓' : 'Connect Square POS'}
+        </Link>
       </nav>
 
       {/* Logout */}
       <div className="p-3 border-t border-gray-200 dark:border-neutral-800">
         <button
-          onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg transition-colors duration-200"
+          onClick={async () => { await logout(); navigate('/login'); }}
+          className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg transition-colors"
         >
           <LogOut size={18} />
           Logout

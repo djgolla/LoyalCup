@@ -47,6 +47,7 @@ import Contact from "./pages/info/Contact";
 import Privacy from "./pages/info/Privacy";
 import Terms from "./pages/info/Terms";
 import About from "./pages/info/About";
+import Pricing from "./pages/info/Pricing";
 
 // error pages
 import NotFound from "./pages/NotFound";
@@ -58,7 +59,6 @@ import { AuthProvider } from "./context/AuthContext";
 import { ShopProvider } from "./context/ShopContext";
 import PageLoader from "./components/ui/PageLoader";
 
-// Redirects logged-in shop owners / admins away from the public home page
 function RoleRedirect({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <PageLoader />;
@@ -86,6 +86,7 @@ export default function App() {
                   <Route path="/privacy" element={<Privacy />} />
                   <Route path="/terms" element={<Terms />} />
                   <Route path="/about" element={<About />} />
+                  <Route path="/pricing" element={<Pricing />} />
                 </Route>
 
                 {/* auth pages */}
@@ -97,7 +98,7 @@ export default function App() {
                 {/* hidden admin login */}
                 <Route path="/admin" element={<AdminLogin />} />
 
-                {/* shop application — public but needs auth to submit */}
+                {/* shop application — public */}
                 <Route element={<MainLayout />}>
                   <Route path="/shop-application" element={<ShopApplication />} />
                 </Route>
@@ -139,7 +140,7 @@ export default function App() {
                   <Route path="/admin/audit-log" element={<AuditLog />} />
                 </Route>
 
-                {/* redirect old customer-only routes to download */}
+                {/* redirects */}
                 <Route path="/shops" element={<Navigate to="/download" replace />} />
                 <Route path="/shops/:id" element={<Navigate to="/download" replace />} />
                 <Route path="/rewards" element={<Navigate to="/download" replace />} />

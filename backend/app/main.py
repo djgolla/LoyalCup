@@ -23,6 +23,7 @@ from app.routes import (
     loyalty,
     admin,
     payments,
+    billing,
     pos_status,
     pos_connect,
     pos_square_callback,
@@ -84,6 +85,7 @@ app.include_router(orders.router)
 app.include_router(loyalty.router)
 app.include_router(admin.router)
 app.include_router(payments.router)
+app.include_router(billing.router)       # ← Stripe shop subscriptions
 app.include_router(pos_status.router)
 app.include_router(pos_connect.router)
 app.include_router(pos_square_callback.router)
@@ -121,6 +123,7 @@ async def health_check():
     health_status["checks"]["rate_limiter"] = "enabled" if settings.rate_limit_enabled else "disabled"
     health_status["checks"]["email_service"] = "configured" if settings.sendgrid_api_key else "not_configured"
     health_status["checks"]["error_tracking"] = "enabled" if settings.sentry_dsn else "disabled"
+    health_status["checks"]["stripe"] = "configured" if settings.stripe_secret_key else "not_configured"
     status_code = 200 if health_status["status"] == "healthy" else 503
     return JSONResponse(content=health_status, status_code=status_code)
 

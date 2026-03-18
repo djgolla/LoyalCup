@@ -1,308 +1,283 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext";
-import { toast } from "sonner";
-import { supabase } from "../../lib/supabase";
+import { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { toast } from 'sonner';
+import { Coffee, Store, MapPin, Phone, Globe, FileText, MessageSquare } from 'lucide-react';
+import supabase from '../../lib/supabase';
 
 export default function ShopApplication() {
-  const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  
+
   const [formData, setFormData] = useState({
-    businessName: "",
-    description: "",
-    address: "",
-    city: "",
-    state: "",
-    zip: "",
-    phone: "",
-    businessLicense: "",
-    website: "",
-    whyJoin: "",
+    businessName: '',
+    description: '',
+    address: '',
+    city: '',
+    state: '',
+    zip: '',
+    phone: '',
+    email: '',         // applicant contact email
+    businessLicense: '',
+    website: '',
+    whyJoin: '',
     agreeToTerms: false,
   });
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === "checkbox" ? checked : value
-    }));
+    setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!formData.agreeToTerms) {
-      toast.error("Please agree to the terms and conditions");
+      toast.error('Please agree to the terms and conditions');
       return;
     }
 
     setLoading(true);
 
     try {
+      // Check if user is logged in — if not, create an account for them first
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        toast.error("You must be logged in to apply");
-        navigate("/login?redirect=/shop-application");
-        return;
+
+      let userId;
+
+      if (session) {
+        userId = session.user.id;
+      } else {
+        // Anonymous apply: sign them up so we have a user record to attach the shop to.
+        // They'll get a confirmation email from Supabase automatically.
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+          email: formData.email,
+          password: Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2),
+          options: {
+            data: { role: 'applicant', full_name: formData.businessName },
+          },
+        });
+
+        if (signUpError) throw signUpError;
+        userId = signUpData.user?.id;
+        if (!userId) throw new Error('Failed to create account');
       }
 
-      // Insert shop directly into Supabase
-      const { data: shopData, error: shopError } = await supabase
+      // Insert shop with status = pending (NOT active)
+      const { error: shopError } = await supabase
         .from('shops')
         .insert({
-          owner_id: session.user.id,
-          name: formData.businessName,
-          description: formData.description,
-          address: formData.address,
-          city: formData.city,
-          state: formData.state,
-          zip: formData.zip,
-          phone: formData.phone,
-          website: formData.website,
-        })
-        .select()
-        .single();
+          owner_id:         userId,
+          name:             formData.businessName,
+          description:      formData.description || null,
+          address:          formData.address,
+          city:             formData.city,
+          state:            formData.state,
+          zip:              formData.zip,
+          phone:            formData.phone,
+          website:          formData.website || null,
+          business_license: formData.businessLicense || null,
+          status:           'pending',   // ← stays pending until admin approves
+        });
 
-      if (shopError) {
-        console.error("Shop creation error:", shopError);
-        throw new Error(shopError.message);
-      }
+      if (shopError) throw shopError;
 
-      console.log("Shop created:", shopData);
-
-      // Update user role in profiles table
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ role: 'shop_owner' })
-        .eq('id', session.user.id);
-
-      if (profileError) {
-        console.error("Profile update error:", profileError);
-        // Don't throw - shop is already created
-      }
-
-      // Update user metadata
-      await supabase.auth.updateUser({
-        data: { role: "shop_owner" }
-      });
-
-      toast.success("Shop created successfully! Welcome to LoyalCup.");
-      
-      // Redirect to shop owner dashboard
-      setTimeout(() => {
-        navigate("/shop-owner");
-      }, 1000);
+      toast.success('Application submitted! We\'ll be in touch within 24–48 hours.');
+      navigate('/application-pending');
     } catch (error) {
-      console.error("Failed to submit application:", error);
-      toast.error(error.message || "Failed to submit application");
+      console.error('Application error:', error);
+      toast.error(error.message || 'Failed to submit application');
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gray-50 dark:bg-neutral-950 py-12 px-4">
-      <div className="max-w-3xl mx-auto">
-        <div className="bg-white dark:bg-neutral-900 rounded-2xl shadow-xl border border-gray-200 dark:border-neutral-800 p-8">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              Apply to Join LoyalCup
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Fill out the form below to list your coffee shop on our platform
-            </p>
-          </div>
+  const inputClass = 'w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 text-gray-900 dark:text-white border border-gray-200 dark:border-neutral-700 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 transition';
 
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-amber-50 to-white dark:from-neutral-900 dark:to-neutral-800 py-12 px-4">
+      <div className="max-w-3xl mx-auto">
+
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center mb-10"
+        >
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl shadow-lg mb-4">
+            <Coffee className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-4xl font-black text-gray-900 dark:text-white mb-2">
+            Join LoyalCup
+          </h1>
+          <p className="text-gray-500 dark:text-gray-400 text-lg">
+            Fill out the form below and we'll review your application within 24–48 hours.
+          </p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white dark:bg-neutral-900 rounded-2xl shadow-xl border border-gray-200 dark:border-neutral-800 p-8"
+        >
           <form onSubmit={handleSubmit} className="space-y-6">
+
             {/* Business Name */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                <Store className="inline w-4 h-4 mr-1" />
                 Business Name <span className="text-red-500">*</span>
               </label>
-              <input
-                type="text"
-                name="businessName"
-                value={formData.businessName}
-                onChange={handleChange}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 text-gray-900 dark:text-white border border-gray-200 dark:border-neutral-700 rounded-lg outline-none focus:ring-2 focus:ring-amber-700 transition"
-                placeholder="The Coffee Corner"
-                required
-              />
+              <input type="text" name="businessName" value={formData.businessName}
+                onChange={handleChange} className={inputClass}
+                placeholder="The Coffee Corner" required />
             </div>
 
             {/* Description */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                 Description
               </label>
-              <textarea
-                name="description"
-                value={formData.description}
-                onChange={handleChange}
-                rows={4}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 text-gray-900 dark:text-white border border-gray-200 dark:border-neutral-700 rounded-lg outline-none focus:ring-2 focus:ring-amber-700 transition resize-none"
-                placeholder="Tell us about your coffee shop..."
-              />
+              <textarea name="description" value={formData.description}
+                onChange={handleChange} rows={3} className={`${inputClass} resize-none`}
+                placeholder="Tell us about your coffee shop..." />
             </div>
 
             {/* Address */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                <MapPin className="inline w-4 h-4 mr-1" />
                 Business Address <span className="text-red-500">*</span>
               </label>
-              <input
-                type="text"
-                name="address"
-                value={formData.address}
-                onChange={handleChange}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 text-gray-900 dark:text-white border border-gray-200 dark:border-neutral-700 rounded-lg outline-none focus:ring-2 focus:ring-amber-700 transition"
-                placeholder="123 Main Street"
-                required
-              />
+              <input type="text" name="address" value={formData.address}
+                onChange={handleChange} className={inputClass}
+                placeholder="123 Main Street" required />
             </div>
 
-            {/* City, State, Zip */}
+            {/* City / State / Zip */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                   City <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  name="city"
-                  value={formData.city}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 text-gray-900 dark:text-white border border-gray-200 dark:border-neutral-700 rounded-lg outline-none focus:ring-2 focus:ring-amber-700 transition"
-                  placeholder="San Francisco"
-                  required
-                />
+                <input type="text" name="city" value={formData.city}
+                  onChange={handleChange} className={inputClass}
+                  placeholder="Chicago" required />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                   State <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  name="state"
-                  value={formData.state}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 text-gray-900 dark:text-white border border-gray-200 dark:border-neutral-700 rounded-lg outline-none focus:ring-2 focus:ring-amber-700 transition"
-                  placeholder="CA"
-                  maxLength={2}
-                  required
-                />
+                <input type="text" name="state" value={formData.state}
+                  onChange={handleChange} className={inputClass}
+                  placeholder="IL" maxLength={2} required />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Zip Code <span className="text-red-500">*</span>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  ZIP <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  name="zip"
-                  value={formData.zip}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 text-gray-900 dark:text-white border border-gray-200 dark:border-neutral-700 rounded-lg outline-none focus:ring-2 focus:ring-amber-700 transition"
-                  placeholder="94102"
-                  required
-                />
+                <input type="text" name="zip" value={formData.zip}
+                  onChange={handleChange} className={inputClass}
+                  placeholder="60601" required />
               </div>
             </div>
 
-            {/* Phone Number */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Phone Number <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="tel"
-                name="phone"
-                value={formData.phone}
-                onChange={handleChange}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 text-gray-900 dark:text-white border border-gray-200 dark:border-neutral-700 rounded-lg outline-none focus:ring-2 focus:ring-amber-700 transition"
-                placeholder="(555) 123-4567"
-                required
-              />
+            {/* Phone + Email */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  <Phone className="inline w-4 h-4 mr-1" />
+                  Phone <span className="text-red-500">*</span>
+                </label>
+                <input type="tel" name="phone" value={formData.phone}
+                  onChange={handleChange} className={inputClass}
+                  placeholder="(555) 123-4567" required />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  Contact Email <span className="text-red-500">*</span>
+                </label>
+                <input type="email" name="email" value={formData.email}
+                  onChange={handleChange} className={inputClass}
+                  placeholder="you@yourcoffeeshop.com" required />
+              </div>
             </div>
 
-            {/* Business License */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Business License Number
-              </label>
-              <input
-                type="text"
-                name="businessLicense"
-                value={formData.businessLicense}
-                onChange={handleChange}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 text-gray-900 dark:text-white border border-gray-200 dark:border-neutral-700 rounded-lg outline-none focus:ring-2 focus:ring-amber-700 transition"
-                placeholder="Optional"
-              />
-            </div>
-
-            {/* Website */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Website
-              </label>
-              <input
-                type="url"
-                name="website"
-                value={formData.website}
-                onChange={handleChange}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 text-gray-900 dark:text-white border border-gray-200 dark:border-neutral-700 rounded-lg outline-none focus:ring-2 focus:ring-amber-700 transition"
-                placeholder="https://yourshop.com"
-              />
+            {/* License + Website */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  <FileText className="inline w-4 h-4 mr-1" />
+                  Business License #
+                </label>
+                <input type="text" name="businessLicense" value={formData.businessLicense}
+                  onChange={handleChange} className={inputClass} placeholder="Optional" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  <Globe className="inline w-4 h-4 mr-1" />
+                  Website
+                </label>
+                <input type="url" name="website" value={formData.website}
+                  onChange={handleChange} className={inputClass} placeholder="https://..." />
+              </div>
             </div>
 
             {/* Why Join */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                <MessageSquare className="inline w-4 h-4 mr-1" />
                 Why do you want to join LoyalCup?
               </label>
-              <textarea
-                name="whyJoin"
-                value={formData.whyJoin}
-                onChange={handleChange}
-                rows={4}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 text-gray-900 dark:text-white border border-gray-200 dark:border-neutral-700 rounded-lg outline-none focus:ring-2 focus:ring-amber-700 transition resize-none"
-                placeholder="Tell us why you'd like to be part of LoyalCup..."
-              />
+              <textarea name="whyJoin" value={formData.whyJoin}
+                onChange={handleChange} rows={3} className={`${inputClass} resize-none`}
+                placeholder="Tell us why you'd be a great fit..." />
             </div>
 
-            {/* Terms and Conditions */}
-            <div className="flex items-start">
-              <input
-                type="checkbox"
-                name="agreeToTerms"
-                checked={formData.agreeToTerms}
+            {/* Terms */}
+            <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-900/10 rounded-xl border border-amber-200 dark:border-amber-800">
+              <input type="checkbox" name="agreeToTerms" checked={formData.agreeToTerms}
                 onChange={handleChange}
-                className="mt-1 w-5 h-5 text-amber-700 focus:ring-amber-700 rounded"
-                required
-              />
-              <label className="ml-3 text-sm text-gray-700 dark:text-gray-300">
-                I agree to the{" "}
-                <a href="/terms" className="text-amber-700 hover:underline">
+                className="mt-1 w-5 h-5 text-amber-600 focus:ring-amber-500 rounded" />
+              <label className="text-sm text-gray-700 dark:text-gray-300">
+                I agree to the{' '}
+                <Link to="/terms" className="text-amber-600 hover:underline font-medium">
                   terms and conditions
-                </a>{" "}
-                and understand that my application will be reviewed by the LoyalCup team
+                </Link>{' '}
+                and understand that my application will be reviewed by the LoyalCup team before I
+                get access to the dashboard.
               </label>
             </div>
 
-            {/* Submit Button */}
-            <div className="pt-4">
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-amber-700 text-white py-4 rounded-lg hover:bg-amber-800 transition font-medium text-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? "Submitting..." : "Submit Application"}
-              </button>
+            {/* Submit */}
+            <motion.button
+              type="submit"
+              disabled={loading}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full bg-gradient-to-r from-amber-600 to-orange-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition disabled:opacity-50"
+            >
+              {loading ? 'Submitting…' : 'Submit Application'}
+            </motion.button>
+
+            <p className="text-center text-sm text-gray-500 dark:text-gray-400">
+              Already have an account?{' '}
+              <Link to="/login" className="text-amber-600 hover:underline">Sign in</Link>
+            </p>
+                        {/* Pricing reminder */}
+            <div className="mt-2 p-4 bg-gray-50 dark:bg-neutral-800 rounded-xl border border-gray-200 dark:border-neutral-700 text-center">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                LoyalCup costs{' '}
+                <span className="font-bold text-gray-900 dark:text-white">$150/month</span>
+                {' '}after approval. Your rate is locked in forever — no price increases.{' '}
+                <Link to="/pricing" className="text-amber-600 hover:underline font-medium">
+                  See what's included →
+                </Link>
+              </p>
             </div>
           </form>
-        </div>
+        </motion.div>
       </div>
     </div>
   );

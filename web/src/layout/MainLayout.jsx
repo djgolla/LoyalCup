@@ -10,7 +10,7 @@ export default function MainLayout() {
       </main>
       <footer className="bg-white dark:bg-[#1b1b1b] border-t border-gray-200 dark:border-neutral-800 mt-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div>
               <h3 className="text-lg font-semibold text-amber-700 mb-3">LoyalCup</h3>
               <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -18,12 +18,19 @@ export default function MainLayout() {
               </p>
             </div>
             <div>
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-3">Quick Links</h4>
+              <h4 className="font-semibold text-gray-900 dark:text-white mb-3">For Customers</h4>
               <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                <li><Link to="/download"          className="hover:text-amber-700 transition">Download App</Link></li>
-                <li><Link to="/shop-application"  className="hover:text-amber-700 transition">List Your Shop</Link></li>
-                <li><Link to="/about"             className="hover:text-amber-700 transition">About Us</Link></li>
-                <li><Link to="/contact"           className="hover:text-amber-700 transition">Contact</Link></li>
+                <li><Link to="/download" className="hover:text-amber-700 transition">Download App</Link></li>
+                <li><Link to="/about"    className="hover:text-amber-700 transition">About Us</Link></li>
+                <li><Link to="/contact"  className="hover:text-amber-700 transition">Contact</Link></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-semibold text-gray-900 dark:text-white mb-3">For Shop Owners</h4>
+              <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                <li><Link to="/pricing"          className="hover:text-amber-700 transition">Pricing</Link></li>
+                <li><Link to="/shop-application" className="hover:text-amber-700 transition">Apply to Join</Link></li>
+                <li><Link to="/login"            className="hover:text-amber-700 transition">Shop Login</Link></li>
               </ul>
             </div>
             <div>

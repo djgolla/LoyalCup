@@ -15,11 +15,17 @@ class Settings(BaseSettings):
     api_version: str = Field(default="1.0.0")
     api_description: str = Field(default="Backend API for LoyalCup")
 
-    # Square
+    # Square (customer payments)
     square_env: str = Field(default="sandbox")
     square_application_id: str = Field(default="")
     square_application_secret: str = Field(default="")
     square_callback_url: str = Field(default="")
+
+    # Stripe (shop owner subscriptions)
+    stripe_secret_key: str = Field(default="")
+    stripe_publishable_key: str = Field(default="")
+    stripe_webhook_secret: str = Field(default="")
+    stripe_price_id: str = Field(default="")    # price_xxxxx for your $150/mo product
 
     # App
     frontend_url: str = Field(default="http://localhost:5173")
