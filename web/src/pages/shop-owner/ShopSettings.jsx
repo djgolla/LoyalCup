@@ -2,14 +2,14 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Store, MapPin, Phone, Clock, Image as ImageIcon,
-  Save, Upload, X, Check, Globe, Mail, DollarSign
+  Save, Upload, X, Check, Globe
 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import supabase from '../../lib/supabase';
 import { toast } from 'sonner';
 
 export default function ShopSettings() {
-  const { shop, shopId, loadShop } = useShop();
+  const { shop, shopId, refreshShop } = useShop();
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -20,12 +20,11 @@ export default function ShopSettings() {
     address: '',
     city: '',
     state: '',
-    zip_code: '',
+    zip: '',           // ← "zip" not "zip_code"
     phone: '',
-    email: '',
     website: '',
     logo_url: '',
-    cover_image_url: '',
+    banner_url: '',    // ← "banner_url" not "cover_image_url"
     hours: {
       monday: { open: '09:00', close: '17:00', closed: false },
       tuesday: { open: '09:00', close: '17:00', closed: false },
@@ -39,20 +38,19 @@ export default function ShopSettings() {
 
   useEffect(() => {
     if (shop) {
-      setFormData({
+      setFormData(prev => ({
         name: shop.name || '',
         description: shop.description || '',
         address: shop.address || '',
         city: shop.city || '',
         state: shop.state || '',
-        zip_code: shop.zip_code || '',
+        zip: shop.zip || '',           // ← "zip"
         phone: shop.phone || '',
-        email: shop.email || '',
         website: shop.website || '',
         logo_url: shop.logo_url || '',
-        cover_image_url: shop.cover_image_url || '',
-        hours: shop.hours || formData.hours,
-      });
+        banner_url: shop.banner_url || '',  // ← "banner_url"
+        hours: shop.hours || prev.hours,
+      }));
     }
   }, [shop]);
 
@@ -75,10 +73,10 @@ export default function ShopSettings() {
         .from('shop-images')
         .getPublicUrl(fileName);
 
-      setFormData({ 
-        ...formData, 
-        [type === 'logo' ? 'logo_url' : 'cover_image_url']: publicUrl 
-      });
+      setFormData(prev => ({ 
+        ...prev, 
+        [type === 'logo' ? 'logo_url' : 'banner_url']: publicUrl 
+      }));
       
       toast.success('Image uploaded!');
     } catch (error) {
@@ -119,24 +117,24 @@ export default function ShopSettings() {
         .from('shops')
         .update({
           name: formData.name,
-          description: formData.description,
-          address: formData.address,
-          city: formData.city,
-          state: formData.state,
-          zip_code: formData.zip_code,
-          phone: formData.phone,
-          email: formData.email,
-          website: formData.website,
-          logo_url: formData.logo_url,
-          cover_image_url: formData.cover_image_url,
+          description: formData.description || null,
+          address: formData.address || null,
+          city: formData.city || null,
+          state: formData.state || null,
+          zip: formData.zip || null,           // ← "zip"
+          phone: formData.phone || null,
+          website: formData.website || null,
+          logo_url: formData.logo_url || null,
+          banner_url: formData.banner_url || null,  // ← "banner_url"
           hours: formData.hours,
+          updated_at: new Date().toISOString(),
         })
         .eq('id', shopId);
 
       if (error) throw error;
 
       toast.success('Settings saved!');
-      loadShop();
+      refreshShop();
     } catch (error) {
       console.error('Failed to save settings:', error);
       toast.error('Failed to save settings');
@@ -146,16 +144,16 @@ export default function ShopSettings() {
   };
 
   const handleHoursChange = (day, field, value) => {
-    setFormData({
-      ...formData,
+    setFormData(prev => ({
+      ...prev,
       hours: {
-        ...formData.hours,
+        ...prev.hours,
         [day]: {
-          ...formData.hours[day],
+          ...prev.hours[day],
           [field]: value
         }
       }
-    });
+    }));
   };
 
   const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
@@ -213,7 +211,7 @@ export default function ShopSettings() {
                     />
                     <button
                       type="button"
-                      onClick={() => setFormData({ ...formData, logo_url: '' })}
+                      onClick={() => setFormData(prev => ({ ...prev, logo_url: '' }))}
                       className="absolute top-0 right-0 p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition"
                     >
                       <X className="w-4 h-4" />
@@ -240,10 +238,10 @@ export default function ShopSettings() {
               </div>
             </div>
 
-            {/* Cover Image */}
+            {/* Banner Image */}
             <div>
               <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
-                Cover Image
+                Banner Image
               </label>
               <div
                 onDragEnter={handleDrag}
@@ -256,16 +254,16 @@ export default function ShopSettings() {
                     : 'border-gray-300 dark:border-neutral-700'
                 }`}
               >
-                {formData.cover_image_url ? (
+                {formData.banner_url ? (
                   <div className="relative">
                     <img 
-                      src={formData.cover_image_url} 
-                      alt="Cover" 
+                      src={formData.banner_url} 
+                      alt="Banner" 
                       className="w-full h-32 object-cover rounded-xl"
                     />
                     <button
                       type="button"
-                      onClick={() => setFormData({ ...formData, cover_image_url: '' })}
+                      onClick={() => setFormData(prev => ({ ...prev, banner_url: '' }))}
                       className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition"
                     >
                       <X className="w-4 h-4" />
@@ -275,7 +273,7 @@ export default function ShopSettings() {
                   <>
                     <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                     <p className="text-gray-600 dark:text-gray-400 mb-2 text-sm">
-                      {uploading ? 'Uploading...' : 'Drop cover image here'}
+                      {uploading ? 'Uploading...' : 'Drop banner image here'}
                     </p>
                     <label className="inline-block px-4 py-2 bg-amber-500 text-white rounded-xl font-semibold cursor-pointer hover:bg-amber-600 transition text-sm">
                       Choose File
@@ -314,7 +312,7 @@ export default function ShopSettings() {
               <input
                 type="text"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                 className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
                 required
               />
@@ -326,7 +324,7 @@ export default function ShopSettings() {
               </label>
               <textarea
                 value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                 className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition resize-none"
                 rows="3"
               />
@@ -339,31 +337,19 @@ export default function ShopSettings() {
               <input
                 type="tel"
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
                 className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
               />
             </div>
 
             <div>
               <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
-                Email
-              </label>
-              <input
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
                 Website
               </label>
               <input
                 type="url"
                 value={formData.website}
-                onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                onChange={(e) => setFormData(prev => ({ ...prev, website: e.target.value }))}
                 className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
                 placeholder="https://..."
               />
@@ -391,7 +377,7 @@ export default function ShopSettings() {
               <input
                 type="text"
                 value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
                 className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
               />
             </div>
@@ -403,7 +389,7 @@ export default function ShopSettings() {
               <input
                 type="text"
                 value={formData.city}
-                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                onChange={(e) => setFormData(prev => ({ ...prev, city: e.target.value }))}
                 className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
               />
             </div>
@@ -415,19 +401,19 @@ export default function ShopSettings() {
               <input
                 type="text"
                 value={formData.state}
-                onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                onChange={(e) => setFormData(prev => ({ ...prev, state: e.target.value }))}
                 className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
               />
             </div>
 
-            <div className="md:col-span-2">
+            <div>
               <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
                 ZIP Code
               </label>
               <input
                 type="text"
-                value={formData.zip_code}
-                onChange={(e) => setFormData({ ...formData, zip_code: e.target.value })}
+                value={formData.zip}
+                onChange={(e) => setFormData(prev => ({ ...prev, zip: e.target.value }))}
                 className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
               />
             </div>
