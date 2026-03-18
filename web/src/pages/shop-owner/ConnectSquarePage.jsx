@@ -1,176 +1,318 @@
-import React, { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
-
-function Alert({ type = "info", message }) {
-  // type: info, error, success
-  let style =
-    type === "error"
-      ? "bg-red-50 border-red-200 text-red-800"
-      : type === "success"
-      ? "bg-green-50 border-green-200 text-green-800"
-      : "bg-amber-50 border-amber-200 text-amber-800";
-  let icon =
-    type === "error" ? <XCircle className="h-5 w-5 mr-2" />
-    : type === "success" ? <CheckCircle2 className="h-5 w-5 mr-2" />
-    : <AlertTriangle className="h-5 w-5 mr-2" />;
-
-  return (
-    <div className={`flex items-center border px-4 py-2 rounded-lg mb-4 ${style}`}>
-      {icon}
-      <div className="text-sm">{message}</div>
-    </div>
-  );
-}
+import { useEffect, useState, useCallback } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import { useShop } from "../../context/ShopContext";
+import {
+  getSquareConnectUrl,
+  getPosStatus,
+  triggerPosSync,
+} from "../../services/posService";
 
 export default function ConnectSquarePage() {
-  const [status, setStatus] = useState("loading");
+  const { shop, loading: shopLoading } = useShop();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  const [posStatus, setPosStatus] = useState(null);
+  const [loadingStatus, setLoadingStatus] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState(null);
   const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
-  const [locations, setLocations] = useState([]);
-  const [shopId, setShopId] = useState("");
-  const [merchantId, setMerchantId] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  async function checkStatus() {
-    setLoading(true);
-    setError(null);
+  const callbackStatus = searchParams.get("status");
+  const callbackSynced = searchParams.get("synced");
+  const callbackItems = searchParams.get("items");
+
+  const shopId = shop?.id;
+
+  const loadStatus = useCallback(async () => {
+    if (!shopId) return;
     try {
-      const res = await fetch("/api/v1/pos/status?provider=square");
-      const data = await res.json();
-      setStatus(data.status);
-      if (data.location_id) setLocations([{ id: data.location_id, name: "This Location" }]);
-      if (data.shop_id) setShopId(data.shop_id);
-      if (data.merchant_id) setMerchantId(data.merchant_id);
-    } catch {
-      setError("Could not connect to backend. Please try again or contact support.");
-      setStatus("error");
+      setLoadingStatus(true);
+      const data = await getPosStatus(shopId, "square");
+      setPosStatus(data);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoadingStatus(false);
     }
-    setLoading(false);
-  }
-
-  useEffect(() => { checkStatus(); }, []);
+  }, [shopId]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("status") === "choose_location") {
-      try {
-        const locsRaw = params.get("locations");
-        if (locsRaw) {
-          const locs = JSON.parse(decodeURIComponent(atob(locsRaw)));
-          setLocations(locs);
-        }
-        setShopId(params.get("shop_id"));
-        setMerchantId(params.get("merchant_id"));
-        setStatus("choose_location");
-      } catch {
-        setError("Failed to parse locations from Square.");
-      }
+    if (!shopLoading && shopId) {
+      loadStatus();
     }
-  }, []);
+  }, [shopId, shopLoading, loadStatus]);
 
-  async function handleConnect() {
-    setLoading(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      const res = await fetch("/api/v1/pos/connect?provider=square", { method: "POST" });
-      const data = await res.json();
-      if (!data.authorization_url) throw new Error("No auth url received");
-      window.location.href = data.authorization_url;
-    } catch (err) {
-      setError("Could not begin Square connect flow. Try again or contact support.");
-      setLoading(false);
-    }
-  }
-
-  async function handleLocationPick(e) {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    setSuccess(null);
-    const locationId = e.target.location_id.value;
-    try {
-      const res = await fetch("/api/v1/pos/square/set-location", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shop_id: shopId, location_id: locationId }),
+  useEffect(() => {
+    if (callbackStatus === "connected") {
+      setSyncResult({
+        status: "connected",
+        synced: callbackSynced,
+        items: callbackItems,
       });
-      if (!res.ok) throw new Error("Failed to set location");
-      setStatus("connected");
-      setLocations([]);
-      setSuccess("Square location linked successfully!");
-    } catch (err) {
-      setError("Error saving your Square location. Try again or contact support.");
+      window.history.replaceState({}, "", "/shop-owner/connect-square");
+      setTimeout(loadStatus, 1000);
     }
-    setLoading(false);
-  }
+  }, [callbackStatus, callbackSynced, callbackItems, loadStatus]);
+
+  const handleConnect = async () => {
+    setError(null);
+    setConnecting(true);
+    try {
+      const { authorization_url } = await getSquareConnectUrl();
+      window.location.href = authorization_url;
+    } catch (e) {
+      setError(e.message);
+      setConnecting(false);
+    }
+  };
+
+  const handleSync = async () => {
+    if (!shopId) return;
+    setError(null);
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const result = await triggerPosSync(shopId, "square");
+      setSyncResult(result);
+      await loadStatus();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const isConnected = posStatus?.status === "connected";
+
+  // Show a neutral loading state while shop context initialises
+  const statusLabel = shopLoading || loadingStatus
+    ? "Loading..."
+    : isConnected
+    ? null   // badge rendered below
+    : null;
 
   return (
-    <div className="max-w-xl mx-auto py-10 px-4">
-      <h1 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">Connect Your Square POS</h1>
+    <div className="max-w-2xl mx-auto py-10 px-4">
+      {/* Header */}
+      <div className="mb-8">
+        <button
+          onClick={() => navigate("/shop-owner/settings")}
+          className="text-sm text-gray-500 hover:text-gray-700 mb-4 flex items-center gap-1"
+        >
+          ← Back to Settings
+        </button>
+        <h1 className="text-2xl font-bold text-gray-900">POS Integration</h1>
+        <p className="text-gray-500 mt-1">
+          Connect your Square account to automatically import your menu and
+          process payments through your existing POS.
+        </p>
+      </div>
 
-      {error && <Alert type="error" message={error} />}
-      {success && <Alert type="success" message={success} />}
-
-      {status === "connected" && (
-        <div className={`flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 text-green-900 px-4 py-2 mb-6`}>
-          <CheckCircle2 className="h-5 w-5" />
+      {/* OAuth callback success banner */}
+      {syncResult?.status === "connected" && (
+        <div className="mb-6 rounded-xl bg-green-50 border border-green-200 p-4 flex items-start gap-3">
+          <span className="text-green-500 text-xl mt-0.5">✓</span>
           <div>
-            <span className="font-medium">Square Connected!</span>
-            {locations.length ? (
-              <span className="ml-2 text-xs text-green-700">Location: {locations[0].name}</span>
-            ) : null}
-            <span className="ml-2 text-xs text-green-700">Merchant ID: {merchantId}</span>
+            <p className="font-semibold text-green-800">Square Connected!</p>
+            {syncResult.synced === "true" && (
+              <p className="text-green-700 text-sm mt-0.5">
+                {syncResult.items || 0} menu items imported from Square. Head to{" "}
+                <button
+                  className="underline font-medium"
+                  onClick={() => navigate("/shop-owner/menu")}
+                >
+                  Menu Builder
+                </button>{" "}
+                to review and customize.
+              </p>
+            )}
+            {syncResult.synced === "partial" && (
+              <p className="text-yellow-700 text-sm mt-0.5">
+                Connection saved but menu sync had an issue. Use Sync below to retry.
+              </p>
+            )}
           </div>
         </div>
       )}
 
-      {status === "choose_location" ? (
-        <form onSubmit={handleLocationPick} className="mb-8">
-          <label className="block font-medium text-sm text-gray-700 mb-2">
-            Select Square Location:
-            <select
-              name="location_id"
-              required
-              className="mt-2 block w-full rounded-md border-gray-300 focus:border-amber-500 focus:ring focus:ring-amber-500 focus:ring-opacity-50 py-2 px-3"
-            >
-              <option value="">-- Select --</option>
-              {locations.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name || l.id}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="submit"
-            disabled={loading}
-            className="mt-4 inline-flex items-center px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:bg-gray-300"
-          >
-            {loading ? "Saving..." : "Save Location"}
-          </button>
-        </form>
-      ) : status !== "connected" ? (
-        <button
-          onClick={handleConnect}
-          disabled={loading}
-          className="mt-3 inline-flex items-center px-8 py-2 bg-green-100 text-green-900 border border-green-200 rounded-lg font-medium hover:bg-green-200 transition disabled:bg-gray-200"
-        >
-          {loading ? "Connecting..." : "Connect Square"}
-        </button>
-      ) : null}
+      {/* Manual sync result banner */}
+      {syncResult?.status === "success" && (
+        <div className="mb-6 rounded-xl bg-blue-50 border border-blue-200 p-4">
+          <p className="font-semibold text-blue-800">Sync Complete</p>
+          <p className="text-blue-700 text-sm mt-1">
+            {syncResult.synced?.categories_synced || 0} categories,{" "}
+            {syncResult.synced?.items_synced || 0} items,{" "}
+            {syncResult.synced?.modifier_groups_synced || 0} modifier groups updated.
+          </p>
+        </div>
+      )}
 
-      <div className="mt-10 text-sm text-gray-600 dark:text-gray-400">
-        Haven&apos;t registered with Square?{" "}
-        <a
-          href="https://squareup.com/us/en"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-amber-700 underline hover:text-amber-600"
-        >
-          Sign up here
-        </a>
-        .
+      {/* Error banner */}
+      {error && (
+        <div className="mb-6 rounded-xl bg-red-50 border border-red-200 p-4">
+          <p className="font-semibold text-red-800">Something went wrong</p>
+          <p className="text-red-700 text-sm mt-1">{error}</p>
+        </div>
+      )}
+
+      {/* Square card */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="flex items-center gap-4 p-6 border-b border-gray-100">
+          <div className="w-12 h-12 bg-black rounded-xl flex items-center justify-center text-white font-bold text-lg">
+            ■
+          </div>
+          <div className="flex-1">
+            <h2 className="font-semibold text-gray-900">Square</h2>
+            <p className="text-sm text-gray-500">
+              Import menu, sync inventory, process payments
+            </p>
+          </div>
+          {/* Status badge */}
+          {shopLoading || loadingStatus ? (
+            <span className="text-xs text-gray-400">Loading...</span>
+          ) : isConnected ? (
+            <span className="bg-green-100 text-green-700 text-xs font-semibold px-3 py-1 rounded-full">
+              Connected
+            </span>
+          ) : (
+            <span className="bg-gray-100 text-gray-500 text-xs font-semibold px-3 py-1 rounded-full">
+              Not connected
+            </span>
+          )}
+        </div>
+
+        <div className="p-6">
+          {/* Still loading shop context — don't show "complete setup first" prematurely */}
+          {shopLoading ? (
+            <div className="flex items-center justify-center py-8 text-gray-400 text-sm gap-2">
+              <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+              Loading your shop...
+            </div>
+          ) : isConnected ? (
+            <div className="space-y-4">
+              <div className="bg-gray-50 rounded-xl p-4 text-sm space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Merchant ID</span>
+                  <span className="font-mono text-gray-700 text-xs">
+                    {posStatus.merchant_id || "—"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Location</span>
+                  <span className="text-gray-700">
+                    {posStatus.location_id ? (
+                      <span className="text-green-600 font-medium">Set ✓</span>
+                    ) : (
+                      <span className="text-yellow-600">Not set</span>
+                    )}
+                  </span>
+                </div>
+                {posStatus.last_updated && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Last updated</span>
+                    <span className="text-gray-700 text-xs">
+                      {new Date(posStatus.last_updated).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={handleSync}
+                  disabled={syncing}
+                  className="flex-1 bg-black text-white rounded-xl py-2.5 px-4 font-medium text-sm hover:bg-gray-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {syncing ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Syncing...
+                    </span>
+                  ) : (
+                    "↻ Sync Menu from Square"
+                  )}
+                </button>
+                <button
+                  onClick={() => navigate("/shop-owner/menu")}
+                  className="flex-1 border border-gray-200 text-gray-700 rounded-xl py-2.5 px-4 font-medium text-sm hover:bg-gray-50 transition"
+                >
+                  View Menu →
+                </button>
+              </div>
+
+              <div className="pt-2 border-t border-gray-100">
+                <button
+                  onClick={handleConnect}
+                  disabled={connecting}
+                  className="text-sm text-gray-400 hover:text-gray-600 underline"
+                >
+                  Reconnect Square account
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <ul className="space-y-2 text-sm text-gray-600">
+                {[
+                  "Auto-import your full Square menu (categories, items, modifiers, prices)",
+                  "Keep your LoyalCup menu in sync with Square",
+                  "Process payments through your Square terminal",
+                  "Override any item names or prices in LoyalCup without touching Square",
+                ].map((benefit) => (
+                  <li key={benefit} className="flex items-start gap-2">
+                    <span className="text-green-500 mt-0.5">✓</span>
+                    <span>{benefit}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <button
+                onClick={handleConnect}
+                disabled={connecting || !shopId}
+                className="w-full bg-black text-white rounded-xl py-3 px-4 font-semibold text-sm hover:bg-gray-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {connecting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Redirecting to Square...
+                  </span>
+                ) : !shopId ? (
+                  "Complete shop setup first"
+                ) : (
+                  "Connect Square →"
+                )}
+              </button>
+
+              {!shopId && (
+                <p className="text-xs text-center text-gray-400">
+                  You need to{" "}
+                  <button
+                    className="underline"
+                    onClick={() => navigate("/shop-owner/setup")}
+                  >
+                    set up your shop
+                  </button>{" "}
+                  before connecting a POS.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Coming soon */}
+      <div className="mt-4 bg-gray-50 rounded-2xl border border-dashed border-gray-200 p-6">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gray-200 rounded-xl flex items-center justify-center text-gray-500 text-lg">
+            ⌛
+          </div>
+          <div>
+            <p className="font-medium text-gray-700">Toast & Clover — Coming Soon</p>
+            <p className="text-sm text-gray-400 mt-0.5">More integrations are on the roadmap.</p>
+          </div>
+        </div>
       </div>
     </div>
   );

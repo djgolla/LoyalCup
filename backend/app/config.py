@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     square_application_id: str = Field(default="", description="Square application ID")
     square_callback_url: str = Field(default="", description="Square OAuth callback URL")
     square_application_secret: str = Field(default="", description="Square secret")
+    frontend_url: str = Field(default="http://localhost:5173", description="Frontend base URL for redirects")
     rate_limit_enabled: bool = Field(default=True)
     rate_limit_requests: int = Field(default=100)
     rate_limit_window: int = Field(default=60)
@@ -37,10 +38,12 @@ class Settings(BaseSettings):
 try:
     settings = Settings()
     print("======== LOADED SETTINGS ========")
+    print("environment:", repr(settings.environment))
     print("square_env:", repr(settings.square_env))
     print("square_application_id:", repr(settings.square_application_id))
     print("square_callback_url:", repr(settings.square_callback_url))
-    print("square_application_secret:", repr(settings.square_application_secret)[:6] + '******')
+    print("square_application_secret:", repr(settings.square_application_secret[:6]) + "******")
+    print("frontend_url:", repr(settings.frontend_url))
     print("=================================")
 except ValidationError as e:
     print("FATAL: .env CONFIGURATION INVALID")

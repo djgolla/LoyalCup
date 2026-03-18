@@ -1,30 +1,56 @@
-import sys
 import os
-import traceback
 import base64
 import json
-import uuid
-from fastapi import APIRouter, Request, HTTPException
+import traceback
+import sys
+from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse
+from app.database import get_supabase
 
 router = APIRouter()
 
-@router.post("/api/v1/pos/connect")
-async def pos_connect(request: Request):
+
+def get_current_shop_id_from_token(request: Request, db) -> str:
+    """
+    Extract the authenticated user's shop_id from their JWT (via Supabase).
+    The Authorization header must be: Bearer <supabase_access_token>
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header.")
+    token = auth_header.split("Bearer ", 1)[1].strip()
+
+    # Use the anon client to verify the token and get user
     try:
-        await request.body()
+        user_resp = db.anon_client.auth.get_user(token)
+        user = user_resp.user
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid or expired token.")
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Token verification failed: {str(e)}")
+
+    user_id = user.id
+
+    # Look up the shop owned by this user
+    shop_result = db.service_client.table("shops") \
+        .select("id") \
+        .eq("owner_id", user_id) \
+        .limit(1) \
+        .execute()
+
+    if not shop_result.data:
+        raise HTTPException(
+            status_code=404,
+            detail="No shop found for this user. Please complete shop setup first."
+        )
+
+    return shop_result.data[0]["id"]
+
+
+@router.post("/api/v1/pos/connect")
+async def pos_connect(request: Request, db=Depends(get_supabase)):
+    try:
         provider = request.query_params.get("provider")
-        print("\n--- SQUARE ENV DEBUG ---")
-        print("provider:", repr(provider))
-        print("os.environ['SQUARE_APPLICATION_ID']:", repr(os.environ.get("SQUARE_APPLICATION_ID")))
-        print("os.environ['square_application_id']:", repr(os.environ.get("square_application_id")))
-        print("os.environ['SQUARE_CALLBACK_URL']:", repr(os.environ.get("SQUARE_CALLBACK_URL")))
-        print("os.environ['square_callback_url']:", repr(os.environ.get("square_callback_url")))
-        print("os.environ['SQUARE_APPLICATION_SECRET']:", repr(os.environ.get("SQUARE_APPLICATION_SECRET")))
-        print("os.environ['square_application_secret']:", repr(os.environ.get("square_application_secret")))
-        print("os.environ['SQUARE_ENV']:", repr(os.environ.get("SQUARE_ENV")))
-        print("os.environ['square_env']:", repr(os.environ.get("square_env")))
-        print("--- END SQUARE ENV DEBUG ---\n")
 
         SQUARE_CLIENT_ID = (
             os.environ.get("SQUARE_APPLICATION_ID")
@@ -39,19 +65,17 @@ async def pos_connect(request: Request):
             raise HTTPException(status_code=400, detail="Missing provider")
         if provider != "square":
             raise HTTPException(status_code=400, detail="Unsupported provider")
-
         if not SQUARE_CLIENT_ID or not SQUARE_CALLBACK_URL:
             raise HTTPException(
                 status_code=500,
-                detail="Missing SQUARE_APPLICATION_ID or SQUARE_CALLBACK_URL env vars (check Docker/host env and .env file)"
+                detail="Missing SQUARE_APPLICATION_ID or SQUARE_CALLBACK_URL env vars"
             )
 
-        # BUILD STATE PARAM (base64-encoded JSON)
-        # (You can add real user/shop info instead of "anonymous" here if you want)
-        state_data = {
-            "shop_id": str(uuid.uuid4()),
-            "user": "anonymous"
-        }
+        # Get the real shop_id from the logged-in user's token
+        shop_id = get_current_shop_id_from_token(request, db)
+
+        # Build state param with real shop_id
+        state_data = {"shop_id": shop_id}
         state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode()
 
         scopes = [
@@ -61,17 +85,15 @@ async def pos_connect(request: Request):
             "ORDERS_READ",
             "ORDERS_WRITE",
             "INVENTORY_READ",
-            "ITEMS_READ"
+            "ITEMS_READ",
         ]
         scopes_str = "%20".join(scopes)
 
-        # THE CRITICAL FIX: Correct sandbox and prod URLs
         if SQUARE_CLIENT_ID.startswith("sandbox-"):
             SQUARE_AUTH_BASE = "https://connect.squareupsandbox.com/oauth2/authorize"
         else:
             SQUARE_AUTH_BASE = "https://connect.squareup.com/oauth2/authorize"
 
-        # INCLUDE 'state' param, which is required by your callback!
         auth_url = (
             f"{SQUARE_AUTH_BASE}"
             f"?client_id={SQUARE_CLIENT_ID}"
@@ -80,15 +102,15 @@ async def pos_connect(request: Request):
             f"&redirect_uri={SQUARE_CALLBACK_URL}"
             f"&state={state}"
         )
-        print("DEBUG AUTH URL:", auth_url)
 
-        return JSONResponse({"authorization_url": auth_url})
+        return JSONResponse({"authorization_url": auth_url, "shop_id": shop_id})
 
+    except HTTPException:
+        raise
     except Exception as e:
-        print("==== UNHANDLED ERROR IN pos_connect ====")
         traceback.print_exc(file=sys.stdout)
-        print("==== END ERROR ====")
-        raise e
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 def register(app):
     app.include_router(router)
