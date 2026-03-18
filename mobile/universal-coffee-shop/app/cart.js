@@ -2,12 +2,13 @@
 // universal-coffee-shop/app/cart.js
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context'; 
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCart } from '../context/CartContext';
 import { supabase } from '../lib/supabase';
-import { awardPointsForOrder, getGlobalPoints, getShopPoints, redeemPoints } from '../services/loyaltyService';
+import { getGlobalPoints, getShopPoints, redeemPoints } from '../services/loyaltyService';
+import { apiClient } from '../services/apiClient';
 
 export default function CartScreen() {
   const router = useRouter();
@@ -38,12 +39,10 @@ export default function CartScreen() {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (currentUser) {
         setUser(currentUser);
-        
-        // Load global points
+
         const global = await getGlobalPoints(currentUser.id);
         setGlobalPoints(global);
 
-        // Load shop-specific points for shops in cart
         const shopIds = Object.keys(itemsByShop);
         const shopPointsData = {};
         for (const shopId of shopIds) {
@@ -57,7 +56,6 @@ export default function CartScreen() {
     }
   };
 
-  // CALCULATE TOTALS (used by getMaxRedeemablePoints)
   const calculateTotals = () => {
     const subtotal = cart.reduce((sum, item) => {
       const price = parseFloat(item.price) || 0;
@@ -80,120 +78,68 @@ export default function CartScreen() {
     }
 
     try {
-      // Get current user
       const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
       if (userError || !user) {
         Alert.alert('Error', 'You must be logged in to place an order');
         return;
       }
 
-      // Process each shop's order
-      const shopOrders = Object.values(itemsByShop);
-      
-      for (const { shopId, shopName, items } of shopOrders) {
-        // Calculate totals
-        const subtotal = items.reduce((sum, item) => {
-          const price = parseFloat(item.price) || 0;
-          const quantity = item.quantity || 1;
-          return sum + (price * quantity);
-        }, 0);
-        
-        const tax = subtotal * 0.08;
-        const serviceFee = 0.99;
-        let total = subtotal + tax + serviceFee;
-        let discount = 0;
+      // Get a fresh Supabase JWT for the backend
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        Alert.alert('Error', 'Session expired — please log in again');
+        return;
+      }
 
-        // Apply points redemption if selected
+      // Process each shop's order through the backend
+      // (backend will push each to Square automatically)
+      const shopOrders = Object.values(itemsByShop);
+      const placedOrders = [];
+
+      for (const { shopId, items } of shopOrders) {
+        // Apply points redemption if selected (deduct from loyalty service first)
+        let discount = 0;
         if (pointsToRedeem > 0) {
           const redeemResult = await redeemPoints(
             user.id,
             shopId,
             pointsToRedeem,
-            'global' // or 'shop' based on selection
+            'global'
           );
-
           if (redeemResult.success) {
             discount = redeemResult.discountAmount;
-            total = Math.max(0, total - discount);
-            console.log(`💰 Redeemed ${pointsToRedeem} points for $${discount.toFixed(2)} off`);
           }
         }
 
-        // Create order
-        const { data: order, error: orderError } = await supabase
-          .from('orders')
-          .insert({
-            customer_id: user.id,
+        // Build items payload for the backend
+        const orderItems = items.map(item => ({
+          menu_item_id: item.id.includes(':') ? item.id.split(':')[1] : item.id,
+          quantity: item.quantity || 1,
+          base_price: parseFloat(item.price) || 0,
+          customizations: item.customizations || [],
+        }));
+
+        // POST to backend — this creates the Supabase order AND pushes to Square
+        const response = await apiClient.post(
+          '/api/v1/orders',
+          {
             shop_id: shopId,
-            status: 'pending',
-            subtotal: subtotal,
-            tax: tax,
-            total: total,
-            loyalty_points_earned: Math.floor(total), // Will be recalculated by awardPointsForOrder
-            metadata: {
-              service_fee: serviceFee,
-              item_count: items.reduce((sum, item) => sum + (item.quantity || 1), 0),
-              points_redeemed: pointsToRedeem,
-              discount_amount: discount,
-            }
-          })
-          .select()
-          .single();
-
-        if (orderError) {
-          console.error('Order creation error:', orderError);
-          throw orderError;
-        }
-
-        console.log('Order created:', order);
-
-        // Award loyalty points
-        const pointsResult = await awardPointsForOrder(
-          order.id,
-          user.id,
-          shopId,
-          total
+            items: orderItems,
+            customer_note: null,
+          },
+          token
         );
 
-        if (pointsResult.success) {
-          console.log(`🎉 Awarded ${pointsResult.points} ${pointsResult.type} points!`);
-        } else {
-          console.error('Failed to award points:', pointsResult.error);
-        }
-
-        // Create order items
-        const orderItems = items.map(item => {
-          const unitPrice = parseFloat(item.price) || 0;
-          const quantity = item.quantity || 1;
-          const totalPrice = unitPrice * quantity;
-          
-          return {
-            order_id: order.id,
-            menu_item_id: item.id.split(':')[1],
-            quantity: quantity,
-            unit_price: unitPrice,
-            total_price: totalPrice,
-          };
-        });
-
-        const { error: itemsError } = await supabase
-          .from('order_items')
-          .insert(orderItems);
-
-        if (itemsError) {
-          console.error('Order items creation error:', itemsError);
-          throw itemsError;
-        }
+        placedOrders.push(response.order);
       }
 
-      // Clear cart and show success
       clearCart();
-      setPointsToRedeem(0); // Reset points
-      
-      const message = pointsToRedeem > 0 
-        ? `Order placed! You saved $${(pointsToRedeem * 0.01).toFixed(2)} with points!`
-        : 'Order placed! You earned loyalty points!';
+      setPointsToRedeem(0);
+
+      const message = pointsToRedeem > 0
+        ? `Order placed! You saved $${(pointsToRedeem * 0.01).toFixed(2)} with points! Your order is on its way to the shop.`
+        : 'Order placed! Your order has been sent to the shop. You earned loyalty points!';
 
       Alert.alert(
         'Order Placed! 🎉',
@@ -201,17 +147,17 @@ export default function CartScreen() {
         [
           {
             text: 'View Rewards',
-            onPress: () => router.push('/rewards')
+            onPress: () => router.push('/rewards'),
           },
           {
             text: 'Continue Shopping',
-            onPress: () => router.back()
-          }
+            onPress: () => router.back(),
+          },
         ]
       );
     } catch (error) {
       console.error('Checkout error:', error);
-      Alert.alert('Error', 'Failed to place order. Please try again.');
+      Alert.alert('Error', error.message || 'Failed to place order. Please try again.');
     }
   };
 
@@ -238,46 +184,37 @@ export default function CartScreen() {
     }
   };
 
-  const getAvailablePoints = () => {
-    return globalPoints?.current_balance || 0;
-  };
+  const getAvailablePoints = () => globalPoints?.current_balance || 0;
 
   const getMaxRedeemablePoints = () => {
     const available = getAvailablePoints();
-    const { total } = calculateTotals(); // 
-    const maxPointsForOrder = Math.floor(total * 100); // Can't redeem more than order value
+    const { total } = calculateTotals();
+    const maxPointsForOrder = Math.floor(total * 100);
     return Math.min(available, maxPointsForOrder);
   };
 
   const handleSelectPoints = (points) => {
     const max = getMaxRedeemablePoints();
-    const selected = Math.min(Math.max(0, points), max);
-    setPointsToRedeem(selected);
+    setPointsToRedeem(Math.min(Math.max(0, points), max));
   };
 
-  // Get current totals for display
   const { subtotal, tax, serviceFee, discount, total } = calculateTotals();
 
   if (cart.length === 0) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.headerButton}
-            onPress={() => router.back()}>
+          <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
             <Feather name="arrow-left" size={24} color="#000" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Cart</Text>
           <View style={styles.headerButton} />
         </View>
-
         <View style={styles.emptyContainer}>
           <Feather name="shopping-bag" size={80} color="#CCC" />
           <Text style={styles.emptyTitle}>Your cart is empty</Text>
           <Text style={styles.emptySubtitle}>Add items to get started</Text>
-          <TouchableOpacity 
-            style={styles.shopButton}
-            onPress={() => router.push('/browse')}>
+          <TouchableOpacity style={styles.shopButton} onPress={() => router.push('/browse')}>
             <Text style={styles.shopButtonText}>Browse Shops</Text>
           </TouchableOpacity>
         </View>
@@ -287,63 +224,49 @@ export default function CartScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.headerButton}
-          onPress={() => router.back()}>
+        <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
           <Feather name="arrow-left" size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Cart ({cart.length})</Text>
-        <TouchableOpacity 
-          style={styles.headerButton}
-          onPress={clearCart}>
+        <TouchableOpacity style={styles.headerButton} onPress={clearCart}>
           <Feather name="trash-2" size={20} color="#FF3B30" />
         </TouchableOpacity>
       </View>
 
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
-        
+
         {Object.values(itemsByShop).map(({ shopId, shopName, items }) => (
           <View key={shopId} style={styles.shopSection}>
             <Text style={styles.shopName}>{shopName}</Text>
-            
             {items.map((item) => (
               <View key={item.id} style={styles.cartItem}>
                 {item.image_url && (
-                  <Image 
-                    source={{ uri: item.image_url }} 
-                    style={styles.itemImage}
-                  />
+                  <Image source={{ uri: item.image_url }} style={styles.itemImage} />
                 )}
-
                 <View style={styles.itemDetails}>
                   <Text style={styles.itemName}>{item.name}</Text>
                   <Text style={styles.itemPrice}>
                     ${(parseFloat(item.price) * (item.quantity || 1)).toFixed(2)}
                   </Text>
-
                   <View style={styles.quantityContainer}>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={styles.quantityButton}
                       onPress={() => handleUpdateQuantity(item.id, -1)}>
                       <Feather name="minus" size={16} color="#000" />
                     </TouchableOpacity>
-                    
                     <Text style={styles.quantityText}>{item.quantity || 1}</Text>
-                    
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={styles.quantityButton}
                       onPress={() => handleUpdateQuantity(item.id, 1)}>
                       <Feather name="plus" size={16} color="#000" />
                     </TouchableOpacity>
                   </View>
                 </View>
-
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.removeButton}
                   onPress={() => handleRemoveItem(item.id)}>
                   <Feather name="trash-2" size={18} color="#FF3B30" />
@@ -356,11 +279,9 @@ export default function CartScreen() {
         <View style={{ height: 300 }} />
       </ScrollView>
 
-      {/* Bottom Checkout Card */}
       <View style={styles.checkoutCard}>
-        {/* Points Redemption */}
         {getAvailablePoints() > 0 && (
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.pointsRedemption}
             onPress={() => setShowPointsSelector(!showPointsSelector)}>
             <View style={styles.pointsRedemptionLeft}>
@@ -368,15 +289,16 @@ export default function CartScreen() {
               <View>
                 <Text style={styles.pointsRedemptionTitle}>Use Points</Text>
                 <Text style={styles.pointsRedemptionSubtitle}>
-                  {pointsToRedeem > 0 ? `${pointsToRedeem} points (-$${discount.toFixed(2)})` : `${getAvailablePoints()} available`}
+                  {pointsToRedeem > 0
+                    ? `${pointsToRedeem} points (-$${discount.toFixed(2)})`
+                    : `${getAvailablePoints()} available`}
                 </Text>
               </View>
             </View>
-            <Feather name={showPointsSelector ? "chevron-up" : "chevron-down"} size={20} color="#666" />
+            <Feather name={showPointsSelector ? 'chevron-up' : 'chevron-down'} size={20} color="#666" />
           </TouchableOpacity>
         )}
 
-        {/* Points Selector */}
         {showPointsSelector && (
           <View style={styles.pointsSelector}>
             <View style={styles.pointsSelectorHeader}>
@@ -385,37 +307,27 @@ export default function CartScreen() {
                 <Text style={styles.pointsClearButton}>Clear</Text>
               </TouchableOpacity>
             </View>
-            
             <View style={styles.pointsSliderContainer}>
-              <TouchableOpacity 
-                style={styles.pointsQuickButton}
-                onPress={() => handleSelectPoints(Math.min(100, getMaxRedeemablePoints()))}>
-                <Text style={styles.pointsQuickButtonText}>100</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.pointsQuickButton}
-                onPress={() => handleSelectPoints(Math.min(250, getMaxRedeemablePoints()))}>
-                <Text style={styles.pointsQuickButtonText}>250</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.pointsQuickButton}
-                onPress={() => handleSelectPoints(Math.min(500, getMaxRedeemablePoints()))}>
-                <Text style={styles.pointsQuickButtonText}>500</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
+              {[100, 250, 500].map(n => (
+                <TouchableOpacity
+                  key={n}
+                  style={styles.pointsQuickButton}
+                  onPress={() => handleSelectPoints(Math.min(n, getMaxRedeemablePoints()))}>
+                  <Text style={styles.pointsQuickButtonText}>{n}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
                 style={styles.pointsQuickButton}
                 onPress={() => handleSelectPoints(getMaxRedeemablePoints())}>
                 <Text style={styles.pointsQuickButtonText}>Max</Text>
               </TouchableOpacity>
             </View>
-
             <Text style={styles.pointsDiscountPreview}>
               {pointsToRedeem} points = ${discount.toFixed(2)} off
             </Text>
           </View>
         )}
 
-        {/* Price Breakdown */}
         <View style={styles.priceBreakdown}>
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>Subtotal</Text>
@@ -429,24 +341,20 @@ export default function CartScreen() {
             <Text style={styles.priceLabel}>Service Fee</Text>
             <Text style={styles.priceValue}>${serviceFee.toFixed(2)}</Text>
           </View>
-          
           {pointsToRedeem > 0 && (
             <View style={styles.priceRow}>
               <Text style={[styles.priceLabel, styles.discountLabel]}>Points Discount</Text>
               <Text style={[styles.priceValue, styles.discountValue]}>-${discount.toFixed(2)}</Text>
             </View>
           )}
-          
           <View style={styles.divider} />
-          
           <View style={styles.priceRow}>
             <Text style={styles.totalLabel}>Total</Text>
             <Text style={styles.totalValue}>${total.toFixed(2)}</Text>
           </View>
         </View>
 
-        {/* Checkout Button */}
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.checkoutButton}
           onPress={handleCheckout}
           activeOpacity={0.8}>
@@ -459,10 +367,7 @@ export default function CartScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FAFAFA',
-  },
+  container: { flex: 1, backgroundColor: '#FAFAFA' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -473,49 +378,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
-  headerButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#000',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  emptyTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#000',
-    marginTop: 20,
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 30,
-  },
-  shopButton: {
-    backgroundColor: '#00704A',
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 25,
-  },
-  shopButtonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 20,
-  },
+  headerButton: { padding: 8 },
+  headerTitle: { fontSize: 20, fontWeight: '700', color: '#000' },
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
+  emptyTitle: { fontSize: 22, fontWeight: '700', color: '#000', marginTop: 20, marginBottom: 8 },
+  emptySubtitle: { fontSize: 16, color: '#666', marginBottom: 30 },
+  shopButton: { backgroundColor: '#00704A', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 25 },
+  shopButtonText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
+  scrollView: { flex: 1 },
+  scrollContent: { paddingBottom: 20 },
   shopSection: {
     marginBottom: 16,
     backgroundColor: '#FFF',
@@ -524,12 +395,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
-  shopName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#00704A',
-    marginBottom: 12,
-  },
+  shopName: { fontSize: 16, fontWeight: '700', color: '#00704A', marginBottom: 12 },
   cartItem: {
     flexDirection: 'row',
     marginBottom: 12,
@@ -537,29 +403,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F5F5F5',
   },
-  itemImage: {
-    width: 70,
-    height: 70,
-    borderRadius: 8,
-    backgroundColor: '#F0F0F0',
-  },
-  itemDetails: {
-    flex: 1,
-    marginLeft: 12,
-    justifyContent: 'space-between',
-  },
-  itemName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 4,
-  },
-  itemPrice: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#00704A',
-    marginBottom: 8,
-  },
+  itemImage: { width: 70, height: 70, borderRadius: 8, backgroundColor: '#F0F0F0' },
+  itemDetails: { flex: 1, marginLeft: 12, justifyContent: 'space-between' },
+  itemName: { fontSize: 16, fontWeight: '600', color: '#000', marginBottom: 4 },
+  itemPrice: { fontSize: 16, fontWeight: 'bold', color: '#00704A', marginBottom: 8 },
   quantityContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -577,17 +424,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  quantityText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    marginHorizontal: 16,
-  },
-  removeButton: {
-    padding: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  quantityText: { fontSize: 16, fontWeight: '600', color: '#000', marginHorizontal: 16 },
+  removeButton: { padding: 8, justifyContent: 'center', alignItems: 'center' },
   checkoutCard: {
     position: 'absolute',
     bottom: 0,
@@ -615,21 +453,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 12,
   },
-  pointsRedemptionLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  pointsRedemptionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#00704A',
-  },
-  pointsRedemptionSubtitle: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 2,
-  },
+  pointsRedemptionLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  pointsRedemptionTitle: { fontSize: 16, fontWeight: '600', color: '#00704A' },
+  pointsRedemptionSubtitle: { fontSize: 13, color: '#666', marginTop: 2 },
   pointsSelector: {
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -643,21 +469,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  pointsSelectorTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-  },
-  pointsClearButton: {
-    fontSize: 14,
-    color: '#FF3B30',
-    fontWeight: '600',
-  },
-  pointsSliderContainer: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
-  },
+  pointsSelectorTitle: { fontSize: 16, fontWeight: '600', color: '#000' },
+  pointsClearButton: { fontSize: 14, color: '#FF3B30', fontWeight: '600' },
+  pointsSliderContainer: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   pointsQuickButton: {
     flex: 1,
     paddingVertical: 10,
@@ -667,58 +481,22 @@ const styles = StyleSheet.create({
     borderColor: '#00704A',
     alignItems: 'center',
   },
-  pointsQuickButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#00704A',
-  },
-  pointsDiscountPreview: {
-    fontSize: 14,
-    color: '#00704A',
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  priceBreakdown: {
-    marginBottom: 16,
-  },
+  pointsQuickButtonText: { fontSize: 14, fontWeight: '600', color: '#00704A' },
+  pointsDiscountPreview: { fontSize: 14, color: '#00704A', fontWeight: '600', textAlign: 'center' },
+  priceBreakdown: { marginBottom: 16 },
   priceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
   },
-  priceLabel: {
-    fontSize: 15,
-    color: '#666',
-  },
-  priceValue: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#000',
-  },
-  discountLabel: {
-    color: '#00704A',
-    fontWeight: '600',
-  },
-  discountValue: {
-    color: '#00704A',
-    fontWeight: 'bold',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#E0E0E0',
-    marginVertical: 12,
-  },
-  totalLabel: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000',
-  },
-  totalValue: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#00704A',
-  },
+  priceLabel: { fontSize: 15, color: '#666' },
+  priceValue: { fontSize: 15, fontWeight: '600', color: '#000' },
+  discountLabel: { color: '#00704A', fontWeight: '600' },
+  discountValue: { color: '#00704A', fontWeight: 'bold' },
+  divider: { height: 1, backgroundColor: '#E0E0E0', marginVertical: 12 },
+  totalLabel: { fontSize: 18, fontWeight: '700', color: '#000' },
+  totalValue: { fontSize: 22, fontWeight: 'bold', color: '#00704A' },
   checkoutButton: {
     backgroundColor: '#00704A',
     flexDirection: 'row',
@@ -728,9 +506,5 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 8,
   },
-  checkoutButtonText: {
-    color: '#FFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
+  checkoutButtonText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
 });

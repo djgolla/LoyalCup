@@ -1,123 +1,178 @@
 """
-Stripe payment routes for order checkout.
+POST /api/v1/payments/create
+
+Full payment flow:
+  1. Receive payment nonce from Square In-App Payments SDK
+  2. Create Square order (tax calculated by Square at shop's location)
+  3. Charge the card
+  4. Save order + payment result to Supabase
+  5. Award loyalty points
+  6. Return confirmation to app
 """
-from fastapi import APIRouter, HTTPException, Depends, Header
-from pydantic import BaseModel
+import logging
 from typing import List, Optional
-import stripe
-import os
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
+
+from app.services.square_order_service import process_payment
+from app.services.loyalty_service import award_points_for_order
 from app.utils.security import require_auth
 from app.database import get_supabase
 
-# Initialize Stripe
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
-
-router = APIRouter(
-    prefix="/api/v1/payments",
-    tags=["payments"],
-)
+router = APIRouter(prefix="/api/v1/payments", tags=["payments"])
+logger = logging.getLogger(__name__)
 
 
-class OrderItem(BaseModel):
+class PaymentItem(BaseModel):
     menu_item_id: str
     quantity: int
-    price: float
-    name: str
+    unit_price: float          # dollars
+    customizations: List[dict] = []
 
 
-class CreatePaymentIntentRequest(BaseModel):
+class CreatePaymentRequest(BaseModel):
     shop_id: str
-    items: List[OrderItem]
-    total: float
+    items: List[PaymentItem]
+    payment_nonce: str         # nonce from Square In-App Payments SDK
+    loyalty_points_to_redeem: int = 0
+    customer_note: Optional[str] = None
 
 
-@router.post("/create-payment-intent")
-async def create_payment_intent(
-    request: CreatePaymentIntentRequest,
-    user: dict = Depends(require_auth())
+@router.post("/create")
+async def create_payment(
+    request: CreatePaymentRequest,
+    user: dict = Depends(require_auth()),
 ):
     """
-    Create a Stripe Payment Intent for order checkout.
-    Returns client_secret for mobile app to complete payment.
+    End-to-end payment: charge card via Square, push to POS as PAID,
+    save order to Supabase, award loyalty points.
     """
+    customer_id = user.get("sub")
+    if not customer_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
+
+    db = get_supabase()
+
+    items_data = [item.dict() for item in request.items]
+
+    # Loyalty discount: 100 points = $1 = 100 cents
+    loyalty_discount_cents = request.loyalty_points_to_redeem  # 1 point = 1 cent
+
     try:
-        user_id = user.get("sub")
-        
-        # Create payment intent
-        intent = stripe.PaymentIntent.create(
-            amount=int(request.total * 100),  # Convert to cents
-            currency="usd",
-            metadata={
-                "user_id": user_id,
-                "shop_id": request.shop_id,
-                "items": str([item.dict() for item in request.items])
+        # ── 1. Charge card + push to Square POS ──────────────────────────────
+        payment_result = await process_payment(
+            db=db,
+            shop_id=request.shop_id,
+            loyalcup_order_id="pending",   # placeholder — replaced after order insert
+            items=items_data,
+            payment_nonce=request.payment_nonce,
+            loyalty_discount_cents=loyalty_discount_cents,
+            customer_note=request.customer_note,
+        )
+
+        charged_cents     = payment_result["charged_cents"]
+        tax_cents         = payment_result["tax_cents"]
+        square_order_id   = payment_result["square_order_id"]
+        square_payment_id = payment_result["square_payment_id"]
+        currency          = payment_result["currency"]
+
+        # Convert to dollars for Supabase
+        charged_dollars = charged_cents / 100
+        tax_dollars     = tax_cents / 100
+        subtotal_dollars = sum(
+            item["unit_price"] * item.get("quantity", 1) for item in items_data
+        )
+
+        # ── 2. Save order to Supabase ─────────────────────────────────────────
+        order_insert = {
+            "customer_id": customer_id,
+            "shop_id":     request.shop_id,
+            "status":      "confirmed",     # already paid — skip 'pending'
+            "subtotal":    subtotal_dollars,
+            "tax":         tax_dollars,
+            "total":       charged_dollars,
+            "metadata": {
+                "square_order_id":         square_order_id,
+                "square_payment_id":       square_payment_id,
+                "pos_provider":            "square",
+                "currency":                currency,
+                "loyalty_points_redeemed": request.loyalty_points_to_redeem,
+                "payment_method":          "card_in_app",
             },
-            automatic_payment_methods={"enabled": True},
-        )
-        
-        return {
-            "client_secret": intent.client_secret,
-            "payment_intent_id": intent.id
         }
-    
-    except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        if request.loyalty_points_to_redeem > 0:
+            order_insert["metadata"]["discount_amount"] = loyalty_discount_cents / 100
 
-
-@router.post("/webhook")
-async def stripe_webhook(
-    stripe_signature: str = Header(None, alias="stripe-signature")
-):
-    """
-    Handle Stripe webhook events.
-    Creates order in database after successful payment.
-    """
-    webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
-    
-    try:
-        # This would be the raw body in production
-        # For now, just handle the event
-        event = stripe.Event.construct_from(
-            stripe.Webhook.construct_event(
-                payload=request.body,
-                sig_header=stripe_signature,
-                secret=webhook_secret
-            ),
-            stripe.api_key
+        order_resp = (
+            db.get_service_client()
+            .table("orders")
+            .insert(order_insert)
+            .select()
+            .single()
+            .execute()
         )
-        
-        # Handle successful payment
-        if event.type == "payment_intent.succeeded":
-            payment_intent = event.data.object
-            
-            # Get metadata
-            user_id = payment_intent.metadata.get("user_id")
-            shop_id = payment_intent.metadata.get("shop_id")
-            items = eval(payment_intent.metadata.get("items"))
-            
-            # Create order in database
-            db = get_supabase()
-            order_data = {
-                "shop_id": shop_id,
-                "customer_id": user_id,
-                "items": items,
-                "total": payment_intent.amount / 100,
-                "status": "pending",
-                "payment_intent_id": payment_intent.id,
-                "payment_status": "paid"
-            }
-            
-            result = await db.execute_query(
-                table="orders",
-                operation="insert",
-                data=order_data
+        order = order_resp.data
+        order_id = order["id"]
+
+        # ── 3. Save order items ───────────────────────────────────────────────
+        order_items = []
+        for item in items_data:
+            order_items.append({
+                "order_id":     order_id,
+                "menu_item_id": item["menu_item_id"],
+                "quantity":     item.get("quantity", 1),
+                "unit_price":   item["unit_price"],
+                "total_price":  item["unit_price"] * item.get("quantity", 1),
+                "customizations": item.get("customizations", []),
+            })
+        db.get_service_client().table("order_items").insert(order_items).execute()
+
+        # ── 4. Update Square reference_id with real order ID ─────────────────
+        # (best-effort — Square already processed the payment, this is just housekeeping)
+        try:
+            updated_metadata = {**order["metadata"], "loyalcup_order_id": order_id}
+            db.get_service_client().table("orders").update(
+                {"metadata": updated_metadata}
+            ).eq("id", order_id).execute()
+        except Exception:
+            pass  # non-fatal
+
+        # ── 5. Award loyalty points ───────────────────────────────────────────
+        try:
+            await award_points_for_order(
+                db=db,
+                order_id=order_id,
+                customer_id=customer_id,
+                shop_id=request.shop_id,
+                order_total=charged_dollars,
             )
-            
-            return {"status": "success"}
-        
-        return {"status": "ignored"}
-    
-    except Exception as e:
+        except Exception as e:
+            logger.warning(f"Points award failed for order {order_id}: {e}")
+            # non-fatal — order was paid, points can be reconciled later
+
+        logger.info(
+            f"[Payment] SUCCESS order={order_id}  "
+            f"square_payment={square_payment_id}  "
+            f"charged=${charged_dollars:.2f}"
+        )
+
+        return {
+            "success":          True,
+            "order_id":         order_id,
+            "square_order_id":  square_order_id,
+            "charged":          charged_dollars,
+            "tax":              tax_dollars,
+            "currency":         currency,
+            "status":           "confirmed",
+            "message":          "Payment successful! Your order is being prepared.",
+        }
+
+    except ValueError as e:
+        logger.warning(f"[Payment] Validation error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        logger.error(f"[Payment] Payment failed: {e}")
+        raise HTTPException(status_code=402, detail=str(e))
+    except Exception as e:
+        logger.exception(f"[Payment] Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail="Payment processing failed. Please try again.")
