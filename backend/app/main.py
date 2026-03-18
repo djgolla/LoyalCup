@@ -58,7 +58,7 @@ if settings.rate_limit_enabled:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins + ["*"],
+    allow_origins=settings.cors_origins,   # ← remove the + ["*"]
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
