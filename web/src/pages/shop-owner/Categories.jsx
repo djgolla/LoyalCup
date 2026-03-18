@@ -146,11 +146,11 @@ export default function Categories() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('menu_categories')
+        .from('categories')
         .select('*')
         .eq('shop_id', shopId)
         // no is_active filter — old rows have NULL which gets excluded by eq()
-        .order('sort_order', { ascending: true });
+        .order('display_order', { ascending: true });
       if (error) throw error;
       setCategories(data || []);
     } catch (err) {
@@ -165,19 +165,19 @@ export default function Categories() {
     try {
       if (editingCategory) {
         const { error } = await supabase
-          .from('menu_categories')
+          .from('categories')
           .update({ name: formData.name, description: formData.description || null })
           .eq('id', editingCategory.id);
         if (error) throw error;
         toast.success('Category updated!');
       } else {
         const { error } = await supabase
-          .from('menu_categories')
+          .from('categories')
           .insert([{
             name: formData.name,
             description: formData.description || null,
             shop_id: shopId,
-            sort_order: categories.length,
+            display_order: categories.length,
             is_active: true,
           }]);
         if (error) throw error;
@@ -196,7 +196,7 @@ export default function Categories() {
     if (!confirm(`Delete "${category.name}"? Menu items in this category won't be deleted.`)) return;
     try {
       const { error } = await supabase
-        .from('menu_categories')
+        .from('categories')
         .update({ is_active: false })
         .eq('id', category.id);
       if (error) throw error;
