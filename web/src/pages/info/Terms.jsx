@@ -202,7 +202,7 @@ export default function Terms() {
               <br />
               <strong>Email:</strong> legal@loyalcup.com
               <br />
-              <strong>Address:</strong> 123 Coffee Street, San Francisco, CA 94102
+              <strong>Address:</strong> NO PHYSICAL ADDRESS AT THIS TIME
             </p>
           </section>
         </div>

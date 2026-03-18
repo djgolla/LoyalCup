@@ -32,7 +32,7 @@ export default function About() {
             </h2>
           </div>
           <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed mb-4">
-            LoyalCup was born from a simple observation: while big chains like Starbucks have 
+            LoyalCup was born from a simple observation: while big chains have 
             sophisticated mobile apps and loyalty programs, local coffee shops struggle to compete 
             with outdated technology or expensive, complex systems.
           </p>

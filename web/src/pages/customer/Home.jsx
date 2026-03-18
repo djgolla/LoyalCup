@@ -447,7 +447,7 @@ export default function Home() {
             transition={{ delay: 0.2 }}
             className="text-2xl text-gray-600 dark:text-gray-400 mb-12"
           >
-            Download the app and join thousands of coffee lovers supporting local businesses
+            Download the app and join other coffee lovers supporting local businesses
           </motion.p>
 
           <motion.button

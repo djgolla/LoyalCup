@@ -168,7 +168,7 @@ export default function Privacy() {
               <br />
               <strong>Email:</strong> privacy@loyalcup.com
               <br />
-              <strong>Address:</strong> 123 Coffee Street, San Francisco, CA 94102
+              <strong>Address:</strong> NO PYSICAL ADDRESS AT THIS TIME
             </p>
           </section>
         </div>

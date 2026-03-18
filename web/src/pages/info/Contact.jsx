@@ -135,7 +135,7 @@ export default function Contact() {
                       Email
                     </h3>
                     <p className="text-gray-600 dark:text-gray-400">
-                      support@loyalcup.com
+                      support@loyalcupapp.com
                     </p>
                   </div>
                 </div>
@@ -149,7 +149,7 @@ export default function Contact() {
                       Phone
                     </h3>
                     <p className="text-gray-600 dark:text-gray-400">
-                      1-800-LOYAL-CUP
+                      1-815-242-0618
                     </p>
                     <p className="text-sm text-gray-500 dark:text-gray-500">
                       Mon-Fri 9am-6pm EST
@@ -166,8 +166,8 @@ export default function Contact() {
                       Address
                     </h3>
                     <p className="text-gray-600 dark:text-gray-400">
-                      123 Coffee Street<br />
-                      San Francisco, CA 94102
+                      NO PYSICAL LOCATION<br />
+                      AT THIS TIME
                     </p>
                   </div>
                 </div>
