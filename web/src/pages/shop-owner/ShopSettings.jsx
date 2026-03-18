@@ -1,67 +1,69 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Store, MapPin, Phone, Clock, Image as ImageIcon,
+import {
+  Store, MapPin, Clock, Image as ImageIcon,
   Save, Upload, X, Check, Globe
 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import supabase from '../../lib/supabase';
 import { toast } from 'sonner';
 
+const DEFAULT_HOURS = {
+  monday:    { open: '09:00', close: '17:00', closed: false },
+  tuesday:   { open: '09:00', close: '17:00', closed: false },
+  wednesday: { open: '09:00', close: '17:00', closed: false },
+  thursday:  { open: '09:00', close: '17:00', closed: false },
+  friday:    { open: '09:00', close: '17:00', closed: false },
+  saturday:  { open: '10:00', close: '16:00', closed: false },
+  sunday:    { open: '10:00', close: '16:00', closed: false },
+};
+
 export default function ShopSettings() {
-  const { shop, shopId, refreshShop } = useShop();
+  const { shop, shopId, loadShop } = useShop();
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
-  
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     address: '',
     city: '',
     state: '',
-    zip: '',           // ← "zip" not "zip_code"
+    zip: '',
     phone: '',
     website: '',
     logo_url: '',
-    banner_url: '',    // ← "banner_url" not "cover_image_url"
-    hours: {
-      monday: { open: '09:00', close: '17:00', closed: false },
-      tuesday: { open: '09:00', close: '17:00', closed: false },
-      wednesday: { open: '09:00', close: '17:00', closed: false },
-      thursday: { open: '09:00', close: '17:00', closed: false },
-      friday: { open: '09:00', close: '17:00', closed: false },
-      saturday: { open: '10:00', close: '16:00', closed: false },
-      sunday: { open: '10:00', close: '16:00', closed: false },
-    },
+    banner_url: '',
+    hours: DEFAULT_HOURS,
   });
 
   useEffect(() => {
     if (shop) {
       setFormData(prev => ({
-        name: shop.name || '',
+        name:        shop.name        || '',
         description: shop.description || '',
-        address: shop.address || '',
-        city: shop.city || '',
-        state: shop.state || '',
-        zip: shop.zip || '',           // ← "zip"
-        phone: shop.phone || '',
-        website: shop.website || '',
-        logo_url: shop.logo_url || '',
-        banner_url: shop.banner_url || '',  // ← "banner_url"
-        hours: shop.hours || prev.hours,
+        address:     shop.address     || '',
+        city:        shop.city        || '',
+        state:       shop.state       || '',
+        zip:         shop.zip         || '',
+        phone:       shop.phone       || '',
+        website:     shop.website     || '',
+        logo_url:    shop.logo_url    || '',
+        banner_url:  shop.banner_url  || '',
+        hours:       shop.hours       || prev.hours,
       }));
     }
   }, [shop]);
 
   const handleImageUpload = async (file, type) => {
-    if (!file) return;
+    if (!file || !shopId) return;
 
     try {
       setUploading(true);
 
       const fileExt = file.name.split('.').pop();
-      const fileName = `${shopId}/${type}-${Math.random()}.${fileExt}`;
+      const fileName = `${shopId}/${type}-${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from('shop-images')
@@ -73,11 +75,8 @@ export default function ShopSettings() {
         .from('shop-images')
         .getPublicUrl(fileName);
 
-      setFormData(prev => ({ 
-        ...prev, 
-        [type === 'logo' ? 'logo_url' : 'banner_url']: publicUrl 
-      }));
-      
+      const field = type === 'logo' ? 'logo_url' : 'banner_url';
+      setFormData(prev => ({ ...prev, [field]: publicUrl }));
       toast.success('Image uploaded!');
     } catch (error) {
       console.error('Upload error:', error);
@@ -90,9 +89,9 @@ export default function ShopSettings() {
   const handleDrag = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
+    if (e.type === 'dragenter' || e.type === 'dragover') {
       setDragActive(true);
-    } else if (e.type === "dragleave") {
+    } else if (e.type === 'dragleave') {
       setDragActive(false);
     }
   };
@@ -101,40 +100,39 @@ export default function ShopSettings() {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+    if (e.dataTransfer.files?.[0]) {
       handleImageUpload(e.dataTransfer.files[0], type);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     try {
       setLoading(true);
 
       const { error } = await supabase
         .from('shops')
         .update({
-          name: formData.name,
+          name:        formData.name,
           description: formData.description || null,
-          address: formData.address || null,
-          city: formData.city || null,
-          state: formData.state || null,
-          zip: formData.zip || null,           // ← "zip"
-          phone: formData.phone || null,
-          website: formData.website || null,
-          logo_url: formData.logo_url || null,
-          banner_url: formData.banner_url || null,  // ← "banner_url"
-          hours: formData.hours,
-          updated_at: new Date().toISOString(),
+          address:     formData.address     || null,
+          city:        formData.city        || null,
+          state:       formData.state       || null,
+          zip:         formData.zip         || null,
+          phone:       formData.phone       || null,
+          website:     formData.website     || null,
+          logo_url:    formData.logo_url    || null,
+          banner_url:  formData.banner_url  || null,
+          hours:       formData.hours,
+          updated_at:  new Date().toISOString(),
         })
         .eq('id', shopId);
 
       if (error) throw error;
 
       toast.success('Settings saved!');
-      refreshShop();
+      loadShop();
     } catch (error) {
       console.error('Failed to save settings:', error);
       toast.error('Failed to save settings');
@@ -148,11 +146,8 @@ export default function ShopSettings() {
       ...prev,
       hours: {
         ...prev.hours,
-        [day]: {
-          ...prev.hours[day],
-          [field]: value
-        }
-      }
+        [day]: { ...prev.hours[day], [field]: value },
+      },
     }));
   };
 
@@ -160,10 +155,7 @@ export default function ShopSettings() {
 
   return (
     <div className="space-y-6 pb-8">
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="text-4xl font-black text-gray-900 dark:text-white mb-2">
           Shop Settings
         </h1>
@@ -173,10 +165,10 @@ export default function ShopSettings() {
       </motion.div>
 
       <form onSubmit={handleSubmit} className="space-y-8">
-        {/* Shop Images */}
+
+        {/* ── Shop Images ── */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
           className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border-2 border-gray-200 dark:border-neutral-800 shadow-lg"
         >
@@ -188,32 +180,23 @@ export default function ShopSettings() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Logo */}
             <div>
-              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
-                Logo
-              </label>
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">Logo</label>
               <div
-                onDragEnter={handleDrag}
-                onDragLeave={handleDrag}
-                onDragOver={handleDrag}
-                onDrop={(e) => handleDrop(e, 'logo')}
+                onDragEnter={handleDrag} onDragLeave={handleDrag}
+                onDragOver={handleDrag} onDrop={(e) => handleDrop(e, 'logo')}
                 className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition ${
-                  dragActive 
-                    ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20' 
+                  dragActive
+                    ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20'
                     : 'border-gray-300 dark:border-neutral-700'
                 }`}
               >
                 {formData.logo_url ? (
                   <div className="relative">
-                    <img 
-                      src={formData.logo_url} 
-                      alt="Logo" 
-                      className="w-32 h-32 object-cover rounded-xl mx-auto"
-                    />
-                    <button
-                      type="button"
+                    <img src={formData.logo_url} alt="Logo"
+                      className="w-32 h-32 object-cover rounded-xl mx-auto" />
+                    <button type="button"
                       onClick={() => setFormData(prev => ({ ...prev, logo_url: '' }))}
-                      className="absolute top-0 right-0 p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition"
-                    >
+                      className="absolute top-0 right-0 p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
@@ -225,47 +208,34 @@ export default function ShopSettings() {
                     </p>
                     <label className="inline-block px-4 py-2 bg-amber-500 text-white rounded-xl font-semibold cursor-pointer hover:bg-amber-600 transition text-sm">
                       Choose File
-                      <input
-                        type="file"
-                        accept="image/*"
+                      <input type="file" accept="image/*"
                         onChange={(e) => handleImageUpload(e.target.files[0], 'logo')}
-                        className="hidden"
-                        disabled={uploading}
-                      />
+                        className="hidden" disabled={uploading} />
                     </label>
                   </>
                 )}
               </div>
             </div>
 
-            {/* Banner Image */}
+            {/* Banner */}
             <div>
-              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
-                Banner Image
-              </label>
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">Banner Image</label>
               <div
-                onDragEnter={handleDrag}
-                onDragLeave={handleDrag}
-                onDragOver={handleDrag}
-                onDrop={(e) => handleDrop(e, 'cover')}
+                onDragEnter={handleDrag} onDragLeave={handleDrag}
+                onDragOver={handleDrag} onDrop={(e) => handleDrop(e, 'banner')}
                 className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition ${
-                  dragActive 
-                    ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20' 
+                  dragActive
+                    ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20'
                     : 'border-gray-300 dark:border-neutral-700'
                 }`}
               >
                 {formData.banner_url ? (
                   <div className="relative">
-                    <img 
-                      src={formData.banner_url} 
-                      alt="Banner" 
-                      className="w-full h-32 object-cover rounded-xl"
-                    />
-                    <button
-                      type="button"
+                    <img src={formData.banner_url} alt="Banner"
+                      className="w-full h-32 object-cover rounded-xl" />
+                    <button type="button"
                       onClick={() => setFormData(prev => ({ ...prev, banner_url: '' }))}
-                      className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition"
-                    >
+                      className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
@@ -277,13 +247,9 @@ export default function ShopSettings() {
                     </p>
                     <label className="inline-block px-4 py-2 bg-amber-500 text-white rounded-xl font-semibold cursor-pointer hover:bg-amber-600 transition text-sm">
                       Choose File
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => handleImageUpload(e.target.files[0], 'cover')}
-                        className="hidden"
-                        disabled={uploading}
-                      />
+                      <input type="file" accept="image/*"
+                        onChange={(e) => handleImageUpload(e.target.files[0], 'banner')}
+                        className="hidden" disabled={uploading} />
                     </label>
                   </>
                 )}
@@ -292,10 +258,9 @@ export default function ShopSettings() {
           </div>
         </motion.div>
 
-        {/* Basic Information */}
+        {/* ── Basic Information ── */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
           className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border-2 border-gray-200 dark:border-neutral-800 shadow-lg"
         >
@@ -306,61 +271,38 @@ export default function ShopSettings() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
-              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
-                Shop Name *
-              </label>
-              <input
-                type="text"
-                value={formData.name}
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">Shop Name *</label>
+              <input type="text" value={formData.name} required
                 onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
-                required
-              />
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition" />
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
-                Description
-              </label>
-              <textarea
-                value={formData.description}
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">Description</label>
+              <textarea value={formData.description} rows="3"
                 onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition resize-none"
-                rows="3"
-              />
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition resize-none" />
             </div>
 
             <div>
-              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
-                Phone
-              </label>
-              <input
-                type="tel"
-                value={formData.phone}
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">Phone</label>
+              <input type="tel" value={formData.phone}
                 onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
-              />
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition" />
             </div>
 
             <div>
-              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
-                Website
-              </label>
-              <input
-                type="url"
-                value={formData.website}
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">Website</label>
+              <input type="url" value={formData.website} placeholder="https://..."
                 onChange={(e) => setFormData(prev => ({ ...prev, website: e.target.value }))}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
-                placeholder="https://..."
-              />
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition" />
             </div>
           </div>
         </motion.div>
 
-        {/* Location */}
+        {/* ── Location ── */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
           className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border-2 border-gray-200 dark:border-neutral-800 shadow-lg"
         >
@@ -371,59 +313,38 @@ export default function ShopSettings() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
-              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
-                Address
-              </label>
-              <input
-                type="text"
-                value={formData.address}
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">Address</label>
+              <input type="text" value={formData.address}
                 onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
-              />
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition" />
             </div>
 
             <div>
-              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
-                City
-              </label>
-              <input
-                type="text"
-                value={formData.city}
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">City</label>
+              <input type="text" value={formData.city}
                 onChange={(e) => setFormData(prev => ({ ...prev, city: e.target.value }))}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
-              />
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition" />
             </div>
 
             <div>
-              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
-                State
-              </label>
-              <input
-                type="text"
-                value={formData.state}
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">State</label>
+              <input type="text" value={formData.state}
                 onChange={(e) => setFormData(prev => ({ ...prev, state: e.target.value }))}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
-              />
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition" />
             </div>
 
             <div>
-              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
-                ZIP Code
-              </label>
-              <input
-                type="text"
-                value={formData.zip}
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">ZIP Code</label>
+              <input type="text" value={formData.zip}
                 onChange={(e) => setFormData(prev => ({ ...prev, zip: e.target.value }))}
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
-              />
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition" />
             </div>
           </div>
         </motion.div>
 
-        {/* Business Hours */}
+        {/* ── Business Hours ── */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
           className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border-2 border-gray-200 dark:border-neutral-800 shadow-lg"
         >
@@ -438,36 +359,27 @@ export default function ShopSettings() {
                 <div className="w-32">
                   <p className="font-bold text-gray-900 dark:text-white capitalize">{day}</p>
                 </div>
-                
+
                 {formData.hours[day].closed ? (
                   <div className="flex-1">
                     <span className="text-red-600 font-semibold">Closed</span>
                   </div>
                 ) : (
                   <div className="flex-1 flex items-center gap-4">
-                    <input
-                      type="time"
-                      value={formData.hours[day].open}
+                    <input type="time" value={formData.hours[day].open}
                       onChange={(e) => handleHoursChange(day, 'open', e.target.value)}
-                      className="px-3 py-2 bg-white dark:bg-neutral-900 border-2 border-gray-200 dark:border-neutral-700 rounded-lg focus:outline-none focus:border-amber-500 transition"
-                    />
+                      className="px-3 py-2 bg-white dark:bg-neutral-900 border-2 border-gray-200 dark:border-neutral-700 rounded-lg focus:outline-none focus:border-amber-500 transition" />
                     <span className="text-gray-600 dark:text-gray-400">to</span>
-                    <input
-                      type="time"
-                      value={formData.hours[day].close}
+                    <input type="time" value={formData.hours[day].close}
                       onChange={(e) => handleHoursChange(day, 'close', e.target.value)}
-                      className="px-3 py-2 bg-white dark:bg-neutral-900 border-2 border-gray-200 dark:border-neutral-700 rounded-lg focus:outline-none focus:border-amber-500 transition"
-                    />
+                      className="px-3 py-2 bg-white dark:bg-neutral-900 border-2 border-gray-200 dark:border-neutral-700 rounded-lg focus:outline-none focus:border-amber-500 transition" />
                   </div>
                 )}
 
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.hours[day].closed}
+                  <input type="checkbox" checked={formData.hours[day].closed}
                     onChange={(e) => handleHoursChange(day, 'closed', e.target.checked)}
-                    className="w-5 h-5 text-amber-600 rounded focus:ring-2 focus:ring-amber-500"
-                  />
+                    className="w-5 h-5 text-amber-600 rounded focus:ring-2 focus:ring-amber-500" />
                   <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Closed</span>
                 </label>
               </div>
@@ -475,26 +387,21 @@ export default function ShopSettings() {
           </div>
         </motion.div>
 
-        {/* Save Button */}
+        {/* ── Save Button ── */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
           className="flex justify-end"
         >
           <motion.button
-            type="submit"
-            disabled={loading}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+            type="submit" disabled={loading}
+            whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
             className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl font-bold shadow-lg hover:shadow-xl transition disabled:opacity-50"
           >
             {loading ? (
               <>
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                >
+                <motion.div animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
                   <Save className="w-5 h-5" />
                 </motion.div>
                 Saving...

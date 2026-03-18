@@ -1,27 +1,22 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useAuth } from "./context/AuthContext";
 
 // layouts
 import MainLayout from "./layout/MainLayout";
 import AuthLayout from "./layout/AuthLayout";
 import ShopOwnerLayout from "./layout/ShopOwnerLayout";
-import WorkerLayout from "./layout/WorkerLayout";
 import AdminLayout from "./layout/AdminLayout";
 
 // auth components
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import RoleGuard from "./components/auth/RoleGuard";
 
-// customer pages
+// public pages
 import Home from "./pages/customer/Home";
-import ShopList from "./pages/customer/ShopList";
-import ShopDetail from "./pages/customer/ShopDetail";
-import Rewards from "./pages/customer/Rewards";
-import Profile from "./pages/customer/Profile";
-import EditProfile from "./pages/customer/EditProfile";
+import Download from "./pages/Download";
 
 // auth pages
-import CustomerLogin from "./pages/auth/CustomerLogin";
-import Register from "./pages/auth/Register";
+import Login from "./pages/auth/Login";
 import AdminLogin from "./pages/auth/AdminLogin";
 import ShopApplication from "./pages/auth/ShopApplication";
 import ApplicationPending from "./pages/auth/ApplicationPending";
@@ -36,12 +31,8 @@ import ShopOwnerAnalytics from "./pages/shop-owner/Analytics";
 import LoyaltySettings from "./pages/shop-owner/LoyaltySettings";
 import Workers from "./pages/shop-owner/Workers";
 import ShopSettings from "./pages/shop-owner/ShopSettings";
-import ShopSetup from './pages/shop-owner/ShopSetup';
+import ShopSetup from "./pages/shop-owner/ShopSetup";
 import ConnectSquarePage from "./pages/shop-owner/ConnectSquarePage";
-
-// worker pages
-import OrderQueue from "./pages/worker/OrderQueue";
-import DailySummary from "./pages/worker/DailySummary";
 
 // admin pages
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -64,125 +55,107 @@ import NotFound from "./pages/NotFound";
 import { ThemeProvider } from "./context/ThemeContext";
 import { AccentProvider } from "./context/AccentContext";
 import { AuthProvider } from "./context/AuthContext";
-import { CartProvider } from "./context/CartContext";
 import { ShopProvider } from "./context/ShopContext";
-import { StripeProvider } from "./context/StripeContext";
+import PageLoader from "./components/ui/PageLoader";
+
+// Redirects logged-in shop owners / admins away from the public home page
+function RoleRedirect({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return <PageLoader />;
+  if (user) {
+    const role = user.user_metadata?.role;
+    if (role === "shop_owner") return <Navigate to="/shop-owner/dashboard" replace />;
+    if (role === "admin")      return <Navigate to="/admin/dashboard" replace />;
+  }
+  return children;
+}
 
 export default function App() {
-
   return (
     <ThemeProvider>
       <AccentProvider>
         <AuthProvider>
           <ShopProvider>
-            <StripeProvider>
-              <CartProvider>
-                <BrowserRouter>
-                <Routes>
-                  {/* auth pages */}
-                  <Route element={<AuthLayout />}>
-                    <Route path="/login" element={<CustomerLogin />} />
-                    <Route path="/register" element={<Register />} />
-                    <Route path="/application-pending" element={<ApplicationPending />} />
-                  </Route>
+            <BrowserRouter>
+              <Routes>
+                {/* public pages */}
+                <Route element={<MainLayout />}>
+                  <Route path="/" element={<RoleRedirect><Home /></RoleRedirect>} />
+                  <Route path="/download" element={<Download />} />
+                  <Route path="/contact" element={<Contact />} />
+                  <Route path="/privacy" element={<Privacy />} />
+                  <Route path="/terms" element={<Terms />} />
+                  <Route path="/about" element={<About />} />
+                </Route>
 
-                  {/* admin login (separate, hidden) */}
-                  <Route path="/admin" element={<AdminLogin />} />
+                {/* auth pages */}
+                <Route element={<AuthLayout />}>
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/application-pending" element={<ApplicationPending />} />
+                </Route>
 
-                  {/* protected shop application */}
-                  <Route
-                    element={
-                      <ProtectedRoute>
-                        <AuthLayout />
-                      </ProtectedRoute>
-                    }
-                  >
-                    <Route path="/shop-application" element={<ShopApplication />} />
-                  </Route>
+                {/* hidden admin login */}
+                <Route path="/admin" element={<AdminLogin />} />
 
-                  {/* public customer pages */}
-                  <Route element={<MainLayout />}>
-                    <Route path="/" element={<Home />} />
-                    <Route path="/shops" element={<ShopList />} />
-                    <Route path="/shops/:id" element={<ShopDetail />} />
-                    {/* info pages */}
-                    <Route path="/contact" element={<Contact />} />
-                    <Route path="/privacy" element={<Privacy />} />
-                    <Route path="/terms" element={<Terms />} />
-                    <Route path="/about" element={<About />} />
-                  </Route>
+                {/* shop application — public but needs auth to submit */}
+                <Route element={<MainLayout />}>
+                  <Route path="/shop-application" element={<ShopApplication />} />
+                </Route>
 
-                  {/* protected customer pages */}
-                  <Route
-                    element={
-                      <ProtectedRoute>
-                        <MainLayout />
-                      </ProtectedRoute>
-                    }
-                  >
-                    <Route path="/rewards" element={<Rewards />} />
-                    <Route path="/profile" element={<Profile />} />
-                    <Route path="/profile/edit" element={<EditProfile />} />
-                  </Route>
+                {/* shop owner pages */}
+                <Route
+                  element={
+                    <RoleGuard roles={["shop_owner", "admin"]}>
+                      <ShopOwnerLayout />
+                    </RoleGuard>
+                  }
+                >
+                  <Route path="/shop-owner/dashboard" element={<ShopOwnerDashboard />} />
+                  <Route path="/shop-owner/menu" element={<MenuBuilder />} />
+                  <Route path="/shop-owner/categories" element={<Categories />} />
+                  <Route path="/shop-owner/customizations" element={<Customizations />} />
+                  <Route path="/shop-owner/orders" element={<ShopOwnerOrders />} />
+                  <Route path="/shop-owner/analytics" element={<ShopOwnerAnalytics />} />
+                  <Route path="/shop-owner/loyalty" element={<LoyaltySettings />} />
+                  <Route path="/shop-owner/workers" element={<Workers />} />
+                  <Route path="/shop-owner/settings" element={<ShopSettings />} />
+                  <Route path="/shop-owner/setup" element={<ShopSetup />} />
+                  <Route path="/shop-owner/connect-square" element={<ConnectSquarePage />} />
+                </Route>
 
-                  {/* shop owner pages */}
-                  <Route
-                    element={
-                      <RoleGuard roles={["shop_owner", "admin"]}>
-                        <ShopOwnerLayout />
-                      </RoleGuard>
-                    }
-                  >
-                    <Route path="/shop-owner/dashboard" element={<ShopOwnerDashboard />} />
-                    <Route path="/shop-owner/menu" element={<MenuBuilder />} />
-                    <Route path="/shop-owner/categories" element={<Categories />} />
-                    <Route path="/shop-owner/customizations" element={<Customizations />} />
-                    <Route path="/shop-owner/orders" element={<ShopOwnerOrders />} />
-                    <Route path="/shop-owner/analytics" element={<ShopOwnerAnalytics />} />
-                    <Route path="/shop-owner/loyalty" element={<LoyaltySettings />} />
-                    <Route path="/shop-owner/workers" element={<Workers />} />
-                    <Route path="/shop-owner/settings" element={<ShopSettings />} />
-                    <Route path="/shop-owner/setup" element={<ShopSetup />} />
-                    <Route path="/shop-owner/connect-square" element={<ConnectSquarePage />} />
-                  </Route>
+                {/* admin pages */}
+                <Route
+                  element={
+                    <RoleGuard roles={["admin"]}>
+                      <AdminLayout />
+                    </RoleGuard>
+                  }
+                >
+                  <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                  <Route path="/admin/shops" element={<ShopManagement />} />
+                  <Route path="/admin/users" element={<Users />} />
+                  <Route path="/admin/analytics" element={<AdminAnalytics />} />
+                  <Route path="/admin/settings" element={<AdminSettings />} />
+                  <Route path="/admin/audit-log" element={<AuditLog />} />
+                </Route>
 
-                  {/* worker pages */}
-                  <Route
-                    element={
-                      <RoleGuard roles={["shop_worker", "admin"]}>
-                        <WorkerLayout />
-                      </RoleGuard>
-                    }
-                  >
-                    <Route path="/worker" element={<OrderQueue />} />
-                    <Route path="/worker/summary" element={<DailySummary />} />
-                  </Route>
+                {/* redirect old customer-only routes to download */}
+                <Route path="/shops" element={<Navigate to="/download" replace />} />
+                <Route path="/shops/:id" element={<Navigate to="/download" replace />} />
+                <Route path="/rewards" element={<Navigate to="/download" replace />} />
+                <Route path="/profile" element={<Navigate to="/download" replace />} />
+                <Route path="/profile/edit" element={<Navigate to="/download" replace />} />
+                <Route path="/register" element={<Navigate to="/download" replace />} />
+                <Route path="/worker" element={<Navigate to="/login" replace />} />
+                <Route path="/worker/summary" element={<Navigate to="/login" replace />} />
 
-                  {/* admin pages */}
-                  <Route
-                    element={
-                      <RoleGuard roles={["admin"]}>
-                        <AdminLayout />
-                      </RoleGuard>
-                    }
-                  >
-                    <Route path="/admin/dashboard" element={<AdminDashboard />} />
-                    <Route path="/admin/shops" element={<ShopManagement />} />
-                    <Route path="/admin/users" element={<Users />} />
-                    <Route path="/admin/analytics" element={<AdminAnalytics />} />
-                    <Route path="/admin/settings" element={<AdminSettings />} />
-                    <Route path="/admin/audit-log" element={<AuditLog />} />
-                  </Route>
-
-                  {/* 404 */}
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </BrowserRouter>
-            </CartProvider>
-          </StripeProvider>
-        </ShopProvider>
-      </AuthProvider>
-    </AccentProvider>
-  </ThemeProvider>
+                {/* 404 */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </ShopProvider>
+        </AuthProvider>
+      </AccentProvider>
+    </ThemeProvider>
   );
 }

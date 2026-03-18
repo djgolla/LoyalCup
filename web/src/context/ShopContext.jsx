@@ -18,11 +18,10 @@ export function ShopProvider({ children }) {
       return;
     }
 
-    const userRole = user.user_metadata?.role || 'customer';
-    
-    // Only load shop for shop owners and workers
-    if (userRole === 'shop_owner' || userRole === 'shop_worker') {
-      loadUserShop();
+    const userRole = user.user_metadata?.role || "customer";
+
+    if (userRole === "shop_owner" || userRole === "shop_worker") {
+      loadShop();
     } else {
       setShop(null);
       setLoading(false);
@@ -30,23 +29,21 @@ export function ShopProvider({ children }) {
     }
   }, [user]);
 
-  const loadUserShop = async () => {
+  const loadShop = async () => {
     try {
       setError(null);
-      const userRole = user.user_metadata?.role || 'customer';
-      
-      if (userRole === 'shop_owner') {
-        // Get shop owned by this user
+      const userRole = user?.user_metadata?.role || "customer";
+
+      if (userRole === "shop_owner") {
         const { data, error } = await supabase
-          .from('shops')
-          .select('*')
-          .eq('owner_id', user.id)
+          .from("shops")
+          .select("*")
+          .eq("owner_id", user.id)
           .single();
 
         if (error) {
-          if (error.code === 'PGRST116') {
-            // No shop found
-            setError('No shop assigned to your account');
+          if (error.code === "PGRST116") {
+            setError("No shop assigned to your account");
             setShop(null);
           } else {
             throw error;
@@ -54,27 +51,25 @@ export function ShopProvider({ children }) {
         } else {
           setShop(data);
         }
-      } else if (userRole === 'shop_worker') {
-        // For workers, we'd need a shop_workers junction table
-        // For now, get from user_metadata if available
+      } else if (userRole === "shop_worker") {
         const shopId = user.user_metadata?.shop_id;
         if (shopId) {
           const { data, error } = await supabase
-            .from('shops')
-            .select('*')
-            .eq('id', shopId)
+            .from("shops")
+            .select("*")
+            .eq("id", shopId)
             .single();
 
           if (error) throw error;
           setShop(data);
         } else {
-          setError('No shop assigned to your account');
+          setError("No shop assigned to your account");
           setShop(null);
         }
       }
-    } catch (error) {
-      console.error("Failed to load shop:", error);
-      setError(error.message || 'Failed to load shop');
+    } catch (err) {
+      console.error("Failed to load shop:", err);
+      setError(err.message || "Failed to load shop");
     } finally {
       setLoading(false);
     }
@@ -87,7 +82,8 @@ export function ShopProvider({ children }) {
         shopId: shop?.id,
         loading,
         error,
-        refreshShop: loadUserShop,
+        loadShop,        // ← what ShopSettings calls
+        refreshShop: loadShop, // ← keep old name too so nothing else breaks
       }}
     >
       {children}
