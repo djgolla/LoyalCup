@@ -1,161 +1,102 @@
-import { supabase } from '../lib/supabase'
+/**
+ * orderService — all order mutations go through the FastAPI backend.
+ * Reads (get order, history) hit Supabase directly for speed.
+ * Real-time status subscription uses Supabase channels.
+ */
+import { supabase } from '../lib/supabase';
+import { apiClient } from './apiClient';
 
 export const orderService = {
-  // create new order
-  createOrder: async (orderData) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      const { data, error } = await supabase
-        .from('orders')
-        .insert({
-          shop_id: orderData.shop_id,
-          customer_id: user.id,
-          status: 'pending',
-          subtotal: orderData.subtotal,
-          tax: orderData.tax,
-          total: orderData.total,
-          metadata: orderData.metadata || {},
-        })
-        .select()
-        .single()
+  /**
+   * Create a new order via backend (which pushes to Square POS + awards loyalty points).
+   * items: [{ menu_item_id, quantity, base_price, customizations }]
+   */
+  createOrder: async (shopId, items, customerNote = null) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error('Not authenticated');
 
-      if (error) throw error
+    const orderItems = items.map(item => ({
+      menu_item_id: item.id || item.menu_item_id,
+      quantity: item.quantity || 1,
+      base_price: parseFloat(item.price || item.base_price) || 0,
+      customizations: item.customizations || [],
+    }));
 
-      // Insert order items
-      if (orderData.items && orderData.items.length > 0) {
-        const orderItems = orderData.items.map(item => ({
-          order_id: data.id,
-          menu_item_id: item.menu_item_id,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          total_price: item.total_price,
-          customizations: item.customizations || [],
-        }))
-
-        const { error: itemsError } = await supabase
-          .from('order_items')
-          .insert(orderItems)
-
-        if (itemsError) throw itemsError
-      }
-
-      return data
-    } catch (error) {
-      console.error('Failed to create order:', error)
-      throw error
-    }
+    const response = await apiClient.post(
+      '/api/v1/orders',
+      { shop_id: shopId, items: orderItems, customer_note: customerNote },
+      token
+    );
+    return response.order;
   },
 
-  // get order by id
+  /** Get a single order with shop + items (direct Supabase read — fast) */
   getOrder: async (orderId) => {
-    try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
+    const { data, error } = await supabase
+      .from('orders')
+      .select(`
+        *,
+        shops (name, logo_url, address),
+        order_items (
           *,
-          shops (name, logo_url, address),
-          order_items (
-            *,
-            menu_items (name, description)
-          )
-        `)
-        .eq('id', orderId)
-        .single()
+          menu_items (name, description, image_url)
+        )
+      `)
+      .eq('id', orderId)
+      .single();
 
-      if (error) throw error
-      return data
-    } catch (error) {
-      console.error('Failed to fetch order:', error)
-      throw error
-    }
+    if (error) throw error;
+    return data;
   },
 
-  // get user's order history
+  /** Get the current user's order history */
   getOrderHistory: async (params = {}) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await supabase.auth.getUser();
 
-      let query = supabase
-        .from('orders')
-        .select(`
-          *,
-          shops (name, logo_url),
-          order_items (*)
-        `)
-        .eq('customer_id', user.id)
-        .order('created_at', { ascending: false })
+    let query = supabase
+      .from('orders')
+      .select(`
+        *,
+        shops (name, logo_url),
+        order_items (quantity, unit_price, menu_items(name))
+      `)
+      .eq('customer_id', user.id)
+      .order('created_at', { ascending: false });
 
-      if (params.status) {
-        query = query.eq('status', params.status)
-      }
+    if (params.status) query = query.eq('status', params.status);
+    if (params.limit) query = query.limit(params.limit);
 
-      const { data, error } = await query
-      
-      if (error) throw error
-      return data || []
-    } catch (error) {
-      console.error('Failed to fetch order history:', error)
-      throw error
-    }
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
   },
 
-  // update order status
-  updateOrderStatus: async (orderId, status) => {
-    try {
-      const { data, error } = await supabase
-        .from('orders')
-        .update({ status, updated_at: new Date().toISOString() })
-        .eq('id', orderId)
-        .select()
-        .single()
-
-      if (error) throw error
-      return data
-    } catch (error) {
-      console.error('Failed to update order status:', error)
-      throw error
-    }
-  },
-
-  // cancel order
+  /** Cancel a pending order via backend */
   cancelOrder: async (orderId) => {
-    try {
-      const { data, error } = await supabase
-        .from('orders')
-        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-        .eq('id', orderId)
-        .select()
-        .single()
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error('Not authenticated');
 
-      if (error) throw error
-      return data
-    } catch (error) {
-      console.error('Failed to cancel order:', error)
-      throw error
-    }
+    const response = await apiClient.post(
+      `/api/v1/orders/${orderId}/cancel`,
+      {},
+      token
+    );
+    return response.order;
   },
 
-  // subscribe to order updates (real-time)
+  /** Real-time subscription to order status changes */
   subscribeToOrder: (orderId, callback) => {
-    const subscription = supabase
+    const sub = supabase
       .channel(`order:${orderId}`)
       .on(
         'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'orders',
-          filter: `id=eq.${orderId}`,
-        },
-        (payload) => {
-          callback(payload.new)
-        }
+        { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` },
+        (payload) => callback(payload.new)
       )
-      .subscribe()
+      .subscribe();
 
-    return () => {
-      subscription.unsubscribe()
-    }
+    return () => sub.unsubscribe();
   },
-}
+};

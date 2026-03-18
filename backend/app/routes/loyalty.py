@@ -1,89 +1,29 @@
-# loyalty.py
-# loyalty routes for customers, shop owners, and admins
-
-from fastapi import APIRouter, HTTPException, Depends
+"""
+Loyalty routes — uses the real loyalty_service functions + real Supabase auth.
+"""
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
-from typing import Optional, List
-from app.services.loyalty_service import LoyaltyService
+from typing import Optional
 
-router = APIRouter(
-    prefix="/api/v1",
-    tags=["loyalty"]
-)
+from app.services.loyalty_service import award_points_for_order
+from app.utils.security import require_auth
+from app.database import get_supabase
 
-# mock db controller for now
-# in production this would be injected
-class MockDBController:
-    """Mock database controller - replace with actual implementation"""
-    def __init__(self):
-        self.balances = []
-        self.rewards = []
-        self.transactions = []
-        self.shops = []
-    
-    def get_shop(self, shop_id):
-        return {'loyalty_points_per_dollar': 10, 'participates_in_global_loyalty': True}
-    
-    def update_balance(self, user_id, shop_id, points_change):
-        pass
-    
-    def create_transaction(self, **kwargs):
-        return {'id': '1', **kwargs}
-    
-    def get_balances(self, user_id):
-        return []
-    
-    def get_balance(self, user_id, shop_id):
-        return {'points': 0}
-    
-    def get_rewards(self, shop_id, active_only=False):
-        return []
-    
-    def get_reward(self, reward_id):
-        return None
-    
-    def get_transactions(self, user_id, limit=50):
-        return []
-    
-    def get_total_points_issued(self, shop_id):
-        return 0
-    
-    def get_points_redeemed(self, shop_id):
-        return 0
-    
-    def get_active_members_count(self, shop_id):
-        return 0
-    
-    def update_shop_loyalty_settings(self, **kwargs):
-        return kwargs
-    
-    def create_reward(self, **kwargs):
-        return {'id': '1', **kwargs}
-    
-    def update_reward(self, reward_id, **kwargs):
-        return {'id': reward_id, **kwargs}
-    
-    def delete_reward(self, reward_id):
-        return True
-    
-    def get_participating_shops_count(self):
-        return 0
-    
-    def get_total_members_count(self):
-        return 0
+router = APIRouter(prefix="/api/v1", tags=["loyalty"])
 
-# dependency to get loyalty service
-def get_loyalty_service():
-    db = MockDBController()
-    return LoyaltyService(db)
 
-# request/response models
+# ── request models ────────────────────────────────────────────────────────────
+
 class RedeemRequest(BaseModel):
-    reward_id: str
+    points: int
+    shop_id: str
+    points_type: str = "global"  # "global" | "shop"
 
 class LoyaltySettingsUpdate(BaseModel):
     points_per_dollar: int
     participates_in_global_loyalty: bool
+    bonus_multiplier: Optional[float] = 1.0
+    bonus_active: Optional[bool] = False
 
 class RewardCreate(BaseModel):
     name: str
@@ -96,130 +36,269 @@ class RewardUpdate(BaseModel):
     points_required: Optional[int] = None
     is_active: Optional[bool] = None
 
-# customer endpoints
+
+# ── customer endpoints ────────────────────────────────────────────────────────
 
 @router.get("/loyalty/balances")
-async def get_balances(user_id: str = "mock_user", 
-                      service: LoyaltyService = Depends(get_loyalty_service)):
-    """Get all user's loyalty balances (per shop + global)"""
-    balances = service.get_user_balances(user_id)
-    return {"balances": balances}
+async def get_balances(user: dict = Depends(require_auth())):
+    """Get the current user's global + all shop point balances."""
+    customer_id = user.get("sub")
+    db = get_supabase()
 
-@router.get("/loyalty/balances/{shop_id}")
-async def get_balance(shop_id: str, 
-                     user_id: str = "mock_user",
-                     service: LoyaltyService = Depends(get_loyalty_service)):
-    """Get balance at specific shop"""
-    balance = service.get_balance(user_id, shop_id)
-    return {"shop_id": shop_id, "points": balance}
+    global_resp = (
+        db.get_service_client()
+        .table("customer_global_points")
+        .select("*")
+        .eq("customer_id", customer_id)
+        .limit(1)
+        .execute()
+    )
 
-@router.get("/loyalty/transactions")
-async def get_transactions(user_id: str = "mock_user",
-                          limit: int = 50,
-                          service: LoyaltyService = Depends(get_loyalty_service)):
-    """Get transaction history"""
-    transactions = service.get_transaction_history(user_id, limit)
-    return {"transactions": transactions}
+    shop_resp = (
+        db.get_service_client()
+        .table("customer_shop_points")
+        .select("*, shops(name, logo_url)")
+        .eq("customer_id", customer_id)
+        .execute()
+    )
 
-@router.get("/loyalty/rewards")
-async def get_available_rewards(user_id: str = "mock_user",
-                               service: LoyaltyService = Depends(get_loyalty_service)):
-    """Get available rewards (all shops user has points at)"""
-    rewards = service.get_available_rewards(user_id)
-    return {"rewards": rewards}
-
-@router.post("/loyalty/redeem")
-async def redeem_reward(request: RedeemRequest,
-                       user_id: str = "mock_user",
-                       service: LoyaltyService = Depends(get_loyalty_service)):
-    """Redeem points for reward"""
-    try:
-        result = service.redeem_reward(user_id, request.reward_id)
-        return result
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-# shop owner endpoints
-
-@router.get("/shops/{shop_id}/loyalty/settings")
-async def get_loyalty_settings(shop_id: str):
-    """Get loyalty settings for a shop"""
-    # mock implementation - replace with actual db query
     return {
-        "shop_id": shop_id,
-        "points_per_dollar": 10,
-        "participates_in_global_loyalty": True
+        "global": global_resp.data[0] if global_resp.data else {"current_balance": 0, "total_earned": 0},
+        "shops": shop_resp.data or [],
     }
 
+
+@router.get("/loyalty/balances/{shop_id}")
+async def get_shop_balance(shop_id: str, user: dict = Depends(require_auth())):
+    """Get balance at a specific shop."""
+    customer_id = user.get("sub")
+    db = get_supabase()
+
+    resp = (
+        db.get_service_client()
+        .table("customer_shop_points")
+        .select("*")
+        .eq("customer_id", customer_id)
+        .eq("shop_id", shop_id)
+        .limit(1)
+        .execute()
+    )
+
+    return {
+        "shop_id": shop_id,
+        "balance": resp.data[0] if resp.data else {"current_balance": 0, "total_earned": 0},
+    }
+
+
+@router.get("/loyalty/transactions")
+async def get_transactions(
+    limit: int = 50,
+    user: dict = Depends(require_auth()),
+):
+    """Get the current user's points transaction history."""
+    customer_id = user.get("sub")
+    db = get_supabase()
+
+    resp = (
+        db.get_service_client()
+        .table("points_transactions")
+        .select("*, shops(name)")
+        .eq("customer_id", customer_id)
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+
+    return {"transactions": resp.data or []}
+
+
+@router.post("/loyalty/redeem")
+async def redeem_points(request: RedeemRequest, user: dict = Depends(require_auth())):
+    """Redeem points for a discount."""
+    customer_id = user.get("sub")
+    db = get_supabase()
+
+    if request.points <= 0:
+        raise HTTPException(status_code=400, detail="Points must be > 0")
+
+    table = "customer_global_points" if request.points_type == "global" else "customer_shop_points"
+
+    # Check balance
+    q = (
+        db.get_service_client()
+        .table(table)
+        .select("*")
+        .eq("customer_id", customer_id)
+    )
+    if request.points_type == "shop":
+        q = q.eq("shop_id", request.shop_id)
+    balance_resp = q.limit(1).execute()
+    balance_row = balance_resp.data[0] if balance_resp.data else None
+
+    current_balance = balance_row["current_balance"] if balance_row else 0
+    if current_balance < request.points:
+        raise HTTPException(status_code=400, detail="Insufficient points balance")
+
+    discount_amount = round(request.points * 0.01, 2)  # 100 points = $1
+
+    # Deduct balance
+    new_balance = current_balance - request.points
+    upd = (
+        db.get_service_client()
+        .table(table)
+        .update({
+            "current_balance": new_balance,
+            "total_spent": (balance_row.get("total_spent") or 0) + request.points,
+        })
+        .eq("customer_id", customer_id)
+    )
+    if request.points_type == "shop":
+        upd = upd.eq("shop_id", request.shop_id)
+    upd.execute()
+
+    # Record transaction
+    db.get_service_client().table("points_transactions").insert({
+        "customer_id":   customer_id,
+        "shop_id":       request.shop_id,
+        "type":          "redeemed",
+        "points_type":   request.points_type,
+        "amount":        -request.points,
+        "balance_after": new_balance,
+        "description":   f"Redeemed {request.points} points for ${discount_amount:.2f} off",
+    }).execute()
+
+    return {
+        "success": True,
+        "points_redeemed": request.points,
+        "discount_amount": discount_amount,
+        "new_balance": new_balance,
+    }
+
+
+# ── shop owner endpoints ──────────────────────────────────────────────────────
+
+@router.get("/shops/{shop_id}/loyalty/settings")
+async def get_loyalty_settings(shop_id: str, user: dict = Depends(require_auth())):
+    """Get loyalty settings for a shop."""
+    db = get_supabase()
+    resp = (
+        db.get_service_client()
+        .table("shop_loyalty_settings")
+        .select("*")
+        .eq("shop_id", shop_id)
+        .limit(1)
+        .execute()
+    )
+    if resp.data:
+        return resp.data[0]
+    # defaults if not configured yet
+    return {
+        "shop_id": shop_id,
+        "use_global_system": True,
+        "points_per_dollar": 5,
+        "bonus_multiplier": 1.0,
+        "bonus_active": False,
+    }
+
+
 @router.put("/shops/{shop_id}/loyalty/settings")
-async def update_loyalty_settings(shop_id: str,
-                                 settings: LoyaltySettingsUpdate,
-                                 service: LoyaltyService = Depends(get_loyalty_service)):
-    """Update loyalty settings (points per $, global opt-in)"""
-    result = service.update_shop_settings(
-        shop_id=shop_id,
-        points_per_dollar=settings.points_per_dollar,
-        participates_in_global=settings.participates_in_global_loyalty
+async def update_loyalty_settings(
+    shop_id: str,
+    settings: LoyaltySettingsUpdate,
+    user: dict = Depends(require_auth()),
+):
+    """Update loyalty settings for a shop (shop owner only)."""
+    db = get_supabase()
+
+    payload = {
+        "shop_id":       shop_id,
+        "points_per_dollar": settings.points_per_dollar,
+        "use_global_system": settings.participates_in_global_loyalty,
+        "bonus_multiplier": settings.bonus_multiplier,
+        "bonus_active":  settings.bonus_active,
+    }
+
+    existing = (
+        db.get_service_client()
+        .table("shop_loyalty_settings")
+        .select("id")
+        .eq("shop_id", shop_id)
+        .limit(1)
+        .execute()
     )
-    return result
 
-@router.get("/shops/{shop_id}/loyalty/rewards")
-async def get_shop_rewards(shop_id: str,
-                          service: LoyaltyService = Depends(get_loyalty_service)):
-    """Get shop's rewards"""
-    # mock implementation
-    return {"rewards": []}
+    if existing.data:
+        db.get_service_client().table("shop_loyalty_settings").update(payload).eq("shop_id", shop_id).execute()
+    else:
+        db.get_service_client().table("shop_loyalty_settings").insert(payload).execute()
 
-@router.post("/shops/{shop_id}/loyalty/rewards")
-async def create_shop_reward(shop_id: str,
-                            reward: RewardCreate,
-                            service: LoyaltyService = Depends(get_loyalty_service)):
-    """Create reward"""
-    result = service.create_reward(
-        shop_id=shop_id,
-        name=reward.name,
-        description=reward.description or "",
-        points_required=reward.points_required
-    )
-    return result
+    return {"success": True, **payload}
 
-@router.put("/shops/{shop_id}/loyalty/rewards/{reward_id}")
-async def update_shop_reward(shop_id: str,
-                            reward_id: str,
-                            reward: RewardUpdate,
-                            service: LoyaltyService = Depends(get_loyalty_service)):
-    """Update reward"""
-    update_data = {k: v for k, v in reward.dict().items() if v is not None}
-    result = service.update_reward(reward_id, **update_data)
-    return result
-
-@router.delete("/shops/{shop_id}/loyalty/rewards/{reward_id}")
-async def delete_shop_reward(shop_id: str,
-                            reward_id: str,
-                            service: LoyaltyService = Depends(get_loyalty_service)):
-    """Delete reward"""
-    success = service.delete_reward(reward_id)
-    if success:
-        return {"message": "Reward deleted"}
-    raise HTTPException(status_code=404, detail="Reward not found")
 
 @router.get("/shops/{shop_id}/loyalty/stats")
-async def get_shop_loyalty_stats(shop_id: str,
-                                service: LoyaltyService = Depends(get_loyalty_service)):
-    """Loyalty program stats for shop"""
-    stats = service.get_shop_loyalty_stats(shop_id)
-    return stats
+async def get_shop_loyalty_stats(shop_id: str, user: dict = Depends(require_auth())):
+    """Loyalty stats for a shop dashboard."""
+    db = get_supabase()
 
-# admin endpoints
+    members_resp = (
+        db.get_service_client()
+        .table("customer_shop_points")
+        .select("customer_id", count="exact")
+        .eq("shop_id", shop_id)
+        .execute()
+    )
+
+    txn_resp = (
+        db.get_service_client()
+        .table("points_transactions")
+        .select("amount, type")
+        .eq("shop_id", shop_id)
+        .execute()
+    )
+
+    total_issued   = sum(t["amount"] for t in (txn_resp.data or []) if t["type"] == "earned")
+    total_redeemed = sum(abs(t["amount"]) for t in (txn_resp.data or []) if t["type"] == "redeemed")
+
+    return {
+        "shop_id":        shop_id,
+        "active_members": members_resp.count or 0,
+        "total_issued":   total_issued,
+        "total_redeemed": total_redeemed,
+    }
+
+
+# ── admin endpoints ───────────────────────────────────────────────────────────
 
 @router.get("/admin/loyalty/global-stats")
-async def get_global_stats(service: LoyaltyService = Depends(get_loyalty_service)):
-    """Platform-wide loyalty stats"""
-    stats = service.get_global_stats()
-    return stats
+async def get_global_stats(user: dict = Depends(require_auth())):
+    """Platform-wide loyalty stats."""
+    db = get_supabase()
+
+    global_resp = (
+        db.get_service_client()
+        .table("customer_global_points")
+        .select("customer_id", count="exact")
+        .execute()
+    )
+
+    txn_resp = (
+        db.get_service_client()
+        .table("points_transactions")
+        .select("amount, type, points_type")
+        .execute()
+    )
+
+    total_issued   = sum(t["amount"] for t in (txn_resp.data or []) if t["type"] == "earned")
+    total_redeemed = sum(abs(t["amount"]) for t in (txn_resp.data or []) if t["type"] == "redeemed")
+
+    return {
+        "total_members":  global_resp.count or 0,
+        "total_issued":   total_issued,
+        "total_redeemed": total_redeemed,
+    }
+
 
 @router.put("/admin/loyalty/global-settings")
-async def update_global_settings():
-    """Global loyalty settings (placeholder)"""
-    # this would update platform-wide settings like global points rate
+async def update_global_settings(user: dict = Depends(require_auth())):
+    """Placeholder — global loyalty settings managed via Supabase for now."""
     return {"message": "Global settings updated"}

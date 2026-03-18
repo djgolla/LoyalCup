@@ -1,204 +1,71 @@
-// cart screen - STARBUCKS STYLE + LOYALTY REDEMPTION
-// universal-coffee-shop/app/cart.js
+// cart screen — review items & points, then go to checkout
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, Alert } from 'react-native';
+import {
+  StyleSheet, Text, View, TouchableOpacity,
+  ScrollView, Image, Alert
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCart } from '../context/CartContext';
 import { supabase } from '../lib/supabase';
-import { getGlobalPoints, getShopPoints, redeemPoints } from '../services/loyaltyService';
-import { apiClient } from '../services/apiClient';
+import { getGlobalPoints } from '../services/loyaltyService';
 
 export default function CartScreen() {
   const router = useRouter();
   const { cart, removeItem, clearCart, updateQuantity } = useCart();
-  const [user, setUser] = useState(null);
   const [globalPoints, setGlobalPoints] = useState(null);
-  const [shopPoints, setShopPoints] = useState({});
-  const [pointsToRedeem, setPointsToRedeem] = useState(0);
-  const [showPointsSelector, setShowPointsSelector] = useState(false);
 
   // Group items by shop
   const itemsByShop = cart.reduce((acc, item) => {
-    const shopName = item.shopName || 'Unknown Shop';
     const shopId = item.shopId;
-    if (!acc[shopId]) {
-      acc[shopId] = { shopName, shopId, items: [] };
-    }
+    const shopName = item.shopName || 'Unknown Shop';
+    if (!acc[shopId]) acc[shopId] = { shopName, shopId, items: [] };
     acc[shopId].items.push(item);
     return acc;
   }, {});
 
   useEffect(() => {
-    loadUserAndPoints();
+    loadPoints();
   }, []);
 
-  const loadUserAndPoints = async () => {
+  const loadPoints = async () => {
     try {
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (currentUser) {
-        setUser(currentUser);
-
-        const global = await getGlobalPoints(currentUser.id);
-        setGlobalPoints(global);
-
-        const shopIds = Object.keys(itemsByShop);
-        const shopPointsData = {};
-        for (const shopId of shopIds) {
-          const points = await getShopPoints(currentUser.id, shopId);
-          shopPointsData[shopId] = points;
-        }
-        setShopPoints(shopPointsData);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const pts = await getGlobalPoints(user.id);
+        setGlobalPoints(pts);
       }
-    } catch (error) {
-      console.error('Failed to load points:', error);
+    } catch (e) {
+      console.error('Failed to load points:', e);
     }
   };
 
-  const calculateTotals = () => {
-    const subtotal = cart.reduce((sum, item) => {
-      const price = parseFloat(item.price) || 0;
-      const quantity = item.quantity || 1;
-      return sum + (price * quantity);
-    }, 0);
-
-    const tax = subtotal * 0.08;
-    const serviceFee = 0.99;
-    const discount = pointsToRedeem * 0.01;
-    const total = Math.max(0, subtotal + tax + serviceFee - discount);
-
-    return { subtotal, tax, serviceFee, discount, total };
-  };
-
-  const handleCheckout = async () => {
-    if (cart.length === 0) {
-      Alert.alert('Empty Cart', 'Add some items to your cart first!');
-      return;
-    }
-
-    try {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        Alert.alert('Error', 'You must be logged in to place an order');
-        return;
-      }
-
-      // Get a fresh Supabase JWT for the backend
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) {
-        Alert.alert('Error', 'Session expired — please log in again');
-        return;
-      }
-
-      // Process each shop's order through the backend
-      // (backend will push each to Square automatically)
-      const shopOrders = Object.values(itemsByShop);
-      const placedOrders = [];
-
-      for (const { shopId, items } of shopOrders) {
-        // Apply points redemption if selected (deduct from loyalty service first)
-        let discount = 0;
-        if (pointsToRedeem > 0) {
-          const redeemResult = await redeemPoints(
-            user.id,
-            shopId,
-            pointsToRedeem,
-            'global'
-          );
-          if (redeemResult.success) {
-            discount = redeemResult.discountAmount;
-          }
-        }
-
-        // Build items payload for the backend
-        const orderItems = items.map(item => ({
-          menu_item_id: item.id.includes(':') ? item.id.split(':')[1] : item.id,
-          quantity: item.quantity || 1,
-          base_price: parseFloat(item.price) || 0,
-          customizations: item.customizations || [],
-        }));
-
-        // POST to backend — this creates the Supabase order AND pushes to Square
-        const response = await apiClient.post(
-          '/api/v1/orders',
-          {
-            shop_id: shopId,
-            items: orderItems,
-            customer_note: null,
-          },
-          token
-        );
-
-        placedOrders.push(response.order);
-      }
-
-      clearCart();
-      setPointsToRedeem(0);
-
-      const message = pointsToRedeem > 0
-        ? `Order placed! You saved $${(pointsToRedeem * 0.01).toFixed(2)} with points! Your order is on its way to the shop.`
-        : 'Order placed! Your order has been sent to the shop. You earned loyalty points!';
-
-      Alert.alert(
-        'Order Placed! 🎉',
-        message,
-        [
-          {
-            text: 'View Rewards',
-            onPress: () => router.push('/rewards'),
-          },
-          {
-            text: 'Continue Shopping',
-            onPress: () => router.back(),
-          },
-        ]
-      );
-    } catch (error) {
-      console.error('Checkout error:', error);
-      Alert.alert('Error', error.message || 'Failed to place order. Please try again.');
-    }
-  };
-
-  const handleRemoveItem = (itemId) => {
-    Alert.alert(
-      'Remove Item',
-      'Remove this item from cart?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: () => removeItem(itemId) }
-      ]
-    );
-  };
+  const subtotal = cart.reduce((sum, item) => {
+    return sum + (parseFloat(item.price) || 0) * (item.quantity || 1);
+  }, 0);
 
   const handleUpdateQuantity = (itemId, change) => {
     const item = cart.find(i => i.id === itemId);
-    if (item) {
-      const newQuantity = (item.quantity || 1) + change;
-      if (newQuantity > 0) {
-        updateQuantity(itemId, newQuantity);
-      } else {
-        handleRemoveItem(itemId);
-      }
+    if (!item) return;
+    const newQty = (item.quantity || 1) + change;
+    if (newQty <= 0) {
+      Alert.alert('Remove Item', 'Remove this item from cart?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => removeItem(itemId) },
+      ]);
+    } else {
+      updateQuantity(itemId, newQty);
     }
   };
 
-  const getAvailablePoints = () => globalPoints?.current_balance || 0;
-
-  const getMaxRedeemablePoints = () => {
-    const available = getAvailablePoints();
-    const { total } = calculateTotals();
-    const maxPointsForOrder = Math.floor(total * 100);
-    return Math.min(available, maxPointsForOrder);
+  const handleCheckout = () => {
+    if (cart.length === 0) {
+      Alert.alert('Empty Cart', 'Add some items first!');
+      return;
+    }
+    router.push('/checkout');
   };
-
-  const handleSelectPoints = (points) => {
-    const max = getMaxRedeemablePoints();
-    setPointsToRedeem(Math.min(Math.max(0, points), max));
-  };
-
-  const { subtotal, tax, serviceFee, discount, total } = calculateTotals();
 
   if (cart.length === 0) {
     return (
@@ -234,19 +101,18 @@ export default function CartScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
-
+      <ScrollView style={styles.scrollView} contentContainerStyle={{ paddingBottom: 200 }}>
         {Object.values(itemsByShop).map(({ shopId, shopName, items }) => (
           <View key={shopId} style={styles.shopSection}>
             <Text style={styles.shopName}>{shopName}</Text>
             {items.map((item) => (
               <View key={item.id} style={styles.cartItem}>
-                {item.image_url && (
-                  <Image source={{ uri: item.image_url }} style={styles.itemImage} />
-                )}
+                {item.image_url
+                  ? <Image source={{ uri: item.image_url }} style={styles.itemImage} />
+                  : <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
+                      <Feather name="coffee" size={24} color="#CCC" />
+                    </View>
+                }
                 <View style={styles.itemDetails}>
                   <Text style={styles.itemName}>{item.name}</Text>
                   <Text style={styles.itemPrice}>
@@ -266,99 +132,31 @@ export default function CartScreen() {
                     </TouchableOpacity>
                   </View>
                 </View>
-                <TouchableOpacity
-                  style={styles.removeButton}
-                  onPress={() => handleRemoveItem(item.id)}>
-                  <Feather name="trash-2" size={18} color="#FF3B30" />
-                </TouchableOpacity>
               </View>
             ))}
           </View>
         ))}
 
-        <View style={{ height: 300 }} />
-      </ScrollView>
-
-      <View style={styles.checkoutCard}>
-        {getAvailablePoints() > 0 && (
-          <TouchableOpacity
-            style={styles.pointsRedemption}
-            onPress={() => setShowPointsSelector(!showPointsSelector)}>
-            <View style={styles.pointsRedemptionLeft}>
-              <Feather name="award" size={20} color="#00704A" />
-              <View>
-                <Text style={styles.pointsRedemptionTitle}>Use Points</Text>
-                <Text style={styles.pointsRedemptionSubtitle}>
-                  {pointsToRedeem > 0
-                    ? `${pointsToRedeem} points (-$${discount.toFixed(2)})`
-                    : `${getAvailablePoints()} available`}
-                </Text>
-              </View>
-            </View>
-            <Feather name={showPointsSelector ? 'chevron-up' : 'chevron-down'} size={20} color="#666" />
-          </TouchableOpacity>
-        )}
-
-        {showPointsSelector && (
-          <View style={styles.pointsSelector}>
-            <View style={styles.pointsSelectorHeader}>
-              <Text style={styles.pointsSelectorTitle}>Redeem Points</Text>
-              <TouchableOpacity onPress={() => handleSelectPoints(0)}>
-                <Text style={styles.pointsClearButton}>Clear</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.pointsSliderContainer}>
-              {[100, 250, 500].map(n => (
-                <TouchableOpacity
-                  key={n}
-                  style={styles.pointsQuickButton}
-                  onPress={() => handleSelectPoints(Math.min(n, getMaxRedeemablePoints()))}>
-                  <Text style={styles.pointsQuickButtonText}>{n}</Text>
-                </TouchableOpacity>
-              ))}
-              <TouchableOpacity
-                style={styles.pointsQuickButton}
-                onPress={() => handleSelectPoints(getMaxRedeemablePoints())}>
-                <Text style={styles.pointsQuickButtonText}>Max</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.pointsDiscountPreview}>
-              {pointsToRedeem} points = ${discount.toFixed(2)} off
+        {/* Points teaser */}
+        {globalPoints && globalPoints.current_balance > 0 && (
+          <View style={styles.pointsTeaser}>
+            <Feather name="award" size={18} color="#00704A" />
+            <Text style={styles.pointsTeaserText}>
+              You have {globalPoints.current_balance} points — redeem them at checkout!
             </Text>
           </View>
         )}
+      </ScrollView>
 
-        <View style={styles.priceBreakdown}>
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Subtotal</Text>
-            <Text style={styles.priceValue}>${subtotal.toFixed(2)}</Text>
-          </View>
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Tax (8%)</Text>
-            <Text style={styles.priceValue}>${tax.toFixed(2)}</Text>
-          </View>
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Service Fee</Text>
-            <Text style={styles.priceValue}>${serviceFee.toFixed(2)}</Text>
-          </View>
-          {pointsToRedeem > 0 && (
-            <View style={styles.priceRow}>
-              <Text style={[styles.priceLabel, styles.discountLabel]}>Points Discount</Text>
-              <Text style={[styles.priceValue, styles.discountValue]}>-${discount.toFixed(2)}</Text>
-            </View>
-          )}
-          <View style={styles.divider} />
-          <View style={styles.priceRow}>
-            <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValue}>${total.toFixed(2)}</Text>
-          </View>
+      {/* Bottom bar */}
+      <View style={styles.bottomBar}>
+        <View style={styles.subtotalRow}>
+          <Text style={styles.subtotalLabel}>Subtotal</Text>
+          <Text style={styles.subtotalValue}>${subtotal.toFixed(2)}</Text>
         </View>
-
-        <TouchableOpacity
-          style={styles.checkoutButton}
-          onPress={handleCheckout}
-          activeOpacity={0.8}>
-          <Text style={styles.checkoutButtonText}>Place Order</Text>
+        <Text style={styles.taxNote}>Tax & total calculated at checkout</Text>
+        <TouchableOpacity style={styles.checkoutButton} onPress={handleCheckout}>
+          <Text style={styles.checkoutButtonText}>Proceed to Checkout</Text>
           <Feather name="arrow-right" size={20} color="#FFF" />
         </TouchableOpacity>
       </View>
@@ -369,16 +167,11 @@ export default function CartScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FAFAFA' },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 20, paddingVertical: 16,
+    backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
   },
-  headerButton: { padding: 8 },
+  headerButton: { padding: 8, width: 40 },
   headerTitle: { fontSize: 20, fontWeight: '700', color: '#000' },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
   emptyTitle: { fontSize: 22, fontWeight: '700', color: '#000', marginTop: 20, marginBottom: 8 },
@@ -386,125 +179,52 @@ const styles = StyleSheet.create({
   shopButton: { backgroundColor: '#00704A', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 25 },
   shopButtonText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
   scrollView: { flex: 1 },
-  scrollContent: { paddingBottom: 20 },
   shopSection: {
-    marginBottom: 16,
-    backgroundColor: '#FFF',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    backgroundColor: '#FFF', marginBottom: 8,
+    paddingVertical: 16, paddingHorizontal: 16,
+    borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
   },
-  shopName: { fontSize: 16, fontWeight: '700', color: '#00704A', marginBottom: 12 },
+  shopName: { fontSize: 15, fontWeight: '700', color: '#00704A', marginBottom: 12 },
   cartItem: {
-    flexDirection: 'row',
-    marginBottom: 12,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F5F5F5',
+    flexDirection: 'row', marginBottom: 12, paddingBottom: 12,
+    borderBottomWidth: 1, borderBottomColor: '#F5F5F5',
   },
   itemImage: { width: 70, height: 70, borderRadius: 8, backgroundColor: '#F0F0F0' },
+  itemImagePlaceholder: { justifyContent: 'center', alignItems: 'center' },
   itemDetails: { flex: 1, marginLeft: 12, justifyContent: 'space-between' },
   itemName: { fontSize: 16, fontWeight: '600', color: '#000', marginBottom: 4 },
   itemPrice: { fontSize: 16, fontWeight: 'bold', color: '#00704A', marginBottom: 8 },
   quantityContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    borderRadius: 8,
-    paddingHorizontal: 4,
-    paddingVertical: 4,
-    alignSelf: 'flex-start',
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#F5F5F5', borderRadius: 8,
+    paddingHorizontal: 4, paddingVertical: 4, alignSelf: 'flex-start',
   },
   quantityButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    backgroundColor: '#FFF',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 28, height: 28, borderRadius: 6,
+    backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center',
   },
   quantityText: { fontSize: 16, fontWeight: '600', color: '#000', marginHorizontal: 16 },
-  removeButton: { padding: 8, justifyContent: 'center', alignItems: 'center' },
-  checkoutCard: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#FFF',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 30,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 10,
+  pointsTeaser: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    margin: 16, padding: 14,
+    backgroundColor: '#E8F5E9', borderRadius: 12,
   },
-  pointsRedemption: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: '#E8F5E9',
-    borderRadius: 12,
-    marginBottom: 12,
+  pointsTeaserText: { flex: 1, fontSize: 14, color: '#00704A', fontWeight: '500' },
+  bottomBar: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    backgroundColor: '#FFF', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 30,
+    borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08, shadowRadius: 8, elevation: 10,
   },
-  pointsRedemptionLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  pointsRedemptionTitle: { fontSize: 16, fontWeight: '600', color: '#00704A' },
-  pointsRedemptionSubtitle: { fontSize: 13, color: '#666', marginTop: 2 },
-  pointsSelector: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: '#F9F9F9',
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  pointsSelectorHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  pointsSelectorTitle: { fontSize: 16, fontWeight: '600', color: '#000' },
-  pointsClearButton: { fontSize: 14, color: '#FF3B30', fontWeight: '600' },
-  pointsSliderContainer: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  pointsQuickButton: {
-    flex: 1,
-    paddingVertical: 10,
-    backgroundColor: '#FFF',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#00704A',
-    alignItems: 'center',
-  },
-  pointsQuickButtonText: { fontSize: 14, fontWeight: '600', color: '#00704A' },
-  pointsDiscountPreview: { fontSize: 14, color: '#00704A', fontWeight: '600', textAlign: 'center' },
-  priceBreakdown: { marginBottom: 16 },
-  priceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  priceLabel: { fontSize: 15, color: '#666' },
-  priceValue: { fontSize: 15, fontWeight: '600', color: '#000' },
-  discountLabel: { color: '#00704A', fontWeight: '600' },
-  discountValue: { color: '#00704A', fontWeight: 'bold' },
-  divider: { height: 1, backgroundColor: '#E0E0E0', marginVertical: 12 },
-  totalLabel: { fontSize: 18, fontWeight: '700', color: '#000' },
-  totalValue: { fontSize: 22, fontWeight: 'bold', color: '#00704A' },
+  subtotalRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+  subtotalLabel: { fontSize: 16, color: '#666' },
+  subtotalValue: { fontSize: 16, fontWeight: '700', color: '#000' },
+  taxNote: { fontSize: 12, color: '#999', marginBottom: 14 },
   checkoutButton: {
-    backgroundColor: '#00704A',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 18,
-    borderRadius: 12,
-    gap: 8,
+    backgroundColor: '#00704A', flexDirection: 'row',
+    justifyContent: 'center', alignItems: 'center',
+    paddingVertical: 18, borderRadius: 12, gap: 8,
   },
   checkoutButtonText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
 });
