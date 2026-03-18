@@ -1,6 +1,6 @@
-from typing import List
+from typing import List, Union
 from pydantic_settings import BaseSettings
-from pydantic import Field, ValidationError
+from pydantic import Field, ValidationError, field_validator
 
 
 class Settings(BaseSettings):
@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     stripe_secret_key: str = Field(default="")
     stripe_publishable_key: str = Field(default="")
     stripe_webhook_secret: str = Field(default="")
-    stripe_price_id: str = Field(default="")    # price_xxxxx for your $150/mo product
+    stripe_price_id: str = Field(default="")
 
     # App
     frontend_url: str = Field(default="http://localhost:5173")
@@ -42,20 +42,4 @@ class Settings(BaseSettings):
 
     # Email
     sendgrid_api_key: str = Field(default="")
-    sendgrid_from_email: str = Field(default="noreply@loyalcup.com")
-
-    # Cache
-    redis_url: str = Field(default="redis://localhost:6379")
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-
-
-try:
-    settings = Settings()
-except ValidationError as e:
-    print("FATAL: .env CONFIGURATION INVALID")
-    print(e)
-    raise SystemExit(2)
+    sendgrid_from_email
