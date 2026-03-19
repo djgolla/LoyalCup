@@ -25,7 +25,6 @@ const MenuItemGridCard = ({ item, onEdit, onDelete, onToggle, onToggleStock, del
           : 'border-gray-200 dark:border-neutral-800 opacity-60 hover:border-gray-300'
       }`}
     >
-      {/* Status badges top-right */}
       <div className="absolute top-2 right-2 z-10 flex flex-col gap-1 items-end">
         {item.is_out_of_stock && (
           <span className="px-2 py-0.5 bg-orange-500 text-white text-xs font-bold rounded-full shadow">
@@ -44,7 +43,6 @@ const MenuItemGridCard = ({ item, onEdit, onDelete, onToggle, onToggleStock, del
         </motion.button>
       </div>
 
-      {/* Image */}
       {item.image_url ? (
         <div className="h-40 overflow-hidden bg-gray-100 dark:bg-neutral-800">
           <img src={item.image_url} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -117,7 +115,6 @@ const MenuItemListRow = ({ item, onEdit, onDelete, onToggle, onToggleStock, dela
           : 'border-gray-200 dark:border-neutral-800 opacity-60'
       }`}
     >
-      {/* Thumbnail — always square */}
       <div className="w-16 h-16 rounded-xl overflow-hidden shrink-0 bg-gray-100 dark:bg-neutral-800">
         {item.image_url
           ? <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
@@ -230,7 +227,6 @@ const MenuItemModal = ({ item, onClose, onSave, categories, modifierGroups }) =>
   const handleDrag = (e) => { e.preventDefault(); e.stopPropagation(); setDragActive(e.type === 'dragenter' || e.type === 'dragover'); };
   const handleDrop = (e) => { e.preventDefault(); e.stopPropagation(); setDragActive(false); if (e.dataTransfer.files?.[0]) handleImageUpload(e.dataTransfer.files[0]); };
 
-  // Group modifiers by category for dropdown display
   const attachedGroups = modifierGroups.filter(g => (formData.modifier_group_ids || []).includes(g.id));
   const unattachedGroups = modifierGroups.filter(g => !(formData.modifier_group_ids || []).includes(g.id));
 
@@ -254,14 +250,12 @@ const MenuItemModal = ({ item, onClose, onSave, categories, modifierGroups }) =>
         </div>
 
         <div className="overflow-y-auto flex-1 p-6 space-y-5">
-          {/* Image — fixed aspect ratio 16:9 preview */}
           <div>
             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1.5">Item Image</label>
             <div onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}
               className={`border-2 border-dashed rounded-2xl overflow-hidden transition ${dragActive ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20' : 'border-gray-300 dark:border-neutral-700'}`}>
               {formData.image_url ? (
                 <div className="relative">
-                  {/* Fixed 16:9 container so image never changes modal height unexpectedly */}
                   <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
                     <img src={formData.image_url} alt="Preview" className="absolute inset-0 w-full h-full object-cover rounded-xl" />
                   </div>
@@ -283,7 +277,6 @@ const MenuItemModal = ({ item, onClose, onSave, categories, modifierGroups }) =>
             </div>
           </div>
 
-          {/* Name + description */}
           <div className="space-y-3">
             <div>
               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1.5">Item Name *</label>
@@ -299,7 +292,6 @@ const MenuItemModal = ({ item, onClose, onSave, categories, modifierGroups }) =>
             </div>
           </div>
 
-          {/* Price + category */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1.5">Base Price *</label>
@@ -321,7 +313,6 @@ const MenuItemModal = ({ item, onClose, onSave, categories, modifierGroups }) =>
             </div>
           </div>
 
-          {/* Modifier groups — accordion dropdown per group */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-sm font-bold text-gray-700 dark:text-gray-300 flex items-center gap-2">
@@ -336,7 +327,6 @@ const MenuItemModal = ({ item, onClose, onSave, categories, modifierGroups }) =>
               </div>
             ) : (
               <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-                {/* Attached groups first */}
                 {attachedGroups.length > 0 && (
                   <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600 px-1 pb-0.5">Attached</p>
                 )}
@@ -353,7 +343,6 @@ const MenuItemModal = ({ item, onClose, onSave, categories, modifierGroups }) =>
             )}
           </div>
 
-          {/* Status toggles */}
           <div className="grid grid-cols-2 gap-3">
             <div className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer select-none transition ${formData.is_available ? 'border-green-200 bg-green-50 dark:bg-green-900/10' : 'border-gray-200 dark:border-neutral-700 bg-gray-50 dark:bg-neutral-800'}`}
               onClick={() => setFormData(fd => ({ ...fd, is_available: !fd.is_available }))}>
@@ -394,7 +383,7 @@ const MenuItemModal = ({ item, onClose, onSave, categories, modifierGroups }) =>
   );
 };
 
-// ─── Modifier Group Row (accordion inside modal) ───��──────────────────────────
+// ─── Modifier Group Row ───────────────────────────────────────────────────────
 const ModGroupRow = ({ group, isAttached, expanded, onToggleAttach, onExpand }) => (
   <div className={`rounded-xl border-2 overflow-hidden transition ${isAttached ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/10' : 'border-gray-200 dark:border-neutral-700'}`}>
     <div className="flex items-center gap-3 p-2.5 cursor-pointer" onClick={onToggleAttach}>
@@ -456,7 +445,8 @@ export default function MenuBuilder() {
     setLoading(true);
     try {
       const [catRes, itemRes, groupRes, optRes] = await Promise.all([
-        supabase.from('categories').select('*').eq('shop_id', shopId).order('sort_order', { ascending: true }),
+        // ← 'categories' — the actual table name, with display_order sort
+        supabase.from('categories').select('*').eq('shop_id', shopId).order('display_order', { ascending: true }),
         supabase.from('menu_items').select('*').eq('shop_id', shopId).eq('is_active', true).order('display_order', { ascending: true }).order('created_at', { ascending: false }),
         supabase.from('modifier_groups').select('*').eq('shop_id', shopId).eq('is_active', true),
         supabase.from('modifier_options').select('*').eq('shop_id', shopId).eq('is_active', true),
@@ -554,12 +544,12 @@ export default function MenuBuilder() {
     return matchesSearch && matchesCategory;
   });
 
-  const availableItems = filteredItems.filter(i => i.is_available && !i.is_out_of_stock);
-  const outOfStockItems = filteredItems.filter(i => i.is_out_of_stock);
-  const hiddenItems = filteredItems.filter(i => !i.is_available && !i.is_out_of_stock);
-  const totalItems = menuItems.length;
-  const availableCount = menuItems.filter(i => i.is_available && !i.is_out_of_stock).length;
-  const outOfStockCount = menuItems.filter(i => i.is_out_of_stock).length;
+  const availableItems   = filteredItems.filter(i => i.is_available && !i.is_out_of_stock);
+  const outOfStockItems  = filteredItems.filter(i => i.is_out_of_stock);
+  const hiddenItems      = filteredItems.filter(i => !i.is_available && !i.is_out_of_stock);
+  const totalItems       = menuItems.length;
+  const availableCount   = menuItems.filter(i => i.is_available && !i.is_out_of_stock).length;
+  const outOfStockCount  = menuItems.filter(i => i.is_out_of_stock).length;
 
   if (loading) {
     return (
@@ -587,7 +577,6 @@ export default function MenuBuilder() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
         className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -603,15 +592,14 @@ export default function MenuBuilder() {
         </motion.button>
       </motion.div>
 
-      {/* Stats */}
       {totalItems > 0 && (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}
           className="grid grid-cols-4 gap-3">
           {[
-            { icon: Package, label: 'Total Items', value: totalItems, color: 'from-blue-500 to-blue-600' },
-            { icon: Eye, label: 'Available', value: availableCount, color: 'from-green-500 to-green-600' },
-            { icon: AlertTriangle, label: 'Out of Stock', value: outOfStockCount, color: 'from-orange-400 to-orange-500' },
-            { icon: Layers, label: 'Modifier Groups', value: modifierGroups.length, color: 'from-amber-500 to-orange-500' },
+            { icon: Package,       label: 'Total Items',     value: totalItems,         color: 'from-blue-500 to-blue-600' },
+            { icon: Eye,           label: 'Available',       value: availableCount,     color: 'from-green-500 to-green-600' },
+            { icon: AlertTriangle, label: 'Out of Stock',    value: outOfStockCount,    color: 'from-orange-400 to-orange-500' },
+            { icon: Layers,        label: 'Modifier Groups', value: modifierGroups.length, color: 'from-amber-500 to-orange-500' },
           ].map(({ icon: Icon, label, value, color }) => (
             <div key={label} className="bg-white dark:bg-neutral-900 rounded-2xl p-4 border-2 border-gray-200 dark:border-neutral-800 flex items-center gap-3 shadow-sm">
               <div className={`p-2.5 bg-gradient-to-br ${color} rounded-xl shrink-0`}>
@@ -626,7 +614,6 @@ export default function MenuBuilder() {
         </motion.div>
       )}
 
-      {/* Search + filters */}
       <div className="flex flex-col gap-3">
         <div className="flex gap-3">
           <div className="flex-1 relative">
@@ -662,7 +649,6 @@ export default function MenuBuilder() {
         )}
       </div>
 
-      {/* Items */}
       {filteredItems.length === 0 ? (
         <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-24">
           <Sparkles className="w-20 h-20 text-gray-300 dark:text-neutral-700 mx-auto mb-4" />
