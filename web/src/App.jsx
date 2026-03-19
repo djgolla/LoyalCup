@@ -10,6 +10,7 @@ import AdminLayout from "./layout/AdminLayout";
 // auth components
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import RoleGuard from "./components/auth/RoleGuard";
+import ScrollToTop from "./components/ui/ScrollToTop";
 
 // public pages
 import Home from "./pages/customer/Home";
@@ -78,6 +79,7 @@ export default function App() {
         <AuthProvider>
           <ShopProvider>
             <BrowserRouter>
+              <ScrollToTop />
               <Routes>
                 {/* public pages */}
                 <Route element={<MainLayout />}>
