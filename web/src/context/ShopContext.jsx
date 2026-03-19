@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect, useContext } from "react";
+import { createContext, useState, useEffect, useContext, useRef } from "react";
 import { useAuth } from "./AuthContext";
 import supabase from "../lib/supabase";
 
@@ -9,12 +9,14 @@ export function ShopProvider({ children }) {
   const [shop, setShop] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const loadingRef = useRef(false);
 
   useEffect(() => {
     if (!user) {
       setShop(null);
       setLoading(false);
       setError(null);
+      loadingRef.current = false;
       return;
     }
 
@@ -27,17 +29,21 @@ export function ShopProvider({ children }) {
       setLoading(false);
       setError(null);
     }
-  }, [user]);
+  }, [user?.id, user?.user_metadata?.role]); // ← only re-run on actual identity change, NOT every render
 
   const loadShop = async () => {
+    if (!user) return;
+
+    // Set loading TRUE at the top — prevents the layout from seeing shop=null prematurely
+    setLoading(true);
+    loadingRef.current = true;
+
     try {
       setError(null);
       const userRole = user?.user_metadata?.role || "customer";
 
       if (userRole === "shop_owner" || userRole === "applicant") {
-        // Use maybeSingle() — won't throw 406 if multiple rows exist
-        // Also order by created_at desc so we get the latest shop if dupes exist
-        const { data, error } = await supabase
+        const { data, error: fetchError } = await supabase
           .from("shops")
           .select("*")
           .eq("owner_id", user.id)
@@ -45,30 +51,54 @@ export function ShopProvider({ children }) {
           .limit(1)
           .maybeSingle();
 
-        if (error) throw error;
+        if (fetchError) {
+          // RLS 406 or PGRST116 means no row accessible — treat as no shop, NOT a crash
+          const code = fetchError.code || "";
+          const msg  = fetchError.message || "";
+          if (
+            code === "PGRST116" ||
+            msg.includes("406") ||
+            msg.includes("JSON") ||
+            msg.includes("multiple") ||
+            msg.includes("0 rows")
+          ) {
+            setShop(null);
+          } else {
+            console.error("ShopContext load error:", fetchError);
+            setError(fetchError.message);
+            setShop(null);
+          }
+          return;
+        }
         setShop(data || null);
 
       } else if (userRole === "shop_worker") {
         const shopId = user.user_metadata?.shop_id;
-        if (shopId) {
-          const { data, error } = await supabase
-            .from("shops")
-            .select("*")
-            .eq("id", shopId)
-            .maybeSingle();
-
-          if (error) throw error;
-          setShop(data || null);
-        } else {
+        if (!shopId) {
           setError("No shop assigned to your account");
           setShop(null);
+          return;
         }
+        const { data, error: fetchError } = await supabase
+          .from("shops")
+          .select("*")
+          .eq("id", shopId)
+          .maybeSingle();
+
+        if (fetchError) {
+          console.error("ShopContext worker load error:", fetchError);
+          setShop(null);
+          return;
+        }
+        setShop(data || null);
       }
     } catch (err) {
-      console.error("Failed to load shop:", err);
+      console.error("ShopContext unexpected error:", err);
       setError(err.message || "Failed to load shop");
+      setShop(null);
     } finally {
       setLoading(false);
+      loadingRef.current = false;
     }
   };
 

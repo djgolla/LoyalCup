@@ -2,6 +2,7 @@ import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import ShopOwnerSidebar from '../components/navigation/ShopOwnerSidebar';
 import { useShop } from '../context/ShopContext';
+import { useAuth } from '../context/AuthContext';
 import PageLoader from '../components/ui/PageLoader';
 import { CheckCircle, CreditCard, Zap } from 'lucide-react';
 
@@ -13,6 +14,7 @@ const SETUP_ROUTES = [
 
 export default function ShopOwnerLayout() {
   const { shop, loading } = useShop();
+  const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -20,7 +22,9 @@ export default function ShopOwnerLayout() {
   if (loading) return <PageLoader />;
 
   // ── /subscribe is ALWAYS allowed through regardless of shop state ─────────
-  // This prevents the RLS 406 "no shop yet" boot-loop to /shop-application
+  // Prevents the RLS-lag boot-loop: newly registered applicant navigates here
+  // before ShopContext has finished loading their shop row → without this guard
+  // they get kicked to /shop-application every time.
   if (location.pathname === '/shop-owner/subscribe') {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-neutral-950">
@@ -31,8 +35,14 @@ export default function ShopOwnerLayout() {
     );
   }
 
-  // No shop at all — send to application (subscribe already handled above)
+  // No shop — figure out where to send them
   if (!shop) {
+    const role = user?.user_metadata?.role;
+    // Applicants who lost their shop from RLS → send to subscribe, not application form
+    if (role === 'applicant' || role === 'shop_owner') {
+      return <Navigate to="/shop-owner/subscribe" replace />;
+    }
+    // Truly no account — send to application
     return <Navigate to="/shop-application" replace />;
   }
 
