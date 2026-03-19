@@ -21,6 +21,7 @@ from app.routes import (
     menu,
     orders,
     loyalty,
+    reviews,
     admin,
     payments,
     billing,
@@ -30,6 +31,7 @@ from app.routes import (
     pos_square_set_location,
 )
 from app.routes import pos_sync
+from app.routes import pos_square_webhook   # ← NEW
 
 setup_logging(level="INFO" if settings.environment == "production" else "DEBUG")
 logger = get_logger(__name__)
@@ -52,7 +54,6 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
 )
 
-# ── CORS first — must be before everything else ─────────────────────────────
 CORS_ORIGINS = [
     "https://loyalcupapp.com",
     "https://www.loyalcupapp.com",
@@ -79,7 +80,6 @@ async def log_requests(request: Request, call_next):
     try:
         response = await call_next(request)
     except Exception as exc:
-        # Unhandled exception — return CORS-safe 500 so browser sees the error not a CORS block
         origin = request.headers.get("origin", "")
         headers = {}
         if origin in CORS_ORIGINS:
@@ -96,7 +96,6 @@ async def log_requests(request: Request, call_next):
     return response
 
 
-# ---- ROUTERS ----
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(shops.router)
@@ -111,6 +110,8 @@ app.include_router(pos_connect.router)
 app.include_router(pos_square_callback.router)
 app.include_router(pos_square_set_location.router)
 app.include_router(pos_sync.router)
+app.include_router(pos_square_webhook.router)   # ← NEW
+app.include_router(reviews.router)
 
 
 @app.get("/")
