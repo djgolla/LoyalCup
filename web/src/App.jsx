@@ -33,6 +33,7 @@ import Workers from "./pages/shop-owner/Workers";
 import ShopSettings from "./pages/shop-owner/ShopSettings";
 import ShopSetup from "./pages/shop-owner/ShopSetup";
 import ConnectSquarePage from "./pages/shop-owner/ConnectSquarePage";
+import Reviews from './pages/shop-owner/Reviews';
 
 // admin pages
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -122,6 +123,7 @@ export default function App() {
                   <Route path="/shop-owner/settings" element={<ShopSettings />} />
                   <Route path="/shop-owner/setup" element={<ShopSetup />} />
                   <Route path="/shop-owner/connect-square" element={<ConnectSquarePage />} />
+                  <Route path="/shop-owner/reviews" element={<Reviews />} />
                 </Route>
 
                 {/* admin pages */}

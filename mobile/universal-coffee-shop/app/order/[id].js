@@ -1,23 +1,26 @@
-// order tracking screen
+// order tracking screen — with review prompt for completed orders
 import React, { useState, useEffect } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity,
-  ScrollView, ActivityIndicator, Image,
+  ScrollView, ActivityIndicator, Image, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { orderService } from '../../services/orderService';
+import ReviewModal from '../../components/ReviewModal';
 
 const ORDER_STATUSES = [
-  { key: 'pending',   label: 'Order Placed', icon: 'check-circle' },
-  { key: 'accepted',  label: 'Accepted',     icon: 'thumbs-up' },
-  { key: 'preparing', label: 'Preparing',    icon: 'coffee' },
-  { key: 'ready',     label: 'Ready for Pickup', icon: 'package' },
-  { key: 'completed', label: 'Completed',    icon: 'check' },
+  { key: 'pending',   label: 'Order Placed',      icon: 'check-circle' },
+  { key: 'accepted',  label: 'Accepted',           icon: 'thumbs-up' },
+  { key: 'preparing', label: 'Preparing',          icon: 'coffee' },
+  { key: 'ready',     label: 'Ready for Pickup',   icon: 'package' },
+  { key: 'completed', label: 'Completed',          icon: 'check' },
 ];
 
-// Normalize order_items from Supabase → flat array
+// ML threshold — show est time only once model has enough training data
+const ML_MIN_ORDERS = 50;
+
 const normalizeItems = (order) => {
   if (!order) return [];
   if (order.items?.length) return order.items;
@@ -48,6 +51,9 @@ export default function OrderTrackingScreen() {
   const { id } = useLocalSearchParams();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [estTime, setEstTime] = useState(null);        // null = not available yet
+  const [showReview, setShowReview] = useState(false);
+  const [reviewed, setReviewed] = useState(false);
 
   useEffect(() => {
     loadOrder();
@@ -55,7 +61,7 @@ export default function OrderTrackingScreen() {
     return () => clearInterval(interval);
   }, [id]);
 
-  // also subscribe real-time
+  // real-time
   useEffect(() => {
     if (!id) return;
     const unsub = orderService.subscribeToOrder(id, (updated) => {
@@ -68,10 +74,45 @@ export default function OrderTrackingScreen() {
     try {
       const data = await orderService.getOrder(id);
       setOrder(data);
+      // Fetch est time only if not yet completed/cancelled and shop has enough data
+      if (data && !['completed', 'cancelled', 'picked_up'].includes(data.status)) {
+        fetchEstTime(data);
+      }
     } catch (error) {
       console.error('Failed to load order:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchEstTime = async (orderData) => {
+    try {
+      const ML_URL = process.env.EXPO_PUBLIC_ML_URL;
+      if (!ML_URL) return;
+
+      // First check if the model has enough data
+      const statsRes = await fetch(`${ML_URL}/api/model-stats/${orderData.shop_id}`);
+      if (!statsRes.ok) return;
+      const stats = await statsRes.json();
+
+      // Only show estimate if at least 50 completed orders trained the model
+      if ((stats.training_data_count || 0) < ML_MIN_ORDERS) return;
+
+      const items = normalizeItems(orderData);
+      const predRes = await fetch(`${ML_URL}/api/predict-prep-time`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shop_id: orderData.shop_id,
+          items: items.map(i => ({ name: i.name, quantity: i.quantity })),
+          current_queue_length: 0,
+        }),
+      });
+      if (!predRes.ok) return;
+      const pred = await predRes.json();
+      setEstTime(pred);
+    } catch {
+      // silently ignore — est time is nice-to-have
     }
   };
 
@@ -99,6 +140,7 @@ export default function OrderTrackingScreen() {
   const currentStatusIndex = getStatusIndex(order?.status || 'pending');
   const shopName = order?.shops?.name || 'Shop';
   const shopLogo = order?.shops?.logo_url;
+  const isCompleted = order?.status === 'completed' || order?.status === 'picked_up';
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -112,7 +154,7 @@ export default function OrderTrackingScreen() {
 
       <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
 
-        {/* Order info card */}
+        {/* Order info */}
         <View style={styles.card}>
           <View style={styles.shopRow}>
             {shopLogo
@@ -125,6 +167,20 @@ export default function OrderTrackingScreen() {
             </View>
           </View>
         </View>
+
+        {/* Est time — only shown when ML model is trained */}
+        {estTime && (
+          <View style={styles.card}>
+            <View style={styles.estTimeRow}>
+              <Feather name="clock" size={20} color="#00704A" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.estTimeLabel}>Estimated ready time</Text>
+                <Text style={styles.estTimeValue}>{estTime.estimated_ready_time}</Text>
+              </View>
+              <Text style={styles.estTimeMinutes}>~{estTime.estimated_minutes} min</Text>
+            </View>
+          </View>
+        )}
 
         {/* Status tracker */}
         <View style={styles.card}>
@@ -143,12 +199,8 @@ export default function OrderTrackingScreen() {
                   )}
                 </View>
                 <View style={styles.statusRight}>
-                  <Text style={[styles.statusLabel, isDone && styles.statusLabelDone]}>
-                    {status.label}
-                  </Text>
-                  {isCurrent && (
-                    <Text style={styles.statusCurrent}>Current status</Text>
-                  )}
+                  <Text style={[styles.statusLabel, isDone && styles.statusLabelDone]}>{status.label}</Text>
+                  {isCurrent && <Text style={styles.statusCurrent}>Current status</Text>}
                 </View>
               </View>
             );
@@ -206,7 +258,37 @@ export default function OrderTrackingScreen() {
           </View>
         </View>
 
+        {/* Review CTA — only for completed orders */}
+        {isCompleted && !reviewed && (
+          <TouchableOpacity style={styles.reviewCTA} onPress={() => setShowReview(true)} activeOpacity={0.85}>
+            <View style={styles.reviewCTALeft}>
+              <Feather name="star" size={20} color="#F59E0B" />
+              <View>
+                <Text style={styles.reviewCTATitle}>How was your order?</Text>
+                <Text style={styles.reviewCTASub}>Leave a review for {shopName}</Text>
+              </View>
+            </View>
+            <Feather name="chevron-right" size={20} color="#F59E0B" />
+          </TouchableOpacity>
+        )}
+
+        {isCompleted && reviewed && (
+          <View style={[styles.reviewCTA, { backgroundColor: '#F0FAF5' }]}>
+            <Feather name="check-circle" size={20} color="#00704A" />
+            <Text style={{ marginLeft: 10, fontWeight: '600', color: '#00704A' }}>Thanks for your review!</Text>
+          </View>
+        )}
+
       </ScrollView>
+
+      <ReviewModal
+        visible={showReview}
+        orderId={order?.id}
+        shopId={order?.shop_id}
+        shopName={shopName}
+        onClose={() => setShowReview(false)}
+        onSubmitted={() => { setShowReview(false); setReviewed(true); }}
+      />
     </SafeAreaView>
   );
 }
@@ -228,6 +310,12 @@ const styles = StyleSheet.create({
   shopLogoPlaceholder: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
   shopName: { fontSize: 17, fontWeight: '700', color: '#000', marginBottom: 2 },
   orderMeta: { fontSize: 13, color: '#999' },
+
+  // Est time
+  estTimeRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  estTimeLabel: { fontSize: 12, color: '#999', marginBottom: 2 },
+  estTimeValue: { fontSize: 16, fontWeight: '700', color: '#000' },
+  estTimeMinutes: { fontSize: 22, fontWeight: '800', color: '#00704A' },
 
   // Status tracker
   statusItem: { flexDirection: 'row', marginBottom: 4 },
@@ -260,4 +348,10 @@ const styles = StyleSheet.create({
   totalRow: { borderBottomWidth: 0, paddingTop: 12 },
   totalLabel: { fontSize: 18, fontWeight: '700', color: '#000' },
   totalValue: { fontSize: 20, fontWeight: '700', color: '#00704A' },
+
+  // Review CTA
+  reviewCTA: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 16, marginTop: 12, backgroundColor: '#FFFBEB', borderRadius: 16, padding: 16, borderWidth: 1.5, borderColor: '#FDE68A' },
+  reviewCTALeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  reviewCTATitle: { fontSize: 15, fontWeight: '700', color: '#000' },
+  reviewCTASub: { fontSize: 13, color: '#666', marginTop: 1 },
 });

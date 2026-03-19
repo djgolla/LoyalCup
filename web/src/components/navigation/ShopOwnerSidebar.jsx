@@ -2,9 +2,9 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useShop } from '../../context/ShopContext';
 import { useAuth } from '../../context/AuthContext';
 import {
-  LayoutDashboard, Menu as MenuIcon, FolderTree, Layers,
+  LayoutDashboard, Menu as MenuIcon, FolderTree,
   Settings as SettingsIcon, ShoppingBag, BarChart3, Award,
-  LogOut, RefreshCw, Lock,
+  LogOut, Lock, Star,
 } from 'lucide-react';
 
 export default function ShopOwnerSidebar() {
@@ -56,7 +56,6 @@ export default function ShopOwnerSidebar() {
 
   return (
     <aside className="w-64 bg-white dark:bg-[#1f1f1f] border-r border-gray-200 dark:border-neutral-800 flex flex-col shrink-0">
-      {/* Header */}
       <div className="p-4 border-b border-gray-200 dark:border-neutral-800">
         <h1 className="text-xl font-semibold text-amber-700">Shop Owner</h1>
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-1 truncate">
@@ -66,39 +65,29 @@ export default function ShopOwnerSidebar() {
       </div>
 
       <nav className="flex-1 p-3 overflow-y-auto">
-        {/* Overview */}
-        <Link to="/shop-owner/dashboard" icon={LayoutDashboard} requiresSquare>
-          Dashboard
-        </Link>
+        <Link to="/shop-owner/dashboard" icon={LayoutDashboard} requiresSquare>Dashboard</Link>
 
-        {/* Menu */}
         <Section>Menu</Section>
-        <Link to="/shop-owner/menu"           icon={MenuIcon}   requiresSquare>Menu Builder</Link>
-        <Link to="/shop-owner/categories"     icon={FolderTree} requiresSquare>Categories</Link>
-        <Link to="/shop-owner/customizations" icon={Layers}     requiresSquare>Modifier Groups</Link>
+        <Link to="/shop-owner/menu"       icon={MenuIcon}   requiresSquare>Menu Builder</Link>
+        <Link to="/shop-owner/categories" icon={FolderTree} requiresSquare>Categories</Link>
 
-        {/* Operations */}
         <Section>Operations</Section>
-        <Link to="/shop-owner/orders"    icon={ShoppingBag} requiresSquare>Orders</Link>
-        <Link to="/shop-owner/analytics" icon={BarChart3}   requiresSquare>Analytics</Link>
-        <Link to="/shop-owner/loyalty"   icon={Award}       requiresSquare>Loyalty Program</Link>
+        <Link to="/shop-owner/orders"   icon={ShoppingBag} requiresSquare>Orders</Link>
+        <Link to="/shop-owner/reviews"  icon={Star}        requiresSquare>Reviews</Link>
+        <Link to="/shop-owner/loyalty"  icon={Award}       requiresSquare>Loyalty</Link>
+        <Link to="/shop-owner/analytics" icon={BarChart3}  requiresSquare>Analytics</Link>
 
-        {/* Settings */}
         <Section>Settings</Section>
-        <Link to="/shop-owner/settings"       icon={SettingsIcon}>Shop Settings</Link>
-        <Link to="/shop-owner/connect-square" icon={RefreshCw}>
-          {squareConnected ? 'POS Connected ✓' : 'Connect Square POS'}
-        </Link>
+        <Link to="/shop-owner/settings" icon={SettingsIcon}>Shop Settings</Link>
       </nav>
 
-      {/* Logout */}
       <div className="p-3 border-t border-gray-200 dark:border-neutral-800">
         <button
-          onClick={async () => { await logout(); navigate('/'); }}
-          className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg transition-colors"
+          onClick={() => { logout(); navigate('/'); }}
+          className={`${base} ${inactive} w-full text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20`}
         >
           <LogOut size={18} />
-          Logout
+          Sign Out
         </button>
       </div>
     </aside>
