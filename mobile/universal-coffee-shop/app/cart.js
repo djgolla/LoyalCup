@@ -16,7 +16,6 @@ export default function CartScreen() {
   const { cart, removeItem, clearCart, updateQuantity } = useCart();
   const [globalPoints, setGlobalPoints] = useState(null);
 
-  // Group items by shop
   const itemsByShop = cart.reduce((acc, item) => {
     const shopId = item.shopId;
     const shopName = item.shopName || 'Unknown Shop';
@@ -45,17 +44,17 @@ export default function CartScreen() {
     return sum + (parseFloat(item.price) || 0) * (item.quantity || 1);
   }, 0);
 
-  const handleUpdateQuantity = (itemId, change) => {
-    const item = cart.find(i => i.id === itemId);
+  const handleUpdateQuantity = (cartKey, change) => {
+    const item = cart.find(i => i.cartKey === cartKey);
     if (!item) return;
     const newQty = (item.quantity || 1) + change;
     if (newQty <= 0) {
       Alert.alert('Remove Item', 'Remove this item from cart?', [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: () => removeItem(itemId) },
+        { text: 'Remove', style: 'destructive', onPress: () => removeItem(cartKey) },
       ]);
     } else {
-      updateQuantity(itemId, newQty);
+      updateQuantity(cartKey, newQty);
     }
   };
 
@@ -106,7 +105,7 @@ export default function CartScreen() {
           <View key={shopId} style={styles.shopSection}>
             <Text style={styles.shopName}>{shopName}</Text>
             {items.map((item) => (
-              <View key={item.id} style={styles.cartItem}>
+              <View key={item.cartKey} style={styles.cartItem}>
                 {item.image_url
                   ? <Image source={{ uri: item.image_url }} style={styles.itemImage} />
                   : <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
@@ -115,19 +114,24 @@ export default function CartScreen() {
                 }
                 <View style={styles.itemDetails}>
                   <Text style={styles.itemName}>{item.name}</Text>
+                  {item.customizations?.length > 0 && (
+                    <Text style={styles.itemCustomizations}>
+                      {item.customizations.map(c => c.name).join(' · ')}
+                    </Text>
+                  )}
                   <Text style={styles.itemPrice}>
                     ${(parseFloat(item.price) * (item.quantity || 1)).toFixed(2)}
                   </Text>
                   <View style={styles.quantityContainer}>
                     <TouchableOpacity
                       style={styles.quantityButton}
-                      onPress={() => handleUpdateQuantity(item.id, -1)}>
+                      onPress={() => handleUpdateQuantity(item.cartKey, -1)}>
                       <Feather name="minus" size={16} color="#000" />
                     </TouchableOpacity>
                     <Text style={styles.quantityText}>{item.quantity || 1}</Text>
                     <TouchableOpacity
                       style={styles.quantityButton}
-                      onPress={() => handleUpdateQuantity(item.id, 1)}>
+                      onPress={() => handleUpdateQuantity(item.cartKey, 1)}>
                       <Feather name="plus" size={16} color="#000" />
                     </TouchableOpacity>
                   </View>
@@ -137,7 +141,6 @@ export default function CartScreen() {
           </View>
         ))}
 
-        {/* Points teaser */}
         {globalPoints && globalPoints.current_balance > 0 && (
           <View style={styles.pointsTeaser}>
             <Feather name="award" size={18} color="#00704A" />
@@ -148,7 +151,6 @@ export default function CartScreen() {
         )}
       </ScrollView>
 
-      {/* Bottom bar */}
       <View style={styles.bottomBar}>
         <View style={styles.subtotalRow}>
           <Text style={styles.subtotalLabel}>Subtotal</Text>
@@ -166,65 +168,34 @@ export default function CartScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FAFAFA' },
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 16,
-    backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
-  },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
   headerButton: { padding: 8, width: 40 },
   headerTitle: { fontSize: 20, fontWeight: '700', color: '#000' },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
   emptyTitle: { fontSize: 22, fontWeight: '700', color: '#000', marginTop: 20, marginBottom: 8 },
-  emptySubtitle: { fontSize: 16, color: '#666', marginBottom: 30 },
-  shopButton: { backgroundColor: '#00704A', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 25 },
+  emptySubtitle: { fontSize: 15, color: '#999', marginBottom: 32 },
+  shopButton: { paddingHorizontal: 32, paddingVertical: 14, backgroundColor: '#00704A', borderRadius: 12 },
   shopButtonText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
   scrollView: { flex: 1 },
-  shopSection: {
-    backgroundColor: '#FFF', marginBottom: 8,
-    paddingVertical: 16, paddingHorizontal: 16,
-    borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
-  },
+  shopSection: { margin: 16, backgroundColor: '#FFF', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   shopName: { fontSize: 15, fontWeight: '700', color: '#00704A', marginBottom: 12 },
-  cartItem: {
-    flexDirection: 'row', marginBottom: 12, paddingBottom: 12,
-    borderBottomWidth: 1, borderBottomColor: '#F5F5F5',
-  },
+  cartItem: { flexDirection: 'row', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
   itemImage: { width: 70, height: 70, borderRadius: 8, backgroundColor: '#F0F0F0' },
   itemImagePlaceholder: { justifyContent: 'center', alignItems: 'center' },
   itemDetails: { flex: 1, marginLeft: 12, justifyContent: 'space-between' },
-  itemName: { fontSize: 16, fontWeight: '600', color: '#000', marginBottom: 4 },
+  itemName: { fontSize: 16, fontWeight: '600', color: '#000', marginBottom: 2 },
+  itemCustomizations: { fontSize: 12, color: '#00704A', marginBottom: 4 },
   itemPrice: { fontSize: 16, fontWeight: 'bold', color: '#00704A', marginBottom: 8 },
-  quantityContainer: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#F5F5F5', borderRadius: 8,
-    paddingHorizontal: 4, paddingVertical: 4, alignSelf: 'flex-start',
-  },
-  quantityButton: {
-    width: 28, height: 28, borderRadius: 6,
-    backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center',
-  },
+  quantityContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 8, paddingHorizontal: 4, paddingVertical: 4, alignSelf: 'flex-start' },
+  quantityButton: { width: 28, height: 28, borderRadius: 6, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center' },
   quantityText: { fontSize: 16, fontWeight: '600', color: '#000', marginHorizontal: 16 },
-  pointsTeaser: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    margin: 16, padding: 14,
-    backgroundColor: '#E8F5E9', borderRadius: 12,
-  },
+  pointsTeaser: { flexDirection: 'row', alignItems: 'center', gap: 10, margin: 16, padding: 14, backgroundColor: '#E8F5E9', borderRadius: 12 },
   pointsTeaserText: { flex: 1, fontSize: 14, color: '#00704A', fontWeight: '500' },
-  bottomBar: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: '#FFF', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 30,
-    borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.08, shadowRadius: 8, elevation: 10,
-  },
+  bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFF', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 30, borderTopWidth: 1, borderTopColor: '#F0F0F0' },
   subtotalRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   subtotalLabel: { fontSize: 16, color: '#666' },
-  subtotalValue: { fontSize: 16, fontWeight: '700', color: '#000' },
-  taxNote: { fontSize: 12, color: '#999', marginBottom: 14 },
-  checkoutButton: {
-    backgroundColor: '#00704A', flexDirection: 'row',
-    justifyContent: 'center', alignItems: 'center',
-    paddingVertical: 18, borderRadius: 12, gap: 8,
-  },
-  checkoutButtonText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
+  subtotalValue: { fontSize: 18, fontWeight: '700', color: '#000' },
+  taxNote: { fontSize: 12, color: '#999', marginBottom: 12 },
+  checkoutButton: { backgroundColor: '#00704A', borderRadius: 14, paddingVertical: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 },
+  checkoutButtonText: { color: '#FFF', fontSize: 17, fontWeight: '700' },
 });

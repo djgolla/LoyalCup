@@ -7,31 +7,35 @@ export function CartProvider({ children }) {
   const [cart, setCart] = useState([]);
 
   const addItem = (item) => {
+    // unique key = item id + modifiers so same drink with diff mods = separate cart entries
+    const modKey = JSON.stringify((item.customizations || []).map(c => c.id).sort());
+    const cartKey = `${item.id}__${modKey}`;
+
     setCart(prevCart => {
-      const existingItem = prevCart.find(i => i.id === item.id);
+      const existingItem = prevCart.find(i => i.cartKey === cartKey);
       if (existingItem) {
-        return prevCart.map(i => 
-          i.id === item.id 
+        return prevCart.map(i =>
+          i.cartKey === cartKey
             ? { ...i, quantity: (i.quantity || 1) + 1 }
             : i
         );
       }
-      return [...prevCart, { ...item, quantity: 1 }];
+      return [...prevCart, { ...item, cartKey, quantity: 1 }];
     });
   };
 
-  const removeItem = (itemId) => {
-    setCart(prevCart => prevCart.filter(item => item.id !== itemId));
+  const removeItem = (cartKey) => {
+    setCart(prevCart => prevCart.filter(item => item.cartKey !== cartKey));
   };
 
-  const updateQuantity = (itemId, quantity) => {
+  const updateQuantity = (cartKey, quantity) => {
     if (quantity <= 0) {
-      removeItem(itemId);
+      removeItem(cartKey);
       return;
     }
     setCart(prevCart =>
       prevCart.map(item =>
-        item.id === itemId ? { ...item, quantity } : item
+        item.cartKey === cartKey ? { ...item, quantity } : item
       )
     );
   };
@@ -53,14 +57,14 @@ export function CartProvider({ children }) {
   };
 
   return (
-    <CartContext.Provider value={{ 
-      cart, 
-      addItem, 
-      removeItem, 
+    <CartContext.Provider value={{
+      cart,
+      addItem,
+      removeItem,
       updateQuantity,
-      clearCart, 
-      getItemCount, 
-      getTotalPrice 
+      clearCart,
+      getItemCount,
+      getTotalPrice
     }}>
       {children}
     </CartContext.Provider>

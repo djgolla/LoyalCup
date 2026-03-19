@@ -1,17 +1,47 @@
 // order tracking screen
-// universal-coffee-shop/app/order/[id].js
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, ActivityIndicator } from 'react-native';
+import {
+  StyleSheet, Text, View, TouchableOpacity,
+  ScrollView, ActivityIndicator, Image,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { orderService } from '../../services/orderService';
 
 const ORDER_STATUSES = [
-  { key: 'pending', label: 'Order Placed', icon: 'check-circle' },
-  { key: 'preparing', label: 'Preparing', icon: 'coffee' },
-  { key: 'ready', label: 'Ready', icon: 'package' },
-  { key: 'completed', label: 'Completed', icon: 'check' },
+  { key: 'pending',   label: 'Order Placed', icon: 'check-circle' },
+  { key: 'accepted',  label: 'Accepted',     icon: 'thumbs-up' },
+  { key: 'preparing', label: 'Preparing',    icon: 'coffee' },
+  { key: 'ready',     label: 'Ready for Pickup', icon: 'package' },
+  { key: 'completed', label: 'Completed',    icon: 'check' },
 ];
+
+// Normalize order_items from Supabase → flat array
+const normalizeItems = (order) => {
+  if (!order) return [];
+  if (order.items?.length) return order.items;
+  return (order.order_items || []).map(oi => ({
+    name: oi.menu_items?.name || 'Item',
+    description: oi.menu_items?.description || '',
+    image_url: oi.menu_items?.image_url,
+    quantity: oi.quantity || 1,
+    unit_price: oi.unit_price || 0,
+    total_price: oi.total_price || (oi.unit_price * oi.quantity) || 0,
+    customizations: oi.customizations || [],
+  }));
+};
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit',
+  });
+};
+
+const shortId = (id) => id?.slice(0, 8)?.toUpperCase() || '—';
 
 export default function OrderTrackingScreen() {
   const router = useRouter();
@@ -21,16 +51,23 @@ export default function OrderTrackingScreen() {
 
   useEffect(() => {
     loadOrder();
-    
-    // poll for updates every 10 seconds
     const interval = setInterval(loadOrder, 10000);
     return () => clearInterval(interval);
   }, [id]);
 
+  // also subscribe real-time
+  useEffect(() => {
+    if (!id) return;
+    const unsub = orderService.subscribeToOrder(id, (updated) => {
+      setOrder(prev => ({ ...prev, ...updated }));
+    });
+    return unsub;
+  }, [id]);
+
   const loadOrder = async () => {
     try {
-      const orderData = await orderService.getOrder(id);
-      setOrder(orderData);
+      const data = await orderService.getOrder(id);
+      setOrder(data);
     } catch (error) {
       console.error('Failed to load order:', error);
     } finally {
@@ -38,13 +75,18 @@ export default function OrderTrackingScreen() {
     }
   };
 
-  const getStatusIndex = (status) => {
-    return ORDER_STATUSES.findIndex(s => s.key === status);
-  };
+  const getStatusIndex = (status) => ORDER_STATUSES.findIndex(s => s.key === status);
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
+            <Feather name="arrow-left" size={24} color="#000" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Order Tracking</Text>
+          <View style={styles.headerButton} />
+        </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#00704A" />
           <Text style={styles.loadingText}>Loading order...</Text>
@@ -53,239 +95,169 @@ export default function OrderTrackingScreen() {
     );
   }
 
+  const items = normalizeItems(order);
   const currentStatusIndex = getStatusIndex(order?.status || 'pending');
+  const shopName = order?.shops?.name || 'Shop';
+  const shopLogo = order?.shops?.logo_url;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => router.back()}>
+        <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
           <Feather name="arrow-left" size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Order Tracking</Text>
-        <View style={styles.backButton} />
+        <View style={styles.headerButton} />
       </View>
 
-      <ScrollView 
-        style={styles.content}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
-        
-        <View style={styles.orderInfo}>
-          <Text style={styles.orderNumber}>Order #{order?.id || 'N/A'}</Text>
-          <Text style={styles.orderDate}>
-            {order?.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'Today'}
-          </Text>
-        </View>
+      <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
 
-        <View style={styles.statusContainer}>
-          {ORDER_STATUSES.map((status, index) => (
-            <View key={status.key} style={styles.statusItem}>
-              <View style={styles.statusIconContainer}>
-                <View style={[
-                  styles.statusIcon,
-                  index <= currentStatusIndex && styles.statusIconActive
-                ]}>
-                  <Feather 
-                    name={status.icon} 
-                    size={22} 
-                    color={index <= currentStatusIndex ? '#FFF' : '#CCC'} 
-                  />
-                </View>
-                {index < ORDER_STATUSES.length - 1 && (
-                  <View style={[
-                    styles.statusLine,
-                    index < currentStatusIndex && styles.statusLineActive
-                  ]} />
-                )}
-              </View>
-              <View style={styles.statusTextContainer}>
-                <Text style={[
-                  styles.statusLabel,
-                  index <= currentStatusIndex && styles.statusLabelActive
-                ]}>
-                  {status.label}
-                </Text>
-              </View>
+        {/* Order info card */}
+        <View style={styles.card}>
+          <View style={styles.shopRow}>
+            {shopLogo
+              ? <Image source={{ uri: shopLogo }} style={styles.shopLogo} />
+              : <View style={styles.shopLogoPlaceholder}><Feather name="coffee" size={18} color="#00704A" /></View>
+            }
+            <View style={{ flex: 1 }}>
+              <Text style={styles.shopName}>{shopName}</Text>
+              <Text style={styles.orderMeta}>#{shortId(order?.id)} · {formatDate(order?.created_at)}</Text>
             </View>
-          ))}
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Order Items</Text>
-          {order?.items?.map((item, index) => (
-            <View key={index} style={styles.orderItem}>
-              <Text style={styles.itemName}>
-                {item.quantity}x {item.name}
-              </Text>
-              <Text style={styles.itemPrice}>
-                ${(item.price * item.quantity).toFixed(2)}
-              </Text>
-            </View>
-          ))}
-        </View>
-
-        <View style={styles.totalSection}>
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValue}>${order?.total?.toFixed(2) || '0.00'}</Text>
           </View>
         </View>
+
+        {/* Status tracker */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Order Status</Text>
+          {ORDER_STATUSES.map((status, index) => {
+            const isDone = index <= currentStatusIndex;
+            const isCurrent = index === currentStatusIndex;
+            return (
+              <View key={status.key} style={styles.statusItem}>
+                <View style={styles.statusLeft}>
+                  <View style={[styles.statusIcon, isDone && styles.statusIconDone, isCurrent && styles.statusIconCurrent]}>
+                    <Feather name={status.icon} size={18} color={isDone ? '#FFF' : '#CCC'} />
+                  </View>
+                  {index < ORDER_STATUSES.length - 1 && (
+                    <View style={[styles.statusLine, isDone && styles.statusLineDone]} />
+                  )}
+                </View>
+                <View style={styles.statusRight}>
+                  <Text style={[styles.statusLabel, isDone && styles.statusLabelDone]}>
+                    {status.label}
+                  </Text>
+                  {isCurrent && (
+                    <Text style={styles.statusCurrent}>Current status</Text>
+                  )}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+
+        {/* Order items */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Items</Text>
+          {items.length === 0 ? (
+            <Text style={styles.noItems}>No items found</Text>
+          ) : (
+            items.map((item, index) => (
+              <View key={index} style={[styles.itemRow, index < items.length - 1 && styles.itemRowBorder]}>
+                <View style={styles.itemLeft}>
+                  <View style={styles.qtyBadge}>
+                    <Text style={styles.qtyText}>{item.quantity}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.itemName}>{item.name}</Text>
+                    {item.customizations?.length > 0 && (
+                      <Text style={styles.itemCustom}>
+                        {item.customizations.map(c => c.name).join(' · ')}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+                <Text style={styles.itemPrice}>
+                  ${parseFloat(item.total_price || item.unit_price * item.quantity || 0).toFixed(2)}
+                </Text>
+              </View>
+            ))
+          )}
+        </View>
+
+        {/* Totals */}
+        <View style={styles.card}>
+          <View style={styles.priceRow}>
+            <Text style={styles.priceLabel}>Subtotal</Text>
+            <Text style={styles.priceValue}>${parseFloat(order?.subtotal || 0).toFixed(2)}</Text>
+          </View>
+          <View style={styles.priceRow}>
+            <Text style={styles.priceLabel}>Tax</Text>
+            <Text style={styles.priceValue}>${parseFloat(order?.tax || 0).toFixed(2)}</Text>
+          </View>
+          {order?.loyalty_discount > 0 && (
+            <View style={styles.priceRow}>
+              <Text style={[styles.priceLabel, { color: '#00704A' }]}>Points Discount</Text>
+              <Text style={[styles.priceValue, { color: '#00704A' }]}>-${parseFloat(order.loyalty_discount).toFixed(2)}</Text>
+            </View>
+          )}
+          <View style={[styles.priceRow, styles.totalRow]}>
+            <Text style={styles.totalLabel}>Total</Text>
+            <Text style={styles.totalValue}>${parseFloat(order?.total || 0).toFixed(2)}</Text>
+          </View>
+        </View>
+
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FAFAFA',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#666',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#000',
-  },
-  content: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 24,
-  },
-  orderInfo: {
-    alignItems: 'center',
-    paddingVertical: 24,
-    paddingHorizontal: 20,
-    backgroundColor: '#FFF',
-    marginBottom: 16,
-  },
-  orderNumber: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#000',
-    marginBottom: 4,
-  },
-  orderDate: {
-    fontSize: 14,
-    color: '#666',
-  },
-  statusContainer: {
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    backgroundColor: '#FFF',
-    marginBottom: 16,
-  },
-  statusItem: {
-    flexDirection: 'row',
-    marginBottom: 24,
-  },
-  statusIconContainer: {
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  statusIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F0F0F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  statusIconActive: {
-    backgroundColor: '#00704A',
-  },
-  statusLine: {
-    width: 2,
-    height: 24,
-    backgroundColor: '#E0E0E0',
-    marginTop: 4,
-  },
-  statusLineActive: {
-    backgroundColor: '#00704A',
-  },
-  statusTextContainer: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  statusLabel: {
-    fontSize: 15,
-    color: '#999',
-  },
-  statusLabelActive: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-  },
-  section: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFF',
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#000',
-    marginBottom: 12,
-  },
-  orderItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  itemName: {
-    fontSize: 15,
-    color: '#000',
-    flex: 1,
-  },
-  itemPrice: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#00704A',
-  },
-  totalSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    backgroundColor: '#FFF',
-  },
-  totalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  totalLabel: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000',
-  },
-  totalValue: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#00704A',
-  },
+  container: { flex: 1, backgroundColor: '#FAFAFA' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  headerButton: { width: 40, height: 40, justifyContent: 'center' },
+  headerTitle: { fontSize: 20, fontWeight: '700', color: '#000' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { marginTop: 12, fontSize: 16, color: '#666' },
+  content: { flex: 1 },
+
+  card: { backgroundColor: '#FFF', marginHorizontal: 16, marginTop: 12, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#F0F0F0', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  sectionTitle: { fontSize: 14, fontWeight: '700', color: '#999', letterSpacing: 1, marginBottom: 14, textTransform: 'uppercase' },
+
+  shopRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  shopLogo: { width: 44, height: 44, borderRadius: 22 },
+  shopLogoPlaceholder: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
+  shopName: { fontSize: 17, fontWeight: '700', color: '#000', marginBottom: 2 },
+  orderMeta: { fontSize: 13, color: '#999' },
+
+  // Status tracker
+  statusItem: { flexDirection: 'row', marginBottom: 4 },
+  statusLeft: { alignItems: 'center', marginRight: 16, width: 40 },
+  statusIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center' },
+  statusIconDone: { backgroundColor: '#00704A' },
+  statusIconCurrent: { backgroundColor: '#00704A' },
+  statusLine: { width: 2, flex: 1, minHeight: 20, backgroundColor: '#E0E0E0', marginVertical: 2 },
+  statusLineDone: { backgroundColor: '#00704A' },
+  statusRight: { flex: 1, paddingTop: 10, paddingBottom: 16 },
+  statusLabel: { fontSize: 15, color: '#CCC' },
+  statusLabelDone: { color: '#000', fontWeight: '600' },
+  statusCurrent: { fontSize: 12, color: '#00704A', marginTop: 2, fontWeight: '600' },
+
+  // Items
+  itemRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
+  itemRowBorder: { borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
+  itemLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  qtyBadge: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
+  qtyText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
+  itemName: { fontSize: 15, fontWeight: '600', color: '#000' },
+  itemCustom: { fontSize: 12, color: '#00704A', marginTop: 2 },
+  itemPrice: { fontSize: 15, fontWeight: '600', color: '#000' },
+  noItems: { fontSize: 14, color: '#999', textAlign: 'center', paddingVertical: 12 },
+
+  // Totals
+  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
+  priceLabel: { fontSize: 15, color: '#666' },
+  priceValue: { fontSize: 15, fontWeight: '600', color: '#000' },
+  totalRow: { borderBottomWidth: 0, paddingTop: 12 },
+  totalLabel: { fontSize: 18, fontWeight: '700', color: '#000' },
+  totalValue: { fontSize: 20, fontWeight: '700', color: '#00704A' },
 });
