@@ -1,26 +1,15 @@
 """
 Square Webhook Handler
 Receives order state change events from Square and syncs status into LoyalCup orders.
-
-Setup required:
-  1. In Square Developer Dashboard → Webhooks → Add endpoint:
-     URL: https://loyalcup-production.up.railway.app/api/v1/pos/square/webhook
-     Events: order.updated, order.created
-  2. Copy the webhook signature key → add to Railway as SQUARE_WEBHOOK_SIGNATURE_KEY
-
-How it works:
-  - Customer places order in LoyalCup → order pushed to Square POS (reference_id = loyalcup order id)
-  - Barista updates order on Square register/KDS
-  - Square fires webhook → we match by reference_id → update LoyalCup order status
-  - Supabase realtime pushes update to customer's phone instantly
 """
+import base64
 import hashlib
 import hmac
 import json
 import logging
 import os
+from datetime import datetime
 from fastapi import APIRouter, Request, HTTPException
-
 from app.database import get_supabase
 
 router = APIRouter()
@@ -28,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 SQUARE_WEBHOOK_SIG_KEY = os.getenv("SQUARE_WEBHOOK_SIGNATURE_KEY", "")
 
-# Square order state → LoyalCup status
 SQUARE_STATE_MAP = {
     "OPEN":        "accepted",
     "IN_PROGRESS": "preparing",
@@ -38,10 +26,6 @@ SQUARE_STATE_MAP = {
 
 
 def _verify_square_signature(body: bytes, signature: str, url: str) -> bool:
-    """
-    Square HMAC-SHA256 signature verification.
-    https://developer.squareup.com/docs/webhooks/step3validate
-    """
     if not SQUARE_WEBHOOK_SIG_KEY:
         logger.warning("[SquareWebhook] No signature key set — skipping verification (dev mode)")
         return True
@@ -51,7 +35,6 @@ def _verify_square_signature(body: bytes, signature: str, url: str) -> bool:
         combined.encode("utf-8"),
         hashlib.sha256,
     ).digest()
-    import base64
     expected_b64 = base64.b64encode(expected).decode("utf-8")
     return hmac.compare_digest(expected_b64, signature or "")
 
@@ -74,27 +57,24 @@ async def square_webhook(request: Request):
     event_type = payload.get("type", "")
     logger.info(f"[SquareWebhook] Event: {event_type}")
 
-    # Only care about order updates
     if event_type not in ("order.updated", "order.created", "order.fulfillment.updated"):
         return {"received": True, "action": "ignored"}
 
     data = payload.get("data", {}).get("object", {})
-    order_obj = data.get("order_updated") or data.get("order") or data.get("fulfillment", {}).get("order") or {}
 
-    # For fulfillment events, extract nested order
     if event_type == "order.fulfillment.updated":
-        order_obj = data.get("fulfillment", {})
-        new_state = order_obj.get("state")
-        reference_id = order_obj.get("order_id")  # Square order ID, not reference_id
-        # Look up by square_order_id in metadata
-        await _sync_by_square_order_id(reference_id, new_state)
+        fulfillment = data.get("fulfillment", {})
+        new_state = fulfillment.get("state")
+        square_order_id = fulfillment.get("order_id")
+        await _sync_by_square_order_id(square_order_id, new_state)
         return {"received": True}
 
+    order_obj = data.get("order_updated") or data.get("order") or {}
     state = order_obj.get("state")
-    reference_id = order_obj.get("reference_id")  # This is our loyalcup order ID
+    reference_id = order_obj.get("reference_id")
 
     if not reference_id or not state:
-        logger.debug(f"[SquareWebhook] No reference_id or state in payload — skipping")
+        logger.debug("[SquareWebhook] No reference_id or state — skipping")
         return {"received": True, "action": "no_reference"}
 
     loyalcup_status = SQUARE_STATE_MAP.get(state)
@@ -107,7 +87,6 @@ async def square_webhook(request: Request):
 
 
 async def _sync_by_square_order_id(square_order_id: str, state: str):
-    """Look up LoyalCup order by metadata.square_order_id and sync status."""
     if not square_order_id or not state:
         return
     loyalcup_status = SQUARE_STATE_MAP.get(state)
@@ -115,9 +94,8 @@ async def _sync_by_square_order_id(square_order_id: str, state: str):
         return
     try:
         db = get_supabase()
-        # Supabase JSONB query: metadata->>'square_order_id' = square_order_id
         resp = (
-            db.get_service_client()
+            db.service_client
             .table("orders")
             .select("id, status")
             .eq("metadata->>square_order_id", square_order_id)
@@ -125,38 +103,29 @@ async def _sync_by_square_order_id(square_order_id: str, state: str):
             .execute()
         )
         if resp.data:
-            order = resp.data[0]
-            await _update_order_status(order["id"], loyalcup_status, source="square_fulfillment_webhook")
+            await _update_order_status(resp.data[0]["id"], loyalcup_status, source="square_fulfillment_webhook")
     except Exception as e:
         logger.exception(f"[SquareWebhook] _sync_by_square_order_id failed: {e}")
 
 
 async def _update_order_status(order_id: str, new_status: str, source: str = "webhook"):
-    """
-    Update order status in Supabase — but only if it's a valid forward transition.
-    Never go backwards (e.g. don't set accepted if already preparing).
-    """
     STATUS_ORDER = ["pending", "accepted", "preparing", "ready", "picked_up", "completed", "cancelled"]
-
     try:
         db = get_supabase()
         resp = (
-            db.get_service_client()
+            db.service_client
             .table("orders")
             .select("id, status")
             .eq("id", order_id)
             .limit(1)
             .execute()
         )
-
         if not resp.data:
             logger.warning(f"[SquareWebhook] Order {order_id} not found")
             return
 
-        order = resp.data[0]
-        current = order["status"]
+        current = resp.data[0]["status"]
 
-        # Don't go backwards or touch terminal states
         if current in ("completed", "cancelled"):
             logger.debug(f"[SquareWebhook] Order {order_id} already terminal ({current}) — skipping")
             return
@@ -165,12 +134,12 @@ async def _update_order_status(order_id: str, new_status: str, source: str = "we
         new_idx = STATUS_ORDER.index(new_status) if new_status in STATUS_ORDER else -1
 
         if new_idx <= current_idx:
-            logger.debug(f"[SquareWebhook] Skipping backward transition {current} → {new_status} for order {order_id}")
+            logger.debug(f"[SquareWebhook] Skipping backward transition {current} → {new_status}")
             return
 
-        db.get_service_client().table("orders").update({
+        db.service_client.table("orders").update({
             "status": new_status,
-            "updated_at": __import__("datetime").datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
         }).eq("id", order_id).execute()
 
         logger.info(f"[SquareWebhook] ({source}) Order {order_id}: {current} → {new_status} ✓")
