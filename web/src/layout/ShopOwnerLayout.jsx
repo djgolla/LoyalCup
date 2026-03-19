@@ -5,11 +5,10 @@ import { useShop } from '../context/ShopContext';
 import PageLoader from '../components/ui/PageLoader';
 import { CheckCircle, CreditCard, Zap } from 'lucide-react';
 
-// Routes accessible before full setup is complete
 const SETUP_ROUTES = [
   '/shop-owner/settings',
   '/shop-owner/connect-square',
-  '/shop-owner/subscribe',   // ← must be reachable before active
+  '/shop-owner/subscribe',
 ];
 
 export default function ShopOwnerLayout() {
@@ -17,16 +16,27 @@ export default function ShopOwnerLayout() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Still fetching — show spinner, never render below this
   if (loading) return <PageLoader />;
 
-  // ── No shop yet (shouldn't happen but safety net) ─────────────────────────
-  if (!loading && !shop && location.pathname !== '/shop-owner/subscribe') {
+  // No shop at all — only allow /subscribe through, everything else back to application
+  if (!shop) {
+    if (location.pathname === '/shop-owner/subscribe') {
+      return (
+        <div className="min-h-screen bg-gray-50 dark:bg-neutral-950">
+          <main className="p-6 max-w-5xl mx-auto">
+            <Outlet />
+          </main>
+        </div>
+      );
+    }
     return <Navigate to="/shop-application" replace />;
   }
 
-  // ── Application submitted but not paid yet ────────────────────────────────
+  // ── shop exists from here down — safe to read shop.status ────────────────
+
+  // Pending payment — show subscribe wall or subscribe page
   if (shop.status === 'pending_payment' || shop.status === 'pending') {
-    // Let them reach the subscribe page
     if (location.pathname === '/shop-owner/subscribe') {
       return (
         <div className="min-h-screen bg-gray-50 dark:bg-neutral-950">
