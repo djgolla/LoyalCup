@@ -52,15 +52,17 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
 )
 
-# ── CORS must be first middleware, before rate limiter ──────────────────────
+# ── CORS first — must be before everything else ─────────────────────────────
+CORS_ORIGINS = [
+    "https://loyalcupapp.com",
+    "https://www.loyalcupapp.com",
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://loyalcupapp.com",
-        "https://www.loyalcupapp.com",
-        "http://localhost:5173",
-        "http://localhost:3000",
-    ],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -74,11 +76,23 @@ if settings.rate_limit_enabled:
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = time.time()
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        # Unhandled exception — return CORS-safe 500 so browser sees the error not a CORS block
+        origin = request.headers.get("origin", "")
+        headers = {}
+        if origin in CORS_ORIGINS:
+            headers["Access-Control-Allow-Origin"] = origin
+            headers["Access-Control-Allow-Credentials"] = "true"
+        logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"},
+            headers=headers,
+        )
     duration = time.time() - start_time
-    logger.info(
-        f"{request.method} {request.url.path} - {response.status_code} - {duration:.3f}s"
-    )
+    logger.info(f"{request.method} {request.url.path} - {response.status_code} - {duration:.3f}s")
     return response
 
 
