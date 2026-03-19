@@ -456,7 +456,7 @@ export default function MenuBuilder() {
     setLoading(true);
     try {
       const [catRes, itemRes, groupRes, optRes] = await Promise.all([
-        supabase.from('menu_categories').select('*').eq('shop_id', shopId).order('sort_order', { ascending: true }),
+        supabase.from('categories').select('*').eq('shop_id', shopId).order('sort_order', { ascending: true }),
         supabase.from('menu_items').select('*').eq('shop_id', shopId).eq('is_active', true).order('display_order', { ascending: true }).order('created_at', { ascending: false }),
         supabase.from('modifier_groups').select('*').eq('shop_id', shopId).eq('is_active', true),
         supabase.from('modifier_options').select('*').eq('shop_id', shopId).eq('is_active', true),
