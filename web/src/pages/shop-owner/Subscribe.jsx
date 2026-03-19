@@ -3,19 +3,13 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   CreditCard, Check, Tag, ArrowRight, Sparkles,
-  Coffee, Shield, Zap, AlertCircle, ExternalLink
+  Coffee, Shield, Zap, AlertCircle, ExternalLink, LogIn
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useShop } from '../../context/ShopContext';
+import supabase from '../../lib/supabase';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-
-async function getAuthHeader() {
-  const { createClient } = await import('@supabase/supabase-js');
-  const supabase = (await import('../../lib/supabase')).default;
-  const { data: { session } } = await supabase.auth.getSession();
-  return session ? { Authorization: `Bearer ${session.access_token}` } : {};
-}
 
 export default function Subscribe() {
   const navigate = useNavigate();
@@ -26,6 +20,27 @@ export default function Subscribe() {
   const [loading, setLoading] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
+  const [session, setSession] = useState(null);
+  const [sessionLoading, setSessionLoading] = useState(true);
+
+  // Load session on mount — this is the root cause of the 401
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+      setSessionLoading(false);
+      if (!s) {
+        console.warn('[Subscribe] No active session — user may need to confirm email or log in');
+      }
+    });
+
+    // Also listen for auth changes (e.g. email confirmation tab coming back)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+      setSessionLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Handle Stripe redirect back
   useEffect(() => {
@@ -35,7 +50,6 @@ export default function Subscribe() {
     if (success === 'true') {
       toast.success('🎉 Subscription activated! Welcome to LoyalCup!');
       loadShop();
-      // clear query params
       navigate('/shop-owner/subscribe', { replace: true });
     }
     if (cancelled === 'true') {
@@ -46,7 +60,7 @@ export default function Subscribe() {
 
   // Check subscription status
   useEffect(() => {
-    if (shop?.subscription_status === 'active') {
+    if (shop?.subscription_status === 'active' || shop?.status === 'active') {
       setSubscribed(true);
     }
   }, [shop]);
@@ -54,23 +68,34 @@ export default function Subscribe() {
   const handleSubscribe = async () => {
     try {
       setLoading(true);
-      const headers = await getAuthHeader();
+
+      // Re-fetch session fresh — don't rely on stale state
+      const { data: { session: freshSession } } = await supabase.auth.getSession();
+
+      if (!freshSession?.access_token) {
+        toast.error('Your session has expired. Please log in again.');
+        navigate('/login');
+        return;
+      }
 
       const res = await fetch(`${API}/api/v1/billing/create-checkout`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...headers },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${freshSession.access_token}`,
+        },
         body: JSON.stringify({ promo_code: promoCode.trim() || null }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.detail || 'Failed to start checkout');
+        throw new Error(data.detail || `Error ${res.status}: Failed to start checkout`);
       }
 
-      // Redirect to Stripe hosted checkout
       window.location.href = data.checkout_url;
     } catch (err) {
+      console.error('[Subscribe] Checkout error:', err);
       toast.error(err.message || 'Something went wrong');
       setLoading(false);
     }
@@ -79,11 +104,20 @@ export default function Subscribe() {
   const handleManageBilling = async () => {
     try {
       setPortalLoading(true);
-      const headers = await getAuthHeader();
+      const { data: { session: freshSession } } = await supabase.auth.getSession();
+
+      if (!freshSession?.access_token) {
+        toast.error('Session expired. Please log in again.');
+        navigate('/login');
+        return;
+      }
 
       const res = await fetch(`${API}/api/v1/billing/portal`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...headers },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${freshSession.access_token}`,
+        },
       });
 
       const data = await res.json();
@@ -108,7 +142,7 @@ export default function Subscribe() {
     'Your rate locked in forever',
   ];
 
-  // ── Already subscribed view ──────────────────────────────────────────────────
+  // ── Already subscribed view ──────────────────────────────────────────────
   if (subscribed) {
     return (
       <div className="max-w-2xl mx-auto py-12">
@@ -125,27 +159,20 @@ export default function Subscribe() {
           >
             <Check className="w-10 h-10 text-white" />
           </motion.div>
-
-          <h1 className="text-4xl font-black text-gray-900 dark:text-white mb-3">
-            You're all set! 🎉
-          </h1>
+          <h1 className="text-4xl font-black text-gray-900 dark:text-white mb-3">You're all set! 🎉</h1>
           <p className="text-gray-500 dark:text-gray-400 mb-8 text-lg">
             Your LoyalCup subscription is active. Your rate is locked in.
           </p>
-
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
               onClick={() => navigate('/shop-owner/dashboard')}
               className="px-8 py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl font-bold shadow-lg flex items-center gap-2 justify-center"
             >
-              Go to Dashboard
-              <ArrowRight className="w-5 h-5" />
+              Go to Dashboard <ArrowRight className="w-5 h-5" />
             </motion.button>
             <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
               onClick={handleManageBilling}
               disabled={portalLoading}
               className="px-8 py-4 bg-gray-100 dark:bg-neutral-800 text-gray-700 dark:text-gray-300 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-neutral-700 transition flex items-center gap-2 justify-center disabled:opacity-50"
@@ -159,13 +186,12 @@ export default function Subscribe() {
     );
   }
 
-  // ── Subscribe view ────────────────────────────────────────────────────────────
+  // ── No session warning banner ────────────────────────────────────────────
+  const noSession = !sessionLoading && !session;
+
   return (
     <div className="max-w-5xl mx-auto py-8 space-y-6">
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="text-4xl font-black text-gray-900 dark:text-white mb-2">
           Activate Your Subscription
         </h1>
@@ -174,26 +200,43 @@ export default function Subscribe() {
         </p>
       </motion.div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      {/* Session warning — shows if no active login */}
+      {noSession && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 rounded-xl"
+        >
+          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-bold text-amber-800 dark:text-amber-400 text-sm">Session expired or email not confirmed</p>
+            <p className="text-sm text-amber-700 dark:text-amber-500 mt-1">
+              You need to be logged in to subscribe. If you just signed up, check your email for a confirmation link, then log in.
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/login')}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white rounded-lg text-sm font-bold hover:bg-amber-700 transition shrink-0"
+          >
+            <LogIn className="w-4 h-4" /> Log In
+          </button>
+        </motion.div>
+      )}
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* ── Left: Features ── */}
         <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.1 }}
+          initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}
           className="bg-white dark:bg-neutral-900 rounded-2xl p-8 border-2 border-gray-100 dark:border-neutral-800 shadow-lg"
         >
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
-            <Coffee className="w-5 h-5 text-amber-600" />
-            What you get
+            <Coffee className="w-5 h-5 text-amber-600" /> What you get
           </h2>
-
           <ul className="space-y-3 mb-8">
             {features.map((f, i) => (
               <motion.li
                 key={i}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
+                initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.15 + i * 0.06 }}
                 className="flex items-center gap-3 text-gray-700 dark:text-gray-300"
               >
@@ -204,7 +247,6 @@ export default function Subscribe() {
               </motion.li>
             ))}
           </ul>
-
           <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-800">
             <div className="flex items-start gap-3">
               <Shield className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
@@ -220,12 +262,9 @@ export default function Subscribe() {
 
         {/* ── Right: Checkout ── */}
         <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.2 }}
+          initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}
           className="bg-white dark:bg-neutral-900 rounded-2xl p-8 border-2 border-amber-200 dark:border-amber-800 shadow-xl"
         >
-          {/* Price */}
           <div className="text-center mb-8">
             <div className="flex items-end justify-center gap-1 mb-1">
               <span className="text-6xl font-black text-gray-900 dark:text-white">$150</span>
@@ -234,11 +273,9 @@ export default function Subscribe() {
             <p className="text-gray-500 dark:text-gray-400 text-sm">No setup fee · Cancel anytime</p>
           </div>
 
-          {/* Promo code */}
           <div className="mb-6">
             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-              <Tag className="w-4 h-4 text-amber-600" />
-              Promo Code (optional)
+              <Tag className="w-4 h-4 text-amber-600" /> Promo Code (optional)
             </label>
             <input
               type="text"
@@ -252,40 +289,32 @@ export default function Subscribe() {
             </p>
           </div>
 
-          {/* Subscribe button */}
           <motion.button
-            whileHover={{ scale: 1.02, boxShadow: '0 15px 40px rgba(245,158,11,0.3)' }}
+            whileHover={{ scale: noSession ? 1 : 1.02, boxShadow: noSession ? 'none' : '0 15px 40px rgba(245,158,11,0.3)' }}
             whileTap={{ scale: 0.98 }}
-            onClick={handleSubscribe}
-            disabled={loading}
+            onClick={noSession ? () => navigate('/login') : handleSubscribe}
+            disabled={loading || sessionLoading}
             className="w-full bg-gradient-to-r from-amber-600 to-orange-600 text-white py-4 rounded-2xl font-bold text-lg shadow-xl flex items-center justify-center gap-3 disabled:opacity-60"
           >
             {loading ? (
               <>
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                >
+                <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
                   <Zap className="w-5 h-5" />
                 </motion.div>
                 Redirecting to checkout...
               </>
+            ) : noSession ? (
+              <><LogIn className="w-5 h-5" /> Log In to Subscribe</>
             ) : (
-              <>
-                <CreditCard className="w-5 h-5" />
-                Subscribe — $150/mo
-                <ArrowRight className="w-5 h-5" />
-              </>
+              <><CreditCard className="w-5 h-5" /> Subscribe — $150/mo <ArrowRight className="w-5 h-5" /></>
             )}
           </motion.button>
 
-          {/* Security note */}
           <div className="mt-4 flex items-center justify-center gap-2 text-xs text-gray-400 dark:text-gray-500">
             <Shield className="w-3.5 h-3.5" />
             Secure checkout powered by Stripe. We never see your card number.
           </div>
 
-          {/* What happens next */}
           <div className="mt-6 p-4 bg-gray-50 dark:bg-neutral-800 rounded-xl">
             <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
               What happens next
@@ -300,11 +329,8 @@ export default function Subscribe() {
         </motion.div>
       </div>
 
-      {/* Need help */}
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.4 }}
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
         className="flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500 justify-center"
       >
         <AlertCircle className="w-4 h-4" />
