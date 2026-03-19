@@ -19,7 +19,6 @@ import Download from "./pages/Download";
 import Login from "./pages/auth/Login";
 import AdminLogin from "./pages/auth/AdminLogin";
 import ShopApplication from "./pages/auth/ShopApplication";
-import ApplicationPending from "./pages/auth/ApplicationPending";
 
 // shop owner pages
 import ShopOwnerDashboard from "./pages/shop-owner/ShopOwnerDashboard";
@@ -34,6 +33,7 @@ import ShopSettings from "./pages/shop-owner/ShopSettings";
 import ShopSetup from "./pages/shop-owner/ShopSetup";
 import ConnectSquarePage from "./pages/shop-owner/ConnectSquarePage";
 import Reviews from './pages/shop-owner/Reviews';
+import Subscribe from './pages/shop-owner/Subscribe';
 
 // admin pages
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -93,7 +93,8 @@ export default function App() {
                 {/* auth pages */}
                 <Route element={<AuthLayout />}>
                   <Route path="/login" element={<Login />} />
-                  <Route path="/application-pending" element={<ApplicationPending />} />
+                  {/* Keep /application-pending as a redirect in case anyone bookmarked it */}
+                  <Route path="/application-pending" element={<Navigate to="/shop-owner/subscribe" replace />} />
                 </Route>
 
                 {/* hidden admin login */}
@@ -104,26 +105,27 @@ export default function App() {
                   <Route path="/shop-application" element={<ShopApplication />} />
                 </Route>
 
-                {/* shop owner pages */}
+                {/* shop owner pages — guarded by RoleGuard + ShopOwnerLayout handles subscription state */}
                 <Route
                   element={
-                    <RoleGuard roles={["shop_owner", "admin"]}>
+                    <RoleGuard roles={["shop_owner", "admin", "applicant"]}>
                       <ShopOwnerLayout />
                     </RoleGuard>
                   }
                 >
-                  <Route path="/shop-owner/dashboard" element={<ShopOwnerDashboard />} />
-                  <Route path="/shop-owner/menu" element={<MenuBuilder />} />
-                  <Route path="/shop-owner/categories" element={<Categories />} />
+                  <Route path="/shop-owner/subscribe"    element={<Subscribe />} />
+                  <Route path="/shop-owner/dashboard"    element={<ShopOwnerDashboard />} />
+                  <Route path="/shop-owner/menu"         element={<MenuBuilder />} />
+                  <Route path="/shop-owner/categories"   element={<Categories />} />
                   <Route path="/shop-owner/customizations" element={<Customizations />} />
-                  <Route path="/shop-owner/orders" element={<ShopOwnerOrders />} />
-                  <Route path="/shop-owner/analytics" element={<ShopOwnerAnalytics />} />
-                  <Route path="/shop-owner/loyalty" element={<LoyaltySettings />} />
-                  <Route path="/shop-owner/workers" element={<Workers />} />
-                  <Route path="/shop-owner/settings" element={<ShopSettings />} />
-                  <Route path="/shop-owner/setup" element={<ShopSetup />} />
+                  <Route path="/shop-owner/orders"       element={<ShopOwnerOrders />} />
+                  <Route path="/shop-owner/analytics"    element={<ShopOwnerAnalytics />} />
+                  <Route path="/shop-owner/loyalty"      element={<LoyaltySettings />} />
+                  <Route path="/shop-owner/workers"      element={<Workers />} />
+                  <Route path="/shop-owner/settings"     element={<ShopSettings />} />
+                  <Route path="/shop-owner/setup"        element={<ShopSetup />} />
                   <Route path="/shop-owner/connect-square" element={<ConnectSquarePage />} />
-                  <Route path="/shop-owner/reviews" element={<Reviews />} />
+                  <Route path="/shop-owner/reviews"      element={<Reviews />} />
                 </Route>
 
                 {/* admin pages */}
@@ -134,22 +136,22 @@ export default function App() {
                     </RoleGuard>
                   }
                 >
-                  <Route path="/admin/dashboard" element={<AdminDashboard />} />
-                  <Route path="/admin/shops" element={<ShopManagement />} />
-                  <Route path="/admin/users" element={<Users />} />
-                  <Route path="/admin/analytics" element={<AdminAnalytics />} />
-                  <Route path="/admin/settings" element={<AdminSettings />} />
-                  <Route path="/admin/audit-log" element={<AuditLog />} />
+                  <Route path="/admin/dashboard"  element={<AdminDashboard />} />
+                  <Route path="/admin/shops"       element={<ShopManagement />} />
+                  <Route path="/admin/users"       element={<Users />} />
+                  <Route path="/admin/analytics"   element={<AdminAnalytics />} />
+                  <Route path="/admin/settings"    element={<AdminSettings />} />
+                  <Route path="/admin/audit-log"   element={<AuditLog />} />
                 </Route>
 
                 {/* redirects */}
-                <Route path="/shops" element={<Navigate to="/download" replace />} />
-                <Route path="/shops/:id" element={<Navigate to="/download" replace />} />
-                <Route path="/rewards" element={<Navigate to="/download" replace />} />
-                <Route path="/profile" element={<Navigate to="/download" replace />} />
+                <Route path="/shops"        element={<Navigate to="/download" replace />} />
+                <Route path="/shops/:id"    element={<Navigate to="/download" replace />} />
+                <Route path="/rewards"      element={<Navigate to="/download" replace />} />
+                <Route path="/profile"      element={<Navigate to="/download" replace />} />
                 <Route path="/profile/edit" element={<Navigate to="/download" replace />} />
-                <Route path="/register" element={<Navigate to="/download" replace />} />
-                <Route path="/worker" element={<Navigate to="/login" replace />} />
+                <Route path="/register"     element={<Navigate to="/download" replace />} />
+                <Route path="/worker"       element={<Navigate to="/login" replace />} />
                 <Route path="/worker/summary" element={<Navigate to="/login" replace />} />
 
                 {/* 404 */}

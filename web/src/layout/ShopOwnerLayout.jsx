@@ -1,46 +1,66 @@
 import { Outlet, Navigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import ShopOwnerSidebar from '../components/navigation/ShopOwnerSidebar';
 import { useShop } from '../context/ShopContext';
 import PageLoader from '../components/ui/PageLoader';
-import { Clock, CheckCircle, CreditCard } from 'lucide-react';
+import { CheckCircle, CreditCard, Zap } from 'lucide-react';
 
-// Routes accessible before setup is complete
+// Routes accessible before full setup is complete
 const SETUP_ROUTES = [
   '/shop-owner/settings',
   '/shop-owner/connect-square',
+  '/shop-owner/subscribe',   // ← must be reachable before active
 ];
 
 export default function ShopOwnerLayout() {
   const { shop, loading } = useShop();
   const location = useLocation();
+  const navigate = useNavigate();
 
   if (loading) return <PageLoader />;
 
-  // ── Still pending approval ────────────────────────────────────────────────
-  if (!shop || shop.status === 'pending') {
+  // ── No shop yet (shouldn't happen but safety net) ─────────────────────────
+  if (!shop) {
+    return <Navigate to="/shop-application" replace />;
+  }
+
+  // ── Application submitted but not paid yet ────────────────────────────────
+  if (shop.status === 'pending_payment' || shop.status === 'pending') {
+    // Let them reach the subscribe page
+    if (location.pathname === '/shop-owner/subscribe') {
+      return (
+        <div className="min-h-screen bg-gray-50 dark:bg-neutral-950">
+          <main className="p-6 max-w-5xl mx-auto">
+            <Outlet />
+          </main>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-neutral-950 flex items-center justify-center px-4">
-        <div className="max-w-lg w-full bg-white dark:bg-neutral-900 rounded-2xl shadow-xl border border-gray-200 dark:border-neutral-800 p-10 text-center">
-          <div className="relative inline-block mb-6">
-            <Clock className="w-20 h-20 text-amber-500" />
+        <div className="max-w-md w-full bg-white dark:bg-neutral-900 rounded-2xl shadow-xl border border-amber-200 dark:border-amber-800 p-10 text-center">
+          <div className="w-20 h-20 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+            <Zap className="w-10 h-10 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
-            Application Under Review
+            One Step Away!
           </h1>
           <p className="text-gray-500 dark:text-gray-400 mb-6">
-            Your shop application is being reviewed by our team. You'll receive an email
-            as soon as it's approved — usually within 24–48 hours.
+            Subscribe to activate your shop and unlock your full dashboard instantly.
           </p>
           <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 text-left text-sm text-amber-800 dark:text-amber-300 space-y-2 mb-6">
-            <p>✅ Application received</p>
-            <p>⏳ Under review by LoyalCup team</p>
-            <p className="opacity-50">📧 Approval email sent to you</p>
-            <p className="opacity-50">🚀 Dashboard access unlocked</p>
+            <p className="flex items-center gap-2"><CheckCircle size={14} /> Application received</p>
+            <p className="flex items-center gap-2 opacity-50"><CreditCard size={14} /> Subscribe to activate</p>
+            <p className="flex items-center gap-2 opacity-30"><CheckCircle size={14} /> Dashboard access unlocked</p>
           </div>
-          <a href="mailto:support@loyalcup.com"
-            className="text-sm text-amber-600 hover:underline">
-            Questions? Email support@loyalcup.com
-          </a>
+          <button
+            onClick={() => navigate('/shop-owner/subscribe')}
+            className="w-full bg-gradient-to-r from-amber-600 to-orange-600 text-white py-3 rounded-xl font-bold hover:opacity-90 transition flex items-center justify-center gap-2"
+          >
+            <CreditCard size={18} />
+            Subscribe — $150/mo
+          </button>
+          <p className="mt-3 text-xs text-gray-400">Activates instantly · Cancel anytime · Promo codes accepted</p>
         </div>
       </div>
     );
@@ -54,9 +74,7 @@ export default function ShopOwnerLayout() {
           <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
             <span className="text-4xl">🚫</span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
-            Account Suspended
-          </h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">Account Suspended</h1>
           <p className="text-gray-500 dark:text-gray-400 mb-6">
             Your shop has been suspended. Please contact support to resolve this.
           </p>
@@ -70,31 +88,23 @@ export default function ShopOwnerLayout() {
   }
 
   // ── Active but setup not complete ─────────────────────────────────────────
-  // Setup is "complete" when Square is connected (square_merchant_id is set)
   const squareConnected = !!shop.square_merchant_id;
   const onSetupRoute = SETUP_ROUTES.some(r => location.pathname.startsWith(r));
 
   if (!squareConnected && !onSetupRoute) {
-    // Determine where they are in setup:
-    // Step 1 — fill out shop settings (name, address, hours, images)
-    // Step 2 — connect Square POS
     const settingsComplete = !!(shop.address && shop.phone && shop.hours);
-
     return <Navigate
       to={settingsComplete ? '/shop-owner/connect-square' : '/shop-owner/settings'}
       replace
     />;
   }
 
-  // ── Fully set up — show full portal ──────────────────────────────────────
+  // ── Fully set up ──────────────────────────────────────────────────────────
   return (
     <div className="flex h-screen w-full overflow-hidden">
       <ShopOwnerSidebar />
       <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-[#181818]">
-        {/* Setup progress banner — shown until Square is connected */}
-        {!squareConnected && (
-          <SetupBanner shop={shop} currentPath={location.pathname} />
-        )}
+        {!squareConnected && <SetupBanner shop={shop} />}
         <main className="p-6">
           <Outlet />
         </main>
@@ -103,10 +113,9 @@ export default function ShopOwnerLayout() {
   );
 }
 
-function SetupBanner({ shop, currentPath }) {
+function SetupBanner({ shop }) {
   const step1Done = !!(shop.address && shop.phone);
   const step2Done = !!shop.square_merchant_id;
-
   return (
     <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-6 py-3">
       <div className="max-w-4xl mx-auto flex items-center gap-6 text-sm font-medium">

@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { Store, MapPin, Phone, Mail, Globe, FileText, Check, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
-import { Coffee, Store, MapPin, Phone, Globe, FileText, MessageSquare } from 'lucide-react';
 import supabase from '../../lib/supabase';
 
 export default function ShopApplication() {
@@ -17,10 +17,9 @@ export default function ShopApplication() {
     state: '',
     zip: '',
     phone: '',
-    email: '',         // applicant contact email
+    email: '',
     businessLicense: '',
     website: '',
-    whyJoin: '',
     agreeToTerms: false,
   });
 
@@ -31,40 +30,33 @@ export default function ShopApplication() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (!formData.agreeToTerms) {
       toast.error('Please agree to the terms and conditions');
       return;
     }
-
     setLoading(true);
-
     try {
-      // Check if user is logged in — if not, create an account for them first
       const { data: { session } } = await supabase.auth.getSession();
 
       let userId;
-
       if (session) {
         userId = session.user.id;
       } else {
-        // Anonymous apply: sign them up so we have a user record to attach the shop to.
-        // They'll get a confirmation email from Supabase automatically.
+        // Create account so we can attach the shop — they'll set a real password after paying
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email: formData.email,
           password: Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2),
           options: {
-            data: { role: 'applicant', full_name: formData.businessName },
+            data: { role: 'shop_owner', full_name: formData.businessName },
           },
         });
-
         if (signUpError) throw signUpError;
         userId = signUpData.user?.id;
         if (!userId) throw new Error('Failed to create account');
       }
 
-      // Insert shop with status = pending (NOT active)
-      const { error: shopError } = await supabase
+      // Create shop with status = pending_payment (not pending review)
+      const { data: shop, error: shopError } = await supabase
         .from('shops')
         .insert({
           owner_id:         userId,
@@ -77,13 +69,16 @@ export default function ShopApplication() {
           phone:            formData.phone,
           website:          formData.website || null,
           business_license: formData.businessLicense || null,
-          status:           'pending',   // ← stays pending until admin approves
-        });
+          status:           'pending_payment', // ← payment activates it, not manual approval
+        })
+        .select('id')
+        .single();
 
       if (shopError) throw shopError;
 
-      toast.success('Application submitted! We\'ll be in touch within 24–48 hours.');
-      navigate('/application-pending');
+      toast.success('Almost there! Complete your subscription to activate your shop.');
+      // Go straight to subscribe — they pay, webhook fires, they're in
+      navigate('/shop-owner/subscribe');
     } catch (error) {
       console.error('Application error:', error);
       toast.error(error.message || 'Failed to submit application');
@@ -92,193 +87,141 @@ export default function ShopApplication() {
     }
   };
 
-  const inputClass = 'w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 text-gray-900 dark:text-white border border-gray-200 dark:border-neutral-700 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 transition';
+  const ic = 'w-full px-4 py-3 border-2 border-gray-200 dark:border-neutral-700 rounded-xl bg-white dark:bg-neutral-800 text-gray-900 dark:text-white focus:outline-none focus:border-amber-500 transition text-sm';
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-amber-50 to-white dark:from-neutral-900 dark:to-neutral-800 py-12 px-4">
-      <div className="max-w-3xl mx-auto">
-
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-10"
-        >
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl shadow-lg mb-4">
-            <Coffee className="w-8 h-8 text-white" />
+    <div className="max-w-2xl mx-auto py-12 px-4">
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-8 text-center">
+        <h1 className="text-4xl font-black text-gray-900 dark:text-white mb-2">Join LoyalCup</h1>
+        <p className="text-gray-500 dark:text-gray-400 text-lg">
+          Tell us about your shop — then subscribe to go live instantly.
+        </p>
+        {/* Step indicator */}
+        <div className="flex items-center justify-center gap-3 mt-6">
+          <div className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-full text-sm font-bold">
+            <span>1</span> <span>Shop Details</span>
           </div>
-          <h1 className="text-4xl font-black text-gray-900 dark:text-white mb-2">
-            Join LoyalCup
-          </h1>
-          <p className="text-gray-500 dark:text-gray-400 text-lg">
-            Fill out the form below and we'll review your application within 24–48 hours.
+          <div className="w-6 h-0.5 bg-gray-300 dark:bg-neutral-700" />
+          <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-neutral-800 text-gray-400 rounded-full text-sm font-bold">
+            <span>2</span> <span>Subscribe & Activate</span>
+          </div>
+          <div className="w-6 h-0.5 bg-gray-300 dark:bg-neutral-700" />
+          <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-neutral-800 text-gray-400 rounded-full text-sm font-bold">
+            <span>3</span> <span>Setup &amp; Go Live</span>
+          </div>
+        </div>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="bg-white dark:bg-neutral-900 rounded-2xl shadow-xl border border-gray-200 dark:border-neutral-800 p-8"
+      >
+        <form onSubmit={handleSubmit} className="space-y-5">
+
+          {/* Business Name */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
+              <Store className="w-4 h-4" /> Business Name *
+            </label>
+            <input name="businessName" value={formData.businessName} onChange={handleChange}
+              placeholder="Brew & Bean Coffee" required className={ic} />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
+              <FileText className="w-4 h-4" /> About Your Shop (optional)
+            </label>
+            <textarea name="description" value={formData.description} onChange={handleChange}
+              placeholder="Tell customers what makes your shop special..." rows={3}
+              className={ic + ' resize-none'} />
+          </div>
+
+          {/* Email (only shown if not logged in) */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
+              <Mail className="w-4 h-4" /> Email Address *
+            </label>
+            <input name="email" type="email" value={formData.email} onChange={handleChange}
+              placeholder="you@yourbusiness.com" required className={ic} />
+          </div>
+
+          {/* Address */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
+              <MapPin className="w-4 h-4" /> Street Address *
+            </label>
+            <input name="address" value={formData.address} onChange={handleChange}
+              placeholder="123 Main St" required className={ic} />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-1">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">City *</label>
+              <input name="city" value={formData.city} onChange={handleChange}
+                placeholder="Austin" required className={ic} />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">State *</label>
+              <input name="state" value={formData.state} onChange={handleChange}
+                placeholder="TX" required maxLength={2} className={ic} />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">ZIP *</label>
+              <input name="zip" value={formData.zip} onChange={handleChange}
+                placeholder="78701" required className={ic} />
+            </div>
+          </div>
+
+          {/* Phone */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
+              <Phone className="w-4 h-4" /> Phone *
+            </label>
+            <input name="phone" type="tel" value={formData.phone} onChange={handleChange}
+              placeholder="(512) 555-0100" required className={ic} />
+          </div>
+
+          {/* Website (optional) */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
+              <Globe className="w-4 h-4" /> Website (optional)
+            </label>
+            <input name="website" type="url" value={formData.website} onChange={handleChange}
+              placeholder="https://yourshop.com" className={ic} />
+          </div>
+
+          {/* Terms */}
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" name="agreeToTerms" checked={formData.agreeToTerms}
+              onChange={handleChange} className="mt-1 w-4 h-4 accent-amber-500" />
+            <span className="text-sm text-gray-600 dark:text-gray-400">
+              I agree to the{' '}
+              <a href="/terms" className="text-amber-600 hover:underline" target="_blank">Terms of Service</a>
+              {' '}and{' '}
+              <a href="/privacy" className="text-amber-600 hover:underline" target="_blank">Privacy Policy</a>
+            </span>
+          </label>
+
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            type="submit"
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-amber-600 to-orange-600 text-white py-4 rounded-2xl font-bold text-lg shadow-xl flex items-center justify-center gap-3 disabled:opacity-60 mt-2"
+          >
+            {loading ? 'Saving...' : (
+              <>Continue to Subscribe <ArrowRight className="w-5 h-5" /></>
+            )}
+          </motion.button>
+
+          <p className="text-center text-xs text-gray-400">
+            Next step: $150/mo subscription · Activates instantly · Cancel anytime
           </p>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-white dark:bg-neutral-900 rounded-2xl shadow-xl border border-gray-200 dark:border-neutral-800 p-8"
-        >
-          <form onSubmit={handleSubmit} className="space-y-6">
-
-            {/* Business Name */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                <Store className="inline w-4 h-4 mr-1" />
-                Business Name <span className="text-red-500">*</span>
-              </label>
-              <input type="text" name="businessName" value={formData.businessName}
-                onChange={handleChange} className={inputClass}
-                placeholder="The Coffee Corner" required />
-            </div>
-
-            {/* Description */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                Description
-              </label>
-              <textarea name="description" value={formData.description}
-                onChange={handleChange} rows={3} className={`${inputClass} resize-none`}
-                placeholder="Tell us about your coffee shop..." />
-            </div>
-
-            {/* Address */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                <MapPin className="inline w-4 h-4 mr-1" />
-                Business Address <span className="text-red-500">*</span>
-              </label>
-              <input type="text" name="address" value={formData.address}
-                onChange={handleChange} className={inputClass}
-                placeholder="123 Main Street" required />
-            </div>
-
-            {/* City / State / Zip */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                  City <span className="text-red-500">*</span>
-                </label>
-                <input type="text" name="city" value={formData.city}
-                  onChange={handleChange} className={inputClass}
-                  placeholder="Chicago" required />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                  State <span className="text-red-500">*</span>
-                </label>
-                <input type="text" name="state" value={formData.state}
-                  onChange={handleChange} className={inputClass}
-                  placeholder="IL" maxLength={2} required />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                  ZIP <span className="text-red-500">*</span>
-                </label>
-                <input type="text" name="zip" value={formData.zip}
-                  onChange={handleChange} className={inputClass}
-                  placeholder="60601" required />
-              </div>
-            </div>
-
-            {/* Phone + Email */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                  <Phone className="inline w-4 h-4 mr-1" />
-                  Phone <span className="text-red-500">*</span>
-                </label>
-                <input type="tel" name="phone" value={formData.phone}
-                  onChange={handleChange} className={inputClass}
-                  placeholder="(555) 123-4567" required />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                  Contact Email <span className="text-red-500">*</span>
-                </label>
-                <input type="email" name="email" value={formData.email}
-                  onChange={handleChange} className={inputClass}
-                  placeholder="you@yourcoffeeshop.com" required />
-              </div>
-            </div>
-
-            {/* License + Website */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                  <FileText className="inline w-4 h-4 mr-1" />
-                  Business License #
-                </label>
-                <input type="text" name="businessLicense" value={formData.businessLicense}
-                  onChange={handleChange} className={inputClass} placeholder="Optional" />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                  <Globe className="inline w-4 h-4 mr-1" />
-                  Website
-                </label>
-                <input type="url" name="website" value={formData.website}
-                  onChange={handleChange} className={inputClass} placeholder="https://..." />
-              </div>
-            </div>
-
-            {/* Why Join */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                <MessageSquare className="inline w-4 h-4 mr-1" />
-                Why do you want to join LoyalCup?
-              </label>
-              <textarea name="whyJoin" value={formData.whyJoin}
-                onChange={handleChange} rows={3} className={`${inputClass} resize-none`}
-                placeholder="Tell us why you'd be a great fit..." />
-            </div>
-
-            {/* Terms */}
-            <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-900/10 rounded-xl border border-amber-200 dark:border-amber-800">
-              <input type="checkbox" name="agreeToTerms" checked={formData.agreeToTerms}
-                onChange={handleChange}
-                className="mt-1 w-5 h-5 text-amber-600 focus:ring-amber-500 rounded" />
-              <label className="text-sm text-gray-700 dark:text-gray-300">
-                I agree to the{' '}
-                <Link to="/terms" className="text-amber-600 hover:underline font-medium">
-                  terms and conditions
-                </Link>{' '}
-                and understand that my application will be reviewed by the LoyalCup team before I
-                get access to the dashboard.
-              </label>
-            </div>
-
-            {/* Submit */}
-            <motion.button
-              type="submit"
-              disabled={loading}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="w-full bg-gradient-to-r from-amber-600 to-orange-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition disabled:opacity-50"
-            >
-              {loading ? 'Submitting…' : 'Submit Application'}
-            </motion.button>
-
-            <p className="text-center text-sm text-gray-500 dark:text-gray-400">
-              Already have an account?{' '}
-              <Link to="/login" className="text-amber-600 hover:underline">Sign in</Link>
-            </p>
-                        {/* Pricing reminder */}
-            <div className="mt-2 p-4 bg-gray-50 dark:bg-neutral-800 rounded-xl border border-gray-200 dark:border-neutral-700 text-center">
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                LoyalCup costs{' '}
-                <span className="font-bold text-gray-900 dark:text-white">$150/month</span>
-                {' '}after approval. Your rate is locked in forever — no price increases.{' '}
-                <Link to="/pricing" className="text-amber-600 hover:underline font-medium">
-                  See what's included →
-                </Link>
-              </p>
-            </div>
-          </form>
-        </motion.div>
-      </div>
+        </form>
+      </motion.div>
     </div>
   );
 }
