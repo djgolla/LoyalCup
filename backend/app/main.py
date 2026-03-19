@@ -52,10 +52,7 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
 )
 
-if settings.rate_limit_enabled:
-    app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
-
+# ── CORS must be first middleware, before rate limiter ──────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -68,6 +65,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+if settings.rate_limit_enabled:
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
 
 
 @app.middleware("http")
@@ -90,7 +91,7 @@ app.include_router(orders.router)
 app.include_router(loyalty.router)
 app.include_router(admin.router)
 app.include_router(payments.router)
-app.include_router(billing.router)       # ← Stripe shop subscriptions
+app.include_router(billing.router)
 app.include_router(pos_status.router)
 app.include_router(pos_connect.router)
 app.include_router(pos_square_callback.router)

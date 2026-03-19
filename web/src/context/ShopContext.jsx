@@ -20,12 +20,7 @@ export function ShopProvider({ children }) {
 
     const userRole = user.user_metadata?.role || "customer";
 
-    // Load shop for owners, workers, AND applicants (pending_payment flow)
-    if (
-      userRole === "shop_owner" ||
-      userRole === "shop_worker" ||
-      userRole === "applicant"
-    ) {
+    if (userRole === "shop_owner" || userRole === "shop_worker" || userRole === "applicant") {
       loadShop();
     } else {
       setShop(null);
@@ -40,22 +35,19 @@ export function ShopProvider({ children }) {
       const userRole = user?.user_metadata?.role || "customer";
 
       if (userRole === "shop_owner" || userRole === "applicant") {
+        // Use maybeSingle() — won't throw 406 if multiple rows exist
+        // Also order by created_at desc so we get the latest shop if dupes exist
         const { data, error } = await supabase
           .from("shops")
           .select("*")
           .eq("owner_id", user.id)
-          .single();
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-        if (error) {
-          if (error.code === "PGRST116") {
-            // No shop yet — not an error for applicants, they might be mid-flow
-            setShop(null);
-          } else {
-            throw error;
-          }
-        } else {
-          setShop(data);
-        }
+        if (error) throw error;
+        setShop(data || null);
+
       } else if (userRole === "shop_worker") {
         const shopId = user.user_metadata?.shop_id;
         if (shopId) {
@@ -63,10 +55,10 @@ export function ShopProvider({ children }) {
             .from("shops")
             .select("*")
             .eq("id", shopId)
-            .single();
+            .maybeSingle();
 
           if (error) throw error;
-          setShop(data);
+          setShop(data || null);
         } else {
           setError("No shop assigned to your account");
           setShop(null);
