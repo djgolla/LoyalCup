@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard, Menu as MenuIcon, FolderTree,
   Settings as SettingsIcon, ShoppingBag, BarChart3, Award,
-  LogOut, Lock, Star,
+  LogOut, Lock, Star, CreditCard,
 } from 'lucide-react';
 
 export default function ShopOwnerSidebar() {
@@ -72,13 +72,16 @@ export default function ShopOwnerSidebar() {
         <Link to="/shop-owner/categories" icon={FolderTree} requiresSquare>Categories</Link>
 
         <Section>Operations</Section>
-        <Link to="/shop-owner/orders"   icon={ShoppingBag} requiresSquare>Orders</Link>
-        <Link to="/shop-owner/reviews"  icon={Star}        requiresSquare>Reviews</Link>
-        <Link to="/shop-owner/loyalty"  icon={Award}       requiresSquare>Loyalty</Link>
-        <Link to="/shop-owner/analytics" icon={BarChart3}  requiresSquare>Analytics</Link>
+        <Link to="/shop-owner/orders"    icon={ShoppingBag} requiresSquare>Orders</Link>
+        <Link to="/shop-owner/reviews"   icon={Star}        requiresSquare>Reviews</Link>
+        <Link to="/shop-owner/loyalty"   icon={Award}       requiresSquare>Loyalty</Link>
+        <Link to="/shop-owner/analytics" icon={BarChart3}   requiresSquare>Analytics</Link>
 
         <Section>Settings</Section>
-        <Link to="/shop-owner/settings" icon={SettingsIcon}>Shop Settings</Link>
+        <Link to="/shop-owner/settings"      icon={SettingsIcon}>Shop Settings</Link>
+        <Link to="/shop-owner/connect-square" icon={CreditCard}>
+          {squareConnected ? 'Square Connected ✓' : 'Connect Square'}
+        </Link>
       </nav>
 
       <div className="p-3 border-t border-gray-200 dark:border-neutral-800">
