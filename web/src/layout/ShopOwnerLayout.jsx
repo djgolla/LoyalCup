@@ -19,33 +19,27 @@ export default function ShopOwnerLayout() {
   // Still fetching — show spinner, never render below this
   if (loading) return <PageLoader />;
 
-  // No shop at all — only allow /subscribe through, everything else back to application
+  // ── /subscribe is ALWAYS allowed through regardless of shop state ─────────
+  // This prevents the RLS 406 "no shop yet" boot-loop to /shop-application
+  if (location.pathname === '/shop-owner/subscribe') {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-neutral-950">
+        <main className="p-6 max-w-5xl mx-auto">
+          <Outlet />
+        </main>
+      </div>
+    );
+  }
+
+  // No shop at all — send to application (subscribe already handled above)
   if (!shop) {
-    if (location.pathname === '/shop-owner/subscribe') {
-      return (
-        <div className="min-h-screen bg-gray-50 dark:bg-neutral-950">
-          <main className="p-6 max-w-5xl mx-auto">
-            <Outlet />
-          </main>
-        </div>
-      );
-    }
     return <Navigate to="/shop-application" replace />;
   }
 
   // ── shop exists from here down — safe to read shop.status ────────────────
 
-  // Pending payment — show subscribe wall or subscribe page
+  // Pending payment — show subscribe wall (subscribe page handled above)
   if (shop.status === 'pending_payment' || shop.status === 'pending') {
-    if (location.pathname === '/shop-owner/subscribe') {
-      return (
-        <div className="min-h-screen bg-gray-50 dark:bg-neutral-950">
-          <main className="p-6 max-w-5xl mx-auto">
-            <Outlet />
-          </main>
-        </div>
-      );
-    }
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-neutral-950 flex items-center justify-center px-4">
         <div className="max-w-md w-full bg-white dark:bg-neutral-900 rounded-2xl shadow-xl border border-amber-200 dark:border-amber-800 p-10 text-center">

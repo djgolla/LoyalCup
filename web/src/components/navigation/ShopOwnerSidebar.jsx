@@ -2,9 +2,9 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useShop } from '../../context/ShopContext';
 import { useAuth } from '../../context/AuthContext';
 import {
-  LayoutDashboard, Menu as MenuIcon, FolderTree,
+  LayoutDashboard, Menu as MenuIcon, FolderTree, Sliders,
   Settings as SettingsIcon, ShoppingBag, BarChart3, Award,
-  LogOut, Lock, Star, CreditCard,
+  LogOut, Lock, Star, CreditCard, Users,
 } from 'lucide-react';
 
 export default function ShopOwnerSidebar() {
@@ -14,7 +14,7 @@ export default function ShopOwnerSidebar() {
 
   const squareConnected = !!shop?.square_merchant_id;
 
-  const base = 'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200 text-sm';
+  const base     = 'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200 text-sm';
   const active   = 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-semibold';
   const inactive = 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800';
   const locked   = 'text-gray-400 dark:text-neutral-600 cursor-not-allowed pointer-events-none';
@@ -68,17 +68,19 @@ export default function ShopOwnerSidebar() {
         <Link to="/shop-owner/dashboard" icon={LayoutDashboard} requiresSquare>Dashboard</Link>
 
         <Section>Menu</Section>
-        <Link to="/shop-owner/menu"       icon={MenuIcon}   requiresSquare>Menu Builder</Link>
-        <Link to="/shop-owner/categories" icon={FolderTree} requiresSquare>Categories</Link>
+        <Link to="/shop-owner/menu"            icon={MenuIcon}   requiresSquare>Menu Builder</Link>
+        <Link to="/shop-owner/categories"      icon={FolderTree} requiresSquare>Categories</Link>
+        <Link to="/shop-owner/customizations"  icon={Sliders}    requiresSquare>Modifiers</Link>
 
         <Section>Operations</Section>
         <Link to="/shop-owner/orders"    icon={ShoppingBag} requiresSquare>Orders</Link>
         <Link to="/shop-owner/reviews"   icon={Star}        requiresSquare>Reviews</Link>
         <Link to="/shop-owner/loyalty"   icon={Award}       requiresSquare>Loyalty</Link>
+        <Link to="/shop-owner/workers"   icon={Users}       requiresSquare>Workers</Link>
         <Link to="/shop-owner/analytics" icon={BarChart3}   requiresSquare>Analytics</Link>
 
         <Section>Settings</Section>
-        <Link to="/shop-owner/settings"      icon={SettingsIcon}>Shop Settings</Link>
+        <Link to="/shop-owner/settings"       icon={SettingsIcon}>Shop Settings</Link>
         <Link to="/shop-owner/connect-square" icon={CreditCard}>
           {squareConnected ? 'Square Connected ✓' : 'Connect Square'}
         </Link>
