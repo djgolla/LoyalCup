@@ -20,7 +20,7 @@ export default function ShopOwnerLayout() {
   if (loading) return <PageLoader />;
 
   // ── No shop yet (shouldn't happen but safety net) ─────────────────────────
-  if (!shop) {
+  if (!loading && !shop && location.pathname !== '/shop-owner/subscribe') {
     return <Navigate to="/shop-application" replace />;
   }
 

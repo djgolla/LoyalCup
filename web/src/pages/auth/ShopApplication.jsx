@@ -18,7 +18,7 @@ export default function ShopApplication() {
     zip: '',
     phone: '',
     email: '',
-    businessLicense: '',
+    password: '',
     website: '',
     agreeToTerms: false,
   });
@@ -34,50 +34,72 @@ export default function ShopApplication() {
       toast.error('Please agree to the terms and conditions');
       return;
     }
+    if (formData.password.length < 8) {
+      toast.error('Password must be at least 8 characters');
+      return;
+    }
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-
+      // Check if already logged in
+      const { data: { session: existingSession } } = await supabase.auth.getSession();
       let userId;
-      if (session) {
-        userId = session.user.id;
+      let userEmail = formData.email;
+
+      if (existingSession) {
+        // Already logged in — use their account
+        userId = existingSession.user.id;
+        userEmail = existingSession.user.email;
       } else {
-        // Create account so we can attach the shop — they'll set a real password after paying
+        // Create account AND sign them in immediately
+        const tempPassword = formData.password;
+
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email: formData.email,
-          password: Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2),
+          password: tempPassword,
           options: {
-            data: { role: 'shop_owner', full_name: formData.businessName },
+            data: { role: 'applicant', full_name: formData.businessName },
           },
         });
+
         if (signUpError) throw signUpError;
-        userId = signUpData.user?.id;
+
+        // signUp in Supabase auto-signs them in if email confirmation is disabled
+        // If email confirmation IS enabled, we need to sign in immediately
+        if (!signUpData.session) {
+          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+            email: formData.email,
+            password: tempPassword,
+          });
+          if (signInError) throw signInError;
+          userId = signInData.user?.id;
+        } else {
+          userId = signUpData.user?.id;
+        }
+
         if (!userId) throw new Error('Failed to create account');
       }
 
-      // Create shop with status = pending_payment (not pending review)
+      // Create shop with status = pending_payment
       const { data: shop, error: shopError } = await supabase
         .from('shops')
         .insert({
-          owner_id:         userId,
-          name:             formData.businessName,
-          description:      formData.description || null,
-          address:          formData.address,
-          city:             formData.city,
-          state:            formData.state,
-          zip:              formData.zip,
-          phone:            formData.phone,
-          website:          formData.website || null,
-          business_license: formData.businessLicense || null,
-          status:           'pending_payment', // ← payment activates it, not manual approval
+          owner_id:    userId,
+          name:        formData.businessName,
+          description: formData.description || null,
+          address:     formData.address,
+          city:        formData.city,
+          state:       formData.state,
+          zip:         formData.zip,
+          phone:       formData.phone,
+          website:     formData.website || null,
+          status:      'pending_payment',
         })
         .select('id')
         .single();
 
       if (shopError) throw shopError;
 
-      toast.success('Almost there! Complete your subscription to activate your shop.');
-      // Go straight to subscribe — they pay, webhook fires, they're in
+      toast.success('Almost there! Complete your subscription to go live.');
       navigate('/shop-owner/subscribe');
     } catch (error) {
       console.error('Application error:', error);
@@ -97,13 +119,13 @@ export default function ShopApplication() {
           Tell us about your shop — then subscribe to go live instantly.
         </p>
         {/* Step indicator */}
-        <div className="flex items-center justify-center gap-3 mt-6">
+        <div className="flex items-center justify-center gap-3 mt-6 flex-wrap">
           <div className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-full text-sm font-bold">
             <span>1</span> <span>Shop Details</span>
           </div>
           <div className="w-6 h-0.5 bg-gray-300 dark:bg-neutral-700" />
           <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-neutral-800 text-gray-400 rounded-full text-sm font-bold">
-            <span>2</span> <span>Subscribe & Activate</span>
+            <span>2</span> <span>Subscribe &amp; Activate</span>
           </div>
           <div className="w-6 h-0.5 bg-gray-300 dark:bg-neutral-700" />
           <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-neutral-800 text-gray-400 rounded-full text-sm font-bold">
@@ -120,16 +142,14 @@ export default function ShopApplication() {
       >
         <form onSubmit={handleSubmit} className="space-y-5">
 
-          {/* Business Name */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
               <Store className="w-4 h-4" /> Business Name *
             </label>
             <input name="businessName" value={formData.businessName} onChange={handleChange}
-              placeholder="Brew & Bean Coffee" required className={ic} />
+              placeholder="Brew &amp; Bean Coffee" required className={ic} />
           </div>
 
-          {/* Description */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
               <FileText className="w-4 h-4" /> About Your Shop (optional)
@@ -139,7 +159,6 @@ export default function ShopApplication() {
               className={ic + ' resize-none'} />
           </div>
 
-          {/* Email (only shown if not logged in) */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
               <Mail className="w-4 h-4" /> Email Address *
@@ -148,7 +167,15 @@ export default function ShopApplication() {
               placeholder="you@yourbusiness.com" required className={ic} />
           </div>
 
-          {/* Address */}
+          {/* Password — needed so they can log back in */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+              Password * <span className="text-gray-400 font-normal">(you'll use this to log in)</span>
+            </label>
+            <input name="password" type="password" value={formData.password} onChange={handleChange}
+              placeholder="Min 8 characters" required minLength={8} className={ic} />
+          </div>
+
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
               <MapPin className="w-4 h-4" /> Street Address *
@@ -175,7 +202,6 @@ export default function ShopApplication() {
             </div>
           </div>
 
-          {/* Phone */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
               <Phone className="w-4 h-4" /> Phone *
@@ -184,7 +210,6 @@ export default function ShopApplication() {
               placeholder="(512) 555-0100" required className={ic} />
           </div>
 
-          {/* Website (optional) */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
               <Globe className="w-4 h-4" /> Website (optional)
@@ -193,7 +218,6 @@ export default function ShopApplication() {
               placeholder="https://yourshop.com" className={ic} />
           </div>
 
-          {/* Terms */}
           <label className="flex items-start gap-3 cursor-pointer">
             <input type="checkbox" name="agreeToTerms" checked={formData.agreeToTerms}
               onChange={handleChange} className="mt-1 w-4 h-4 accent-amber-500" />
@@ -212,7 +236,7 @@ export default function ShopApplication() {
             disabled={loading}
             className="w-full bg-gradient-to-r from-amber-600 to-orange-600 text-white py-4 rounded-2xl font-bold text-lg shadow-xl flex items-center justify-center gap-3 disabled:opacity-60 mt-2"
           >
-            {loading ? 'Saving...' : (
+            {loading ? 'Creating your account...' : (
               <>Continue to Subscribe <ArrowRight className="w-5 h-5" /></>
             )}
           </motion.button>

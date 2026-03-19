@@ -20,7 +20,12 @@ export function ShopProvider({ children }) {
 
     const userRole = user.user_metadata?.role || "customer";
 
-    if (userRole === "shop_owner" || userRole === "shop_worker") {
+    // Load shop for owners, workers, AND applicants (pending_payment flow)
+    if (
+      userRole === "shop_owner" ||
+      userRole === "shop_worker" ||
+      userRole === "applicant"
+    ) {
       loadShop();
     } else {
       setShop(null);
@@ -34,7 +39,7 @@ export function ShopProvider({ children }) {
       setError(null);
       const userRole = user?.user_metadata?.role || "customer";
 
-      if (userRole === "shop_owner") {
+      if (userRole === "shop_owner" || userRole === "applicant") {
         const { data, error } = await supabase
           .from("shops")
           .select("*")
@@ -43,7 +48,7 @@ export function ShopProvider({ children }) {
 
         if (error) {
           if (error.code === "PGRST116") {
-            setError("No shop assigned to your account");
+            // No shop yet — not an error for applicants, they might be mid-flow
             setShop(null);
           } else {
             throw error;
@@ -82,8 +87,8 @@ export function ShopProvider({ children }) {
         shopId: shop?.id,
         loading,
         error,
-        loadShop,        // ← what ShopSettings calls
-        refreshShop: loadShop, // ← keep old name too so nothing else breaks
+        loadShop,
+        refreshShop: loadShop,
       }}
     >
       {children}
