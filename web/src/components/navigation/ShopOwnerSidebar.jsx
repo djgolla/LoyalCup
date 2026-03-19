@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard, Menu as MenuIcon, FolderTree, Sliders,
   Settings as SettingsIcon, ShoppingBag, BarChart3, Award,
-  LogOut, Lock, Star, CreditCard, Users,
+  LogOut, Lock, Star, CreditCard,
 } from 'lucide-react';
 
 export default function ShopOwnerSidebar() {
@@ -68,15 +68,14 @@ export default function ShopOwnerSidebar() {
         <Link to="/shop-owner/dashboard" icon={LayoutDashboard} requiresSquare>Dashboard</Link>
 
         <Section>Menu</Section>
-        <Link to="/shop-owner/menu"            icon={MenuIcon}   requiresSquare>Menu Builder</Link>
-        <Link to="/shop-owner/categories"      icon={FolderTree} requiresSquare>Categories</Link>
-        <Link to="/shop-owner/customizations"  icon={Sliders}    requiresSquare>Modifiers</Link>
+        <Link to="/shop-owner/menu"           icon={MenuIcon}   requiresSquare>Menu Builder</Link>
+        <Link to="/shop-owner/categories"     icon={FolderTree} requiresSquare>Categories</Link>
+        <Link to="/shop-owner/customizations" icon={Sliders}    requiresSquare>Modifiers</Link>
 
         <Section>Operations</Section>
         <Link to="/shop-owner/orders"    icon={ShoppingBag} requiresSquare>Orders</Link>
         <Link to="/shop-owner/reviews"   icon={Star}        requiresSquare>Reviews</Link>
         <Link to="/shop-owner/loyalty"   icon={Award}       requiresSquare>Loyalty</Link>
-        <Link to="/shop-owner/workers"   icon={Users}       requiresSquare>Workers</Link>
         <Link to="/shop-owner/analytics" icon={BarChart3}   requiresSquare>Analytics</Link>
 
         <Section>Settings</Section>
