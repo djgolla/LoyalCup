@@ -138,27 +138,40 @@ const OrderDetailsModal = ({ order: initialOrder, onClose, onStatusUpdated }) =>
   const StatusIcon = config.icon;
   const nextStatuses = NEXT_STATUSES[order.status] || [];
 
-  const handleStatusChange = async (newStatus) => {
-    setUpdating(true);
-    try {
-      const { error } = await supabase
-        .from('orders')
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq('id', order.id);
+const handleStatusChange = async (newStatus) => {
+  setUpdating(true);
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error('Not authenticated');
 
-      if (error) throw error;
-
-      const updated = { ...order, status: newStatus };
-      setOrder(updated);
-      onStatusUpdated?.(updated);
-      toast.success(`Order marked as ${STATUS_CONFIG[newStatus]?.label || newStatus}`);
-    } catch (err) {
-      console.error('Status update failed:', err);
-      toast.error('Failed to update status');
-    } finally {
-      setUpdating(false);
+    const res = await fetch(
+      `${import.meta.env.VITE_API_URL}/api/v1/shops/${order.shop_id}/orders/${order.id}/status`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: newStatus }),
+      }
+    );
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to update status');
     }
-  };
+
+    const updated = { ...order, status: newStatus };
+    setOrder(updated);
+    onStatusUpdated?.(updated);
+    toast.success(`Order marked as ${STATUS_CONFIG[newStatus]?.label || newStatus}`);
+  } catch (err) {
+    console.error('Status update failed:', err);
+    toast.error(err.message || 'Failed to update status');
+  } finally {
+    setUpdating(false);
+  }
+};
 
   const nextStatusConfig = {
     accepted:  { label: 'Accept Order',      color: 'bg-blue-500 hover:bg-blue-600' },

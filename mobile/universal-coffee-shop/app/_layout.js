@@ -72,6 +72,13 @@ function RootLayoutNav() {
       <Stack.Screen name="order-history" />
       <Stack.Screen name="shop/[id]" />
       <Stack.Screen name="order/[id]" />
+      <Stack.Screen name="rewards" />
+      <Stack.Screen name="settings" />
+      <Stack.Screen name="favorites" />
+      <Stack.Screen name="help" />
+      <Stack.Screen name="about" />
+      <Stack.Screen name="payment-methods" />
+      <Stack.Screen name="saved-addresses" />
     </Stack>
   );
 }
