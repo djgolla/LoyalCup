@@ -1,36 +1,63 @@
 // main navigation layout file
-// universal-coffee-shop/app/_layout.js
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
+import * as Notifications from 'expo-notifications';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { CartProvider } from '../context/CartContext';
+import { registerForPushNotifications, clearPushToken } from '../services/notificationService';
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
   const { user, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const notificationListener = useRef();
+  const responseListener = useRef();
 
+  // Auth-based routing
   useEffect(() => {
     if (loading) return;
-
-    const inAuthGroup = segments[0] === '(auth)';
     const currentScreen = segments[0];
-    
-    // redirect based on auth state
     if (!user && currentScreen !== 'launch' && currentScreen !== 'login' && currentScreen !== 'signup') {
-      // User not authenticated - send to launch
       router.replace('/launch');
     } else if (user && (currentScreen === 'launch' || currentScreen === 'login' || currentScreen === 'signup' || !currentScreen)) {
-      // User authenticated but on auth screens or index - send to home
       router.replace('/home');
     }
   }, [user, loading, segments]);
+
+  // Push notifications
+  useEffect(() => {
+    if (user) {
+      // Register & save token when user logs in
+      registerForPushNotifications();
+
+      // Listen for foreground notifications
+      notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+        console.log('[Push] Received:', notification);
+      });
+
+      // Handle tap on notification — navigate to order screen
+      responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+        const orderId = response.notification.request.content.data?.order_id;
+        if (orderId) {
+          router.push(`/order/${orderId}`);
+        }
+      });
+    } else {
+      // User logged out — clear token
+      clearPushToken();
+    }
+
+    return () => {
+      // Use .remove() — the modern API for expo-notifications subscriptions
+      notificationListener.current?.remove();
+      responseListener.current?.remove();
+    };
+  }, [user]);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
@@ -57,17 +84,14 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
-      // Hide the splash screen after the fonts have loaded (or an error was returned)
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
 
-  // Don't render anything until the fonts are loaded
   if (!fontsLoaded && !fontError) {
     return null;
   }
 
-  // Render the layout wrapped in providers
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>

@@ -8,6 +8,7 @@ from app.services.order_service import order_service
 from app.services.export_service import export_service
 from app.services.square_order_service import push_order_to_pos
 from app.services.email_service import email_service
+from app.services.push_service import send_order_push
 from app.utils.security import require_auth, require_shop_worker
 from app.database import get_supabase
 
@@ -242,7 +243,7 @@ async def update_order_status(
         db = get_supabase()
         order_service.db = db
 
-        # Get order before update so we have customer info for email
+        # Get order before update so we have customer info for notifications
         order_before = await order_service.get_order(order_id)
         if not order_before:
             raise HTTPException(status_code=404, detail="Order not found")
@@ -251,12 +252,14 @@ async def update_order_status(
 
         updated_order = await order_service.update_order_status(order_id, request.status)
 
+        shop_name = order_before.get("shops", {}).get("name", "the shop")
+        customer_id = order_before.get("customer_id")
+
         # Send status update email for key statuses
         try:
             EMAIL_NOTIFY_STATUSES = {"accepted", "ready", "cancelled"}
             if request.status in EMAIL_NOTIFY_STATUSES:
                 customer_email = order_before.get("customer", {}).get("email")
-                shop_name = order_before.get("shops", {}).get("name", "the shop")
                 if customer_email:
                     await email_service.send_order_status_update_rich(
                         to_email=customer_email,
@@ -268,6 +271,25 @@ async def update_order_status(
                     )
         except Exception as email_err:
             print(f"[Email] Failed to send status update: {email_err}")
+
+        # Send push notification to customer's device
+        try:
+            if customer_id:
+                profile_res = db.get_service_client().table("profiles") \
+                    .select("push_token") \
+                    .eq("id", customer_id) \
+                    .single() \
+                    .execute()
+                push_token = (profile_res.data or {}).get("push_token")
+                if push_token:
+                    await send_order_push(
+                        push_token=push_token,
+                        order_id=order_id,
+                        status=request.status,
+                        shop_name=shop_name,
+                    )
+        except Exception as push_err:
+            print(f"[Push] Failed to send push notification: {push_err}")
 
         return {"message": "Status updated", "order": updated_order}
     except HTTPException:
