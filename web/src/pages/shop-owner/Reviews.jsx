@@ -41,7 +41,7 @@ export default function Reviews() {
     try {
       const { data, error } = await supabase
         .from('reviews')
-        .select('*, profiles(full_name, avatar_url)')
+        .select('*, customer:profiles(full_name, avatar_url)')
         .eq('shop_id', shopId)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -55,7 +55,6 @@ export default function Reviews() {
 
   useEffect(() => { loadReviews(); }, [loadReviews]);
 
-  // stats
   const total = reviews.length;
   const avg = total > 0 ? reviews.reduce((s, r) => s + r.rating, 0) / total : 0;
   const dist = [5, 4, 3, 2, 1].map(n => ({ n, count: reviews.filter(r => r.rating === n).length }));
@@ -146,16 +145,16 @@ export default function Reviews() {
             >
               <div className="flex items-start justify-between mb-2">
                 <div className="flex items-center gap-3">
-                  {review.profiles?.avatar_url ? (
-                    <img src={review.profiles.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover" />
+                  {review.customer?.avatar_url ? (
+                    <img src={review.customer.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover" />
                   ) : (
                     <div className="w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 font-bold text-sm">
-                      {(review.profiles?.full_name || 'A')[0].toUpperCase()}
+                      {(review.customer?.full_name || 'A')[0].toUpperCase()}
                     </div>
                   )}
                   <div>
                     <p className="font-semibold text-gray-900 dark:text-white text-sm">
-                      {review.profiles?.full_name || 'Anonymous'}
+                      {review.customer?.full_name || 'Anonymous'}
                     </p>
                     <p className="text-xs text-gray-400">
                       {new Date(review.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -164,9 +163,9 @@ export default function Reviews() {
                 </div>
                 <StarRow rating={review.rating} size={15} />
               </div>
-              {review.body && (
+              {review.comment && (
                 <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed mt-2 pl-12">
-                  {review.body}
+                  {review.comment}
                 </p>
               )}
             </motion.div>
