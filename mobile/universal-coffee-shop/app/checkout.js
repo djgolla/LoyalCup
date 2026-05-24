@@ -1,8 +1,8 @@
 /**
  * Checkout screen
- * - Square Web Payments SDK via WebView
- * - Loyalty points redemption
- * - Posts order to backend → Square creates order → charges card → awards points
+ * - Square Web Payments SDK via WebView (per-shop location, not global)
+ * - Loyalty points redemption handled atomically by backend
+ * - POST /api/v1/orders → Square creates order + charges card + awards points
  */
 import React, { useState, useEffect } from 'react';
 import {
@@ -16,53 +16,69 @@ import { useRouter } from 'expo-router';
 import WebView from 'react-native-webview';
 import { useCart } from '../context/CartContext';
 import { supabase } from '../lib/supabase';
-import { getGlobalPoints, redeemPoints } from '../services/loyaltyService';
+import { getGlobalPoints } from '../services/loyaltyService';
 import { apiClient } from '../services/apiClient';
 
 const SQUARE_APP_ID = process.env.EXPO_PUBLIC_SQUARE_APP_ID || '';
-const SQUARE_LOCATION_ID = process.env.EXPO_PUBLIC_SQUARE_LOCATION_ID || '';
 
-const getSquareHTML = (appId, locationId) => `
-<!DOCTYPE html>
+/**
+ * Generate Square card entry HTML using the correct environment + location.
+ * We load the live vs sandbox SDK based on EXPO_PUBLIC_SQUARE_ENV.
+ */
+const getSquareHTML = (appId, locationId) => {
+  const env = process.env.EXPO_PUBLIC_SQUARE_ENV || 'sandbox';
+  const sdkUrl = env === 'production'
+    ? 'https://web.squarecdn.com/v1/square.js'
+    : 'https://sandbox.web.squarecdn.com/v1/square.js';
+
+  return `<!DOCTYPE html>
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <script src="https://sandbox.web.squarecdn.com/v1/square.js"></script>
+  <script src="${sdkUrl}"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, sans-serif; background: #fff; padding: 20px; }
-    #card-container { margin-bottom: 8px; }
+    #card-container { margin-bottom: 8px; min-height: 90px; }
     #pay-button {
       width: 100%; padding: 16px; background: #000; color: #fff;
       border: none; border-radius: 12px; font-size: 16px; font-weight: 700;
       cursor: pointer; margin-top: 12px;
     }
-    #pay-button:disabled { opacity: 0.5; }
-    #status { margin-top: 10px; font-size: 13px; color: #666; text-align: center; }
+    #pay-button:disabled { opacity: 0.5; cursor: not-allowed; }
+    #status { margin-top: 10px; font-size: 13px; color: #666; text-align: center; min-height: 18px; }
     .error { color: #e53e3e !important; }
   </style>
 </head>
 <body>
   <div id="card-container"></div>
-  <button id="pay-button">Confirm Payment</button>
+  <button id="pay-button" disabled>Loading...</button>
   <div id="status"></div>
   <script>
     let card;
     async function init() {
-      if (!window.Square) { document.getElementById('status').textContent = 'Square failed to load'; return; }
+      if (!window.Square) {
+        document.getElementById('status').textContent = 'Square failed to load. Check your connection.';
+        document.getElementById('status').className = 'error';
+        return;
+      }
       try {
         const payments = window.Square.payments('${appId}', '${locationId}');
         card = await payments.card();
         await card.attach('#card-container');
-        document.getElementById('status').textContent = '';
+        document.getElementById('pay-button').textContent = 'Confirm Payment';
+        document.getElementById('pay-button').disabled = false;
       } catch(e) {
         document.getElementById('status').textContent = 'Card form error: ' + e.message;
         document.getElementById('status').className = 'error';
+        document.getElementById('pay-button').textContent = 'Confirm Payment';
+        document.getElementById('pay-button').disabled = false;
       }
     }
     document.getElementById('pay-button').addEventListener('click', async () => {
       const btn = document.getElementById('pay-button');
       const status = document.getElementById('status');
+      if (!card) { status.textContent = 'Card form not ready. Please wait.'; return; }
       btn.disabled = true;
       status.textContent = 'Processing...';
       status.className = '';
@@ -77,7 +93,7 @@ const getSquareHTML = (appId, locationId) => `
           btn.disabled = false;
         }
       } catch(e) {
-        status.textContent = e.message || 'Error';
+        status.textContent = e.message || 'Error tokenizing card';
         status.className = 'error';
         btn.disabled = false;
       }
@@ -85,21 +101,27 @@ const getSquareHTML = (appId, locationId) => `
     init();
   </script>
 </body>
-</html>
-`;
+</html>`;
+};
 
 export default function CheckoutScreen() {
   const router = useRouter();
   const { cart, clearCart } = useCart();
 
-  const [loading, setLoading] = useState(false);
+  const [loading,          setLoading]          = useState(false);
   const [showPaymentSheet, setShowPaymentSheet] = useState(false);
-  const [globalPoints, setGlobalPoints] = useState(null);
-  const [pointsToRedeem, setPointsToRedeem] = useState(0);
-  const [showPointsPanel, setShowPointsPanel] = useState(false);
-  const [user, setUser] = useState(null);
+  const [globalPoints,     setGlobalPoints]     = useState(null);
+  const [pointsToRedeem,   setPointsToRedeem]   = useState(0);
+  const [showPointsPanel,  setShowPointsPanel]  = useState(false);
+  const [user,             setUser]             = useState(null);
+
+  // Per-shop Square location — loaded from the backend POS connection
+  // (not a global env var, since each shop has their own location)
+  const [shopLocationId, setShopLocationId] = useState(null);
+  const [locationLoading, setLocationLoading] = useState(false);
 
   useEffect(() => { loadUser(); }, []);
+  useEffect(() => { if (cart.length > 0) loadShopLocation(); }, [cart]);
 
   const loadUser = async () => {
     try {
@@ -112,7 +134,33 @@ export default function CheckoutScreen() {
     } catch (e) { console.error('loadUser:', e); }
   };
 
-  // ── derived ──────────────────────────────────────────────────────────────────
+  const loadShopLocation = async () => {
+    const shopId = Object.keys(itemsByShop)[0];
+    if (!shopId) return;
+    setLocationLoading(true);
+    try {
+      // Fetch shop's Square location_id from POS status
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) return;
+
+      const res = await apiClient.get(
+        `/api/v1/pos/status?provider=square&shop_id=${shopId}`,
+        token
+      );
+      if (res?.location_id) {
+        setShopLocationId(res.location_id);
+      } else {
+        console.warn('[Checkout] Shop has no Square location set');
+      }
+    } catch (e) {
+      console.warn('[Checkout] Could not load shop location:', e.message);
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
+  // ── derived values ──────────────────────────────────────────────────────────
   const itemsByShop = cart.reduce((acc, item) => {
     const sid = item.shopId;
     if (!acc[sid]) acc[sid] = { shopId: sid, shopName: item.shopName || 'Shop', items: [] };
@@ -120,32 +168,25 @@ export default function CheckoutScreen() {
     return acc;
   }, {});
 
-  const subtotal = cart.reduce((sum, item) => sum + (parseFloat(item.price) || 0) * (item.quantity || 1), 0);
-  const estimatedTax = subtotal * 0.08;
+  const subtotal       = cart.reduce((sum, item) => sum + (parseFloat(item.price) || 0) * (item.quantity || 1), 0);
+  const estimatedTax   = subtotal * 0.0875;
   const availablePoints = globalPoints?.current_balance || 0;
-  const maxRedeemable = Math.min(availablePoints, Math.floor(subtotal * 100));
+  const maxRedeemable  = Math.min(availablePoints, Math.floor(subtotal * 100));
   const pointsDiscount = pointsToRedeem * 0.01;
   const estimatedTotal = Math.max(0, subtotal + estimatedTax - pointsDiscount);
 
-  // Smart points chips — based on actual balance, not hardcoded amounts
   const getPointsChips = () => {
     if (maxRedeemable <= 0) return [];
-    const chips = [];
-    const increments = [
-      Math.floor(maxRedeemable * 0.25),
-      Math.floor(maxRedeemable * 0.5),
-      Math.floor(maxRedeemable * 0.75),
-    ].filter(v => v > 0);
-
-    // deduplicate and add max
     const seen = new Set();
-    for (const v of increments) {
-      if (!seen.has(v) && v < maxRedeemable) {
+    const chips = [];
+    for (const ratio of [0.25, 0.5, 0.75]) {
+      const v = Math.floor(maxRedeemable * ratio);
+      if (v > 0 && !seen.has(v) && v < maxRedeemable) {
         seen.add(v);
         chips.push(v);
       }
     }
-    chips.push(maxRedeemable); // always show max
+    chips.push(maxRedeemable);
     return chips;
   };
 
@@ -154,9 +195,20 @@ export default function CheckoutScreen() {
   };
 
   const handlePay = () => {
-    if (cart.length === 0) { Alert.alert('Empty Cart', 'Nothing to order!'); return; }
-    if (!SQUARE_APP_ID || !SQUARE_LOCATION_ID) {
-      Alert.alert('Setup Required', 'Square credentials not configured.');
+    if (cart.length === 0) {
+      Alert.alert('Empty Cart', 'Nothing to order!');
+      return;
+    }
+    if (!SQUARE_APP_ID) {
+      Alert.alert('Setup Required', 'Square App ID not configured.');
+      return;
+    }
+    if (!shopLocationId) {
+      Alert.alert(
+        'Shop Not Ready',
+        'This shop hasn\'t finished setting up payments. Please try another shop or contact them directly.',
+        [{ text: 'OK' }]
+      );
       return;
     }
     setShowPaymentSheet(true);
@@ -168,7 +220,9 @@ export default function CheckoutScreen() {
       if (msg.type !== 'nonce') return;
       setShowPaymentSheet(false);
       await processPayment(msg.nonce);
-    } catch (e) { console.error('WebView message error:', e); }
+    } catch (e) {
+      console.error('WebView message error:', e);
+    }
   };
 
   const processPayment = async (nonce) => {
@@ -178,50 +232,53 @@ export default function CheckoutScreen() {
       const token = session?.access_token;
       if (!token) throw new Error('Session expired — please log in again');
 
-      if (pointsToRedeem > 0 && user) {
-        const redeemResult = await redeemPoints(user.id, Object.keys(itemsByShop)[0], pointsToRedeem, 'global');
-        if (!redeemResult.success) throw new Error('Failed to redeem points — please try again');
-      }
-
       const { shopId, items } = Object.values(itemsByShop)[0];
+
       const orderItems = items.map(item => ({
-        menu_item_id: item.id.includes(':') ? item.id.split(':')[1] : item.id,
-        quantity: item.quantity || 1,
-        base_price: parseFloat(item.price) || 0,
+        menu_item_id:   item.id?.includes(':') ? item.id.split(':')[1] : item.id,
+        quantity:       Math.max(1, item.quantity || 1),
+        unit_price:     parseFloat(item.price) || 0,
+        base_price:     parseFloat(item.price) || 0,
         customizations: item.customizations || [],
       }));
 
-      const result = await apiClient.post('/api/v1/payments/create', {
-        shop_id: shopId,
-        items: orderItems,
-        payment_nonce: nonce,
-        loyalty_points_redeemed: pointsToRedeem,
+      // POST /api/v1/orders handles payment + Square order + loyalty atomically
+      const result = await apiClient.post('/api/v1/orders', {
+        shop_id:                  shopId,
+        items:                    orderItems,
+        payment_nonce:            nonce,
+        loyalty_points_to_redeem: pointsToRedeem,  // ← backend handles deduction
+        customer_note:            null,             // TODO: add note input field
       }, token);
 
       clearCart();
       setPointsToRedeem(0);
 
+      const orderId   = result.order_id || result.order?.id;
+      const charged   = result.total_charged ?? estimatedTotal;
       const pointsMsg = pointsToRedeem > 0
         ? `\n💰 Saved $${pointsDiscount.toFixed(2)} with points`
-        : '\n⭐ Loyalty points earned!';
+        : '\n⭐ Loyalty points are on their way!';
 
       Alert.alert(
         'Order Placed! 🎉',
-        `Order #${result.order_id?.slice(0, 8) || '—'}\nTotal charged: $${result.charged?.toFixed(2) || estimatedTotal.toFixed(2)}${pointsMsg}`,
+        `Order #${orderId?.slice(0, 8) || '—'}\nCharged: $${charged.toFixed(2)}${pointsMsg}\n\nYour barista has been notified.`,
         [
-          { text: 'Track Order', onPress: () => router.push(`/order/${result.order_id}`) },
-          { text: 'Done', onPress: () => router.push('/home') },
+          { text: 'Track Order', onPress: () => router.push(`/order/${orderId}`) },
+          { text: 'Done',        onPress: () => router.push('/home') },
         ]
       );
     } catch (e) {
       console.error('Payment error:', e);
-      Alert.alert('Payment Failed', e.message || 'Your card was not charged. Please try again.');
+      // Surface clean message to user
+      const msg = e.message || 'Your card was not charged. Please try again.';
+      Alert.alert('Payment Failed', msg, [{ text: 'OK' }]);
     } finally {
       setLoading(false);
     }
   };
 
-  // ── empty cart ───────────────────────────────────────────────────────────────
+  // ── empty cart ──────────────────────────────────────────────────────────────
   if (cart.length === 0) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -245,8 +302,8 @@ export default function CheckoutScreen() {
   }
 
   const pointsChips = getPointsChips();
+  const locationId  = shopLocationId || SQUARE_APP_ID; // fallback for legacy
 
-  // ── main screen ──────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Header */}
@@ -299,7 +356,7 @@ export default function CheckoutScreen() {
                     <Text style={styles.pointsToggleTitle}>
                       {pointsToRedeem > 0 ? `${pointsToRedeem} pts → -$${pointsDiscount.toFixed(2)}` : 'Redeem Points'}
                     </Text>
-                    <Text style={styles.pointsToggleSub}>{availablePoints} pts available</Text>
+                    <Text style={styles.pointsToggleSub}>{availablePoints.toLocaleString()} pts available</Text>
                   </View>
                 </View>
                 <Feather name={showPointsPanel ? 'chevron-up' : 'chevron-down'} size={20} color="#666" />
@@ -315,7 +372,8 @@ export default function CheckoutScreen() {
                         <TouchableOpacity
                           key={i}
                           style={[styles.chip, active && styles.chipActive]}
-                          onPress={() => handleSelectPoints(n)}>
+                          onPress={() => handleSelectPoints(n)}
+                        >
                           <Text style={[styles.chipText, active && styles.chipTextActive]}>
                             {isMax && pointsChips.length > 1 ? `Max (${n})` : `${n} pts`}
                           </Text>
@@ -347,9 +405,7 @@ export default function CheckoutScreen() {
           <View style={styles.priceRow}>
             <View style={styles.taxLabelRow}>
               <Text style={styles.priceLabel}>Tax</Text>
-              <View style={styles.estBadge}>
-                <Text style={styles.estBadgeText}>est.</Text>
-              </View>
+              <View style={styles.estBadge}><Text style={styles.estBadgeText}>est.</Text></View>
             </View>
             <Text style={styles.priceValue}>${estimatedTax.toFixed(2)}</Text>
           </View>
@@ -365,20 +421,17 @@ export default function CheckoutScreen() {
           </View>
           <View style={styles.taxNote}>
             <Feather name="info" size={12} color="#999" />
-            <Text style={styles.taxNoteText}>Final tax calculated live when you proceed to payment</Text>
+            <Text style={styles.taxNoteText}>Final total calculated live by Square at payment time</Text>
           </View>
         </View>
 
-        {/* Points earn note */}
         <View style={styles.infoBox}>
           <Feather name="star" size={14} color="#00704A" />
-          <Text style={styles.infoText}>You'll earn loyalty points automatically after your payment goes through.</Text>
+          <Text style={styles.infoText}>Loyalty points are earned automatically after your order completes.</Text>
         </View>
-
-        {/* Refund policy */}
         <View style={[styles.infoBox, { marginTop: 8 }]}>
           <Feather name="info" size={14} color="#999" />
-          <Text style={[styles.infoText, { color: '#999' }]}>All sales are final. For refund exceptions contact the shop directly.</Text>
+          <Text style={[styles.infoText, { color: '#999' }]}>All sales are final. For exceptions contact the shop directly.</Text>
         </View>
 
       </ScrollView>
@@ -386,25 +439,35 @@ export default function CheckoutScreen() {
       {/* Pay button */}
       <View style={styles.footer}>
         <TouchableOpacity
-          style={[styles.payButton, loading && styles.payButtonDisabled]}
+          style={[styles.payButton, (loading || locationLoading) && styles.payButtonDisabled]}
           onPress={handlePay}
-          disabled={loading}
-          activeOpacity={0.85}>
-          {loading
-            ? <ActivityIndicator color="#FFF" />
-            : (
-              <View style={styles.payButtonInner}>
-                <Feather name="lock" size={18} color="#FFF" />
-                <Text style={styles.payButtonText}>Pay ~${estimatedTotal.toFixed(2)}</Text>
-              </View>
-            )
-          }
+          disabled={loading || locationLoading}
+          activeOpacity={0.85}
+        >
+          {loading ? (
+            <ActivityIndicator color="#FFF" />
+          ) : locationLoading ? (
+            <View style={styles.payButtonInner}>
+              <ActivityIndicator color="#FFF" size="small" />
+              <Text style={styles.payButtonText}>Loading...</Text>
+            </View>
+          ) : (
+            <View style={styles.payButtonInner}>
+              <Feather name="lock" size={18} color="#FFF" />
+              <Text style={styles.payButtonText}>Pay ~${estimatedTotal.toFixed(2)}</Text>
+            </View>
+          )}
         </TouchableOpacity>
-        <Text style={styles.poweredBy}>Secured by Square</Text>
+        <Text style={styles.poweredBy}>Secured by Square · Powered by LoyalCup</Text>
       </View>
 
       {/* Square card entry modal */}
-      <Modal visible={showPaymentSheet} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowPaymentSheet(false)}>
+      <Modal
+        visible={showPaymentSheet}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowPaymentSheet(false)}
+      >
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <SafeAreaView style={styles.modalContainer} edges={['top', 'bottom']}>
             <View style={styles.modalHeader}>
@@ -421,7 +484,7 @@ export default function CheckoutScreen() {
             <WebView
               style={styles.webView}
               originWhitelist={['*']}
-              source={{ html: getSquareHTML(SQUARE_APP_ID, SQUARE_LOCATION_ID) }}
+              source={{ html: getSquareHTML(SQUARE_APP_ID, shopLocationId || '') }}
               onMessage={handleWebViewMessage}
               javaScriptEnabled
               domStorageEnabled
@@ -430,7 +493,7 @@ export default function CheckoutScreen() {
             />
             <View style={styles.modalFooter}>
               <Feather name="lock" size={13} color="#999" />
-              <Text style={styles.modalFooterText}>Card details are tokenized by Square and never stored on our servers.</Text>
+              <Text style={styles.modalFooterText}>Card details are tokenized by Square. We never see or store your card number.</Text>
             </View>
           </SafeAreaView>
         </KeyboardAvoidingView>
@@ -441,25 +504,17 @@ export default function CheckoutScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FAFAFA' },
-
-  // Header
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
   headerButton: { width: 40, height: 40, justifyContent: 'center' },
   headerTitle: { fontSize: 20, fontWeight: '700', color: '#000' },
-
-  // Empty
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   emptyTitle: { fontSize: 22, fontWeight: '700', color: '#000', marginTop: 16, marginBottom: 6 },
   emptySubtitle: { fontSize: 15, color: '#666', marginBottom: 28 },
   browseButton: { backgroundColor: '#000', paddingHorizontal: 32, paddingVertical: 16, borderRadius: 14 },
   browseButtonText: { color: '#FFF', fontWeight: '700', fontSize: 15 },
-
-  // Scroll
   scrollView: { flex: 1 },
   sectionLabel: { fontSize: 11, fontWeight: '700', color: '#999', letterSpacing: 1.5, marginTop: 20, marginBottom: 8, marginHorizontal: 16 },
-  card: { backgroundColor: '#FFF', marginHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: '#F0F0F0', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-
-  // Order items
+  card: { backgroundColor: '#FFF', marginHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: '#F0F0F0', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
   orderItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
   orderItemBorder: { borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
   itemLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 12 },
@@ -469,8 +524,6 @@ const styles = StyleSheet.create({
   itemName: { fontSize: 15, fontWeight: '600', color: '#000', marginBottom: 2 },
   itemCustom: { fontSize: 12, color: '#00704A' },
   itemPrice: { fontSize: 15, fontWeight: '600', color: '#000' },
-
-  // Points
   pointsToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
   pointsToggleLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   pointsIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#00704A', justifyContent: 'center', alignItems: 'center' },
@@ -485,8 +538,6 @@ const styles = StyleSheet.create({
   chipSub: { fontSize: 11, color: '#999', marginTop: 2 },
   chipSubActive: { color: '#AAA' },
   clearPoints: { fontSize: 13, fontWeight: '600', color: '#FF3B30' },
-
-  // Pricing
   priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
   taxLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   estBadge: { backgroundColor: '#F0F0F0', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
@@ -498,20 +549,14 @@ const styles = StyleSheet.create({
   totalValue: { fontSize: 17, fontWeight: '700', color: '#000' },
   taxNote: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingBottom: 14 },
   taxNoteText: { fontSize: 12, color: '#999', flex: 1 },
-
-  // Info boxes
   infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginHorizontal: 16, marginTop: 12, backgroundColor: '#FFF', borderRadius: 12, borderWidth: 1, borderColor: '#F0F0F0', padding: 14 },
   infoText: { flex: 1, fontSize: 13, color: '#00704A', lineHeight: 18 },
-
-  // Footer
   footer: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFF', padding: 20, paddingBottom: 30, borderTopWidth: 1, borderTopColor: '#F0F0F0' },
   payButton: { backgroundColor: '#000', padding: 18, borderRadius: 14 },
   payButtonDisabled: { opacity: 0.5 },
   payButtonInner: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10 },
   payButtonText: { color: '#FFF', fontWeight: '700', fontSize: 18 },
   poweredBy: { textAlign: 'center', fontSize: 12, color: '#999', marginTop: 10 },
-
-  // Modal
   modalContainer: { flex: 1, backgroundColor: '#FFF' },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
   modalAmount: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },

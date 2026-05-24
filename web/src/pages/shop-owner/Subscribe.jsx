@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useShop } from '../../context/ShopContext';
+import { useAuth } from '../../context/AuthContext';
 import supabase from '../../lib/supabase';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -15,25 +16,22 @@ export default function Subscribe() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { shop, loadShop } = useShop();
+  const { refreshSession } = useAuth();
 
-  const [promoCode, setPromoCode] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [portalLoading, setPortalLoading] = useState(false);
-  const [subscribed, setSubscribed] = useState(false);
-  const [session, setSession] = useState(null);
+  const [promoCode,      setPromoCode]      = useState('');
+  const [loading,        setLoading]        = useState(false);
+  const [portalLoading,  setPortalLoading]  = useState(false);
+  const [subscribed,     setSubscribed]     = useState(false);
+  const [session,        setSession]        = useState(null);
   const [sessionLoading, setSessionLoading] = useState(true);
 
-  // Load session on mount — this is the root cause of the 401
+  // Load session on mount
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
       setSessionLoading(false);
-      if (!s) {
-        console.warn('[Subscribe] No active session — user may need to confirm email or log in');
-      }
     });
 
-    // Also listen for auth changes (e.g. email confirmation tab coming back)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
       setSessionLoading(false);
@@ -44,21 +42,23 @@ export default function Subscribe() {
 
   // Handle Stripe redirect back
   useEffect(() => {
-    const success = searchParams.get('success');
+    const success   = searchParams.get('success');
     const cancelled = searchParams.get('cancelled');
 
     if (success === 'true') {
       toast.success('🎉 Subscription activated! Welcome to LoyalCup!');
-      loadShop();
-      navigate('/shop-owner/subscribe', { replace: true });
+      // Refresh JWT so new shop_owner role is active immediately
+      refreshSession?.().then(() => {
+        loadShop();
+        navigate('/shop-owner/dashboard', { replace: true });
+      });
     }
     if (cancelled === 'true') {
       toast.info('Checkout cancelled. You can subscribe anytime.');
       navigate('/shop-owner/subscribe', { replace: true });
     }
-  }, [searchParams]);
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Check subscription status
   useEffect(() => {
     if (shop?.subscription_status === 'active' || shop?.status === 'active') {
       setSubscribed(true);
@@ -69,9 +69,7 @@ export default function Subscribe() {
     try {
       setLoading(true);
 
-      // Re-fetch session fresh — don't rely on stale state
       const { data: { session: freshSession } } = await supabase.auth.getSession();
-
       if (!freshSession?.access_token) {
         toast.error('Your session has expired. Please log in again.');
         navigate('/login');
@@ -135,14 +133,14 @@ export default function Subscribe() {
     'Customer mobile app listing',
     'Full menu & order management',
     'Built-in loyalty program',
-    'Square POS sync',
+    'Square POS sync — orders print on your terminal',
     'Real-time analytics dashboard',
     'Customer insights',
     'Priority support',
     'Your rate locked in forever',
   ];
 
-  // ── Already subscribed view ──────────────────────────────────────────────
+  // ── Already subscribed ────────────────────────────────────────────────────
   if (subscribed) {
     return (
       <div className="max-w-2xl mx-auto py-12">
@@ -152,8 +150,7 @@ export default function Subscribe() {
           className="bg-white dark:bg-neutral-900 rounded-3xl p-10 border-2 border-green-200 dark:border-green-800 shadow-xl text-center"
         >
           <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
+            initial={{ scale: 0 }} animate={{ scale: 1 }}
             transition={{ type: 'spring', duration: 0.6, delay: 0.2 }}
             className="w-20 h-20 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg"
           >
@@ -186,7 +183,6 @@ export default function Subscribe() {
     );
   }
 
-  // ── No session warning banner ────────────────────────────────────────────
   const noSession = !sessionLoading && !session;
 
   return (
@@ -200,11 +196,10 @@ export default function Subscribe() {
         </p>
       </motion.div>
 
-      {/* Session warning — shows if no active login */}
+      {/* Session warning */}
       {noSession && (
         <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
           className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 rounded-xl"
         >
           <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
@@ -224,7 +219,7 @@ export default function Subscribe() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* ── Left: Features ── */}
+        {/* Left: Features */}
         <motion.div
           initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}
           className="bg-white dark:bg-neutral-900 rounded-2xl p-8 border-2 border-gray-100 dark:border-neutral-800 shadow-lg"
@@ -260,7 +255,7 @@ export default function Subscribe() {
           </div>
         </motion.div>
 
-        {/* ── Right: Checkout ── */}
+        {/* Right: Checkout */}
         <motion.div
           initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}
           className="bg-white dark:bg-neutral-900 rounded-2xl p-8 border-2 border-amber-200 dark:border-amber-800 shadow-xl"

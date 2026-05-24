@@ -1,46 +1,38 @@
 /**
- * Minimal API client for talking to the LoyalCup FastAPI backend.
- * Reads EXPO_PUBLIC_API_URL from your .env (e.g. http://localhost:8000)
+ * Thin API client for LoyalCup backend.
+ * All requests attach the Supabase JWT as a Bearer token.
  */
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
+import Constants from 'expo-constants';
+
+const BASE_URL =
+  Constants.expoConfig?.extra?.apiUrl ||
+  process.env.EXPO_PUBLIC_API_URL ||
+  'http://localhost:8000';
+
+async function request(method, path, body, token) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const opts = { method, headers };
+  if (body && method !== 'GET') opts.body = JSON.stringify(body);
+
+  const res = await fetch(`${BASE_URL}${path}`, opts);
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    const msg = data?.detail || data?.message || `Request failed (${res.status})`;
+    const err = new Error(msg);
+    err.status = res.status;
+    err.data   = data;
+    throw err;
+  }
+  return data;
+}
 
 export const apiClient = {
-  async post(path, body, token) {
-    const response = await fetch(`${BASE_URL}${path}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(body),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      const message = data?.detail || data?.message || `Request failed: ${response.status}`;
-      throw new Error(message);
-    }
-
-    return data;
-  },
-
-  async get(path, token) {
-    const response = await fetch(`${BASE_URL}${path}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      const message = data?.detail || data?.message || `Request failed: ${response.status}`;
-      throw new Error(message);
-    }
-
-    return data;
-  },
+  get:    (path, token)        => request('GET',    path, null, token),
+  post:   (path, body, token)  => request('POST',   path, body, token),
+  put:    (path, body, token)  => request('PUT',    path, body, token),
+  patch:  (path, body, token)  => request('PATCH',  path, body, token),
+  delete: (path, token)        => request('DELETE', path, null, token),
 };

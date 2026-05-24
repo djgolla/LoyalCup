@@ -32,9 +32,7 @@ export function AuthProvider({ children }) {
 
   const signup = async (email, password, metadata = {}) => {
     const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: metadata },
+      email, password, options: { data: metadata },
     });
     if (error) throw error;
     return data;
@@ -46,15 +44,14 @@ export function AuthProvider({ children }) {
   };
 
   const signInWithGoogle = async () => {
-    const { data, error } = await supabase.auth.signInWithOAuth({ provider: "google" });
+    const { data, error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
     if (error) throw error;
     return data;
   };
 
   /**
-   * Force-refresh the session from Supabase.
-   * Call this after Stripe webhook promotes user to shop_owner so the
-   * new role is reflected in the JWT without requiring logout/login.
+   * Force-refresh the JWT — call after subscription activates so shop_owner
+   * role is live immediately without logout/login.
    */
   const refreshSession = useCallback(async () => {
     try {
@@ -66,19 +63,19 @@ export function AuthProvider({ children }) {
       }
       return data.session;
     } catch (e) {
-      console.warn("[Auth] Session refresh failed:", e.message);
+      console.warn('[Auth] Session refresh failed:', e.message);
       return null;
     }
   }, []);
 
   const hasRole = (roles) => {
     if (!user) return false;
-    const userRole = user.user_metadata?.role || "customer";
+    const userRole = user.user_metadata?.role || 'customer';
     return Array.isArray(roles) ? roles.includes(userRole) : userRole === roles;
   };
 
   const getRedirectPath = (role) => {
-    const userRole = role || user?.user_metadata?.role || "customer";
+    const userRole = role || user?.user_metadata?.role || 'customer';
     switch (userRole) {
       case "admin":       return "/admin/dashboard";
       case "shop_owner":  return "/shop-owner/dashboard";
@@ -88,21 +85,19 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        session,
-        loading,
-        login,
-        signup,
-        logout,
-        signInWithGoogle,
-        refreshSession,
-        hasRole,
-        getRedirectPath,
-        isAuthenticated: !!user,
-      }}
-    >
+    <AuthContext.Provider value={{
+      user,
+      session,
+      loading,
+      login,
+      signup,
+      logout,
+      signInWithGoogle,
+      refreshSession,
+      hasRole,
+      getRedirectPath,
+      isAuthenticated: !!user,
+    }}>
       {children}
     </AuthContext.Provider>
   );
