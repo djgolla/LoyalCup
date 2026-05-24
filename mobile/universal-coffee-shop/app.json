@@ -1,13 +1,13 @@
 {
   "expo": {
     "name": "LoyalCup",
-    "slug": "universal-coffee-shop",
+    "slug": "loyalcup",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "loyalcup",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.loyalcup.app",
@@ -34,6 +34,12 @@
     "plugins": [
       "expo-router",
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow LoyalCup to find coffee shops near you."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
@@ -43,12 +49,6 @@
           "dark": {
             "backgroundColor": "#000000"
           }
-        }
-      ],
-      [
-        "expo-location",
-        {
-          "locationWhenInUsePermission": "Allow LoyalCup to find coffee shops near you."
         }
       ],
       [
@@ -69,7 +69,6 @@
       "eas": {
         "projectId": "0fa283e2-bdab-464a-9a3c-86e60a67c5ba"
       }
-    },
-    "owner": "danielgoll"
+    }
   }
 }
