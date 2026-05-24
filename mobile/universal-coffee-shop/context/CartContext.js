@@ -8,19 +8,21 @@ export function CartProvider({ children }) {
 
   const addItem = (item) => {
     // unique key = item id + modifiers so same drink with diff mods = separate cart entries
-    const modKey = JSON.stringify((item.customizations || []).map(c => c.id).sort());
+    const modKey  = JSON.stringify((item.customizations || []).map(c => c.id).sort());
     const cartKey = `${item.id}__${modKey}`;
+    // FIXED: respect the quantity passed in (from modifier modal), don't hardcode 1
+    const incomingQty = Math.max(1, item.quantity || 1);
 
     setCart(prevCart => {
       const existingItem = prevCart.find(i => i.cartKey === cartKey);
       if (existingItem) {
         return prevCart.map(i =>
           i.cartKey === cartKey
-            ? { ...i, quantity: (i.quantity || 1) + 1 }
+            ? { ...i, quantity: (i.quantity || 1) + incomingQty }
             : i
         );
       }
-      return [...prevCart, { ...item, cartKey, quantity: 1 }];
+      return [...prevCart, { ...item, cartKey, quantity: incomingQty }];
     });
   };
 
@@ -40,31 +42,22 @@ export function CartProvider({ children }) {
     );
   };
 
-  const clearCart = () => {
-    setCart([]);
-  };
+  const clearCart = () => setCart([]);
 
-  const getItemCount = () => {
-    return cart.reduce((total, item) => total + (item.quantity || 1), 0);
-  };
+  const getItemCount = () =>
+    cart.reduce((total, item) => total + (item.quantity || 1), 0);
 
-  const getTotalPrice = () => {
-    return cart.reduce((total, item) => {
-      const price = parseFloat(item.price) || 0;
+  const getTotalPrice = () =>
+    cart.reduce((total, item) => {
+      const price    = parseFloat(item.price) || 0;
       const quantity = item.quantity || 1;
-      return total + (price * quantity);
+      return total + price * quantity;
     }, 0);
-  };
 
   return (
     <CartContext.Provider value={{
-      cart,
-      addItem,
-      removeItem,
-      updateQuantity,
-      clearCart,
-      getItemCount,
-      getTotalPrice
+      cart, addItem, removeItem, updateQuantity,
+      clearCart, getItemCount, getTotalPrice,
     }}>
       {children}
     </CartContext.Provider>
@@ -73,8 +66,6 @@ export function CartProvider({ children }) {
 
 export function useCart() {
   const context = useContext(CartContext);
-  if (!context) {
-    throw new Error('useCart must be used within CartProvider');
-  }
+  if (!context) throw new Error('useCart must be used within CartProvider');
   return context;
 }

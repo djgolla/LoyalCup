@@ -49,13 +49,11 @@ export default function ConnectSquarePage() {
     if (!shopLoading && shopId) loadStatus();
   }, [shopId, shopLoading, loadStatus]);
 
-  // Handle OAuth callback redirect params
   useEffect(() => {
     if (!callbackStatus) return;
 
     if (callbackStatus === "connected") {
       setSyncResult({ status: "connected", synced: callbackSynced, items: callbackItems });
-
       if (needsLocation) {
         fetchLocations();
       } else if (callbackLocationId) {
@@ -63,10 +61,8 @@ export default function ConnectSquarePage() {
       } else {
         toast.success("Square connected!");
       }
-
       loadShop();
       setTimeout(loadStatus, 1500);
-
     } else if (callbackStatus === "error") {
       const messages = {
         access_denied:         "Connection cancelled. You can connect Square anytime.",
@@ -80,7 +76,6 @@ export default function ConnectSquarePage() {
     window.history.replaceState({}, "", "/shop-owner/connect-square");
   }, [callbackStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // FIXED: was calling `logger.warn` (undefined) — now uses console.warn
   const fetchLocations = async () => {
     try {
       const data = await getPosStatus(shopId, "square");
@@ -130,7 +125,7 @@ export default function ConnectSquarePage() {
       setLocations(null);
       await loadStatus();
       await loadShop();
-      toast.success("Square location set!");
+      toast.success("Square location set! You're ready to accept orders.");
     } catch (e) {
       setError(e.message || "Failed to set location.");
       toast.error("Failed to set location");
@@ -153,7 +148,7 @@ export default function ConnectSquarePage() {
         </button>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">POS Integration</h1>
         <p className="text-gray-500 dark:text-gray-400 mt-1">
-          Connect Square to auto-import your menu and process payments.
+          Square is <strong>required</strong> to accept mobile orders. Orders go directly to your Square terminal.
         </p>
       </div>
 
@@ -204,11 +199,15 @@ export default function ConnectSquarePage() {
       )}
 
       {/* Location picker */}
-      {locations && locations.length > 1 && (
+      {locations && locations.length > 0 && (
         <div className="mb-6 rounded-xl bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 p-5">
-          <h3 className="font-bold text-amber-800 dark:text-amber-300 mb-1">Select your Square location</h3>
+          <h3 className="font-bold text-amber-800 dark:text-amber-300 mb-1">
+            {locations.length === 1 ? "Confirm Your Square Location" : "Select Your Square Location"}
+          </h3>
           <p className="text-sm text-amber-700 dark:text-amber-400 mb-4">
-            We found multiple locations on your Square account. Select the one that matches this shop.
+            {locations.length === 1
+              ? "Confirm this is the location where orders should print."
+              : "Choose which Square terminal receives mobile orders."}
           </p>
           <div className="space-y-2">
             {locations.map((loc) => (
@@ -232,14 +231,14 @@ export default function ConnectSquarePage() {
           <div className="w-12 h-12 bg-black rounded-xl flex items-center justify-center text-white font-bold text-lg shrink-0">■</div>
           <div className="flex-1">
             <h2 className="font-semibold text-gray-900 dark:text-white">Square</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Import menu · sync inventory · process payments</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Required · Import menu · sync inventory · process payments</p>
           </div>
           {shopLoading || loadingStatus ? (
             <span className="text-xs text-gray-400">Loading...</span>
           ) : isConnected ? (
             <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold px-3 py-1 rounded-full">Connected</span>
           ) : (
-            <span className="bg-gray-100 dark:bg-neutral-700 text-gray-500 dark:text-gray-400 text-xs font-semibold px-3 py-1 rounded-full">Not connected</span>
+            <span className="bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs font-semibold px-3 py-1 rounded-full">Required</span>
           )}
         </div>
 
@@ -267,8 +266,8 @@ export default function ConnectSquarePage() {
                   )}
                 </div>
                 {!posStatus?.location_id && (
-                  <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 p-2 rounded-lg">
-                    ⚠️ You must select a Square location before payments can be processed.
+                  <p className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded-lg font-semibold">
+                    ⛔ You must select a Square location before any orders can be accepted.
                   </p>
                 )}
                 {posStatus?.last_updated && (
@@ -311,13 +310,20 @@ export default function ConnectSquarePage() {
             </div>
           ) : (
             <div className="space-y-4">
+              {/* Required warning */}
+              <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl">
+                <span className="text-amber-500 text-lg shrink-0">⚠️</span>
+                <p className="text-sm text-amber-800 dark:text-amber-300 font-medium">
+                  Square is required to accept mobile orders. Without it, customers cannot checkout and orders will not reach you.
+                </p>
+              </div>
+
               <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-300">
                 {[
                   "Auto-import your full Square menu (categories, items, modifiers, prices)",
                   "Keep your LoyalCup menu in sync with Square",
                   "Customers pay through the app — orders appear on your Square terminal",
                   "Override any item names or prices in LoyalCup without touching Square",
-                  "Square is optional — you can manage your menu manually instead",
                 ].map((benefit) => (
                   <li key={benefit} className="flex items-start gap-2">
                     <span className="text-green-500 mt-0.5 shrink-0">✓</span>
@@ -343,18 +349,10 @@ export default function ConnectSquarePage() {
                 <p className="text-xs text-center text-gray-400">
                   You need to{" "}
                   <button className="underline" onClick={() => navigate("/shop-owner/setup")}>set up your shop</button>{" "}
-                  before connecting a POS.
+                  before connecting Square.
                 </p>
               )}
-
-              <div className="border-t border-dashed border-gray-200 dark:border-neutral-700 pt-4">
-                <button
-                  onClick={() => navigate("/shop-owner/dashboard")}
-                  className="w-full text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition text-center py-1"
-                >
-                  Skip for now — I'll manage my menu manually →
-                </button>
-              </div>
+              {/* REMOVED: "Skip for now" button — Square is required, not optional */}
             </div>
           )}
         </div>
