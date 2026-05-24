@@ -15,24 +15,20 @@ router = APIRouter(
 auth_service = AuthService()
 
 
-# Request/Response Models
 class UpdateProfileRequest(BaseModel):
     full_name:  Optional[str] = None
     avatar_url: Optional[str] = None
-    push_token: Optional[str] = None
-    phone:      Optional[str] = None
+    push_token: Optional[str] = None   # FIXED: added so app can save notification token
+    phone:      Optional[str] = None   # FIXED: added so app can save phone for SMS
 
 
 class UpdateRoleRequest(BaseModel):
     role: str
 
 
-# Routes
 @router.get("/me")
 async def get_my_profile(token_payload: dict = Depends(require_auth())):
-    """
-    Get own profile.
-    """
+    """Get own profile."""
     try:
         user_id = token_payload.get("sub")
         profile = await auth_service.get_user_profile(user_id)
@@ -48,9 +44,7 @@ async def update_my_profile(
     data: UpdateProfileRequest,
     token_payload: dict = Depends(require_auth())
 ):
-    """
-    Update own profile.
-    """
+    """Update own profile."""
     try:
         user_id = token_payload.get("sub")
         profile = await auth_service.update_user_profile(user_id, data.dict(exclude_unset=True))
@@ -66,9 +60,7 @@ async def get_user_by_id(
     user_id: str,
     token_payload: dict = Depends(require_admin())
 ):
-    """
-    Get user by ID (admin only).
-    """
+    """Get user by ID (admin only)."""
     try:
         profile = await auth_service.get_user_profile(user_id)
         if not profile:
@@ -84,9 +76,7 @@ async def list_users(
     page: int = Query(1, ge=1),
     per_page: int = Query(10, ge=1, le=100)
 ):
-    """
-    List all users with pagination (admin only).
-    """
+    """List all users with pagination (admin only)."""
     try:
         result = await auth_service.list_users(page, per_page)
         return result
@@ -100,16 +90,11 @@ async def change_user_role(
     data: UpdateRoleRequest,
     token_payload: dict = Depends(require_admin())
 ):
-    """
-    Change user role (admin only).
-    """
+    """Change user role (admin only)."""
     try:
         profile = await auth_service.change_user_role(user_id, data.role)
         if not profile:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-        return {
-            "message": "Role updated successfully",
-            "profile": profile
-        }
+        return {"message": "Role updated successfully", "profile": profile}
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

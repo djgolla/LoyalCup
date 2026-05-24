@@ -3,17 +3,13 @@ Shop Routes - API endpoints for shop management
 Includes public, shop owner, and admin endpoints
 """
 import secrets
-from fastapi import APIRouter, HTTPException, Depends
-from app.utils.security import require_auth
-from app.database import get_supabase
-
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Query
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
 from app.services.shop_service import shop_service
 from app.utils.security import require_auth, require_admin
-
+from app.database import get_supabase
 
 router = APIRouter(
     prefix="/api/v1/shops",
@@ -97,17 +93,11 @@ async def get_shop(shop_id: str):
     shop = await shop_service.get_shop_by_id(shop_id)
     if not shop:
         raise HTTPException(status_code=404, detail="Shop not found")
-    
-    # Get menu items
-    items = await shop_service.list_menu_items(shop_id)
+    items      = await shop_service.list_menu_items(shop_id)
     categories = await shop_service.list_categories(shop_id)
-    
     return {
         "shop": shop,
-        "menu": {
-            "categories": categories,
-            "items": items
-        }
+        "menu": {"categories": categories, "items": items}
     }
 
 
@@ -115,20 +105,11 @@ async def get_shop(shop_id: str):
 async def get_shop_menu(shop_id: str):
     """Get shop menu organized by category"""
     categories = await shop_service.list_categories(shop_id)
-    items = await shop_service.list_menu_items(shop_id)
-    
-    # Organize items by category
+    items      = await shop_service.list_menu_items(shop_id)
     menu_by_category = {}
     for category in categories:
-        category_items = [
-            item for item in items 
-            if item.get('category_id') == category['id']
-        ]
-        menu_by_category[category['name']] = {
-            "category": category,
-            "items": category_items
-        }
-    
+        category_items = [i for i in items if i.get("category_id") == category["id"]]
+        menu_by_category[category["name"]] = {"category": category, "items": category_items}
     return {"menu": menu_by_category}
 
 
@@ -137,21 +118,15 @@ async def apply_shop_owner(
     application: ShopApplicationRequest,
     token_payload: dict = Depends(require_auth())
 ):
-    """
-    Apply to become a shop owner and create a new shop.
-    Automatically upgrades user role to 'shop_owner' and creates shop with active status.
-    """
+    """Apply to become a shop owner."""
     try:
         user_id = token_payload.get("sub")
         if not user_id:
             raise HTTPException(status_code=401, detail="Invalid user token")
-        
-        # Create shop application
         result = await shop_service.create_shop_application(
             user_id=user_id,
             application_data=application.dict()
         )
-        
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -160,7 +135,7 @@ async def apply_shop_owner(
 
 
 # ============================================================================
-# SHOP OWNER ENDPOINTS (require shop ownership)
+# SHOP OWNER ENDPOINTS
 # ============================================================================
 
 @router.post("")
@@ -179,12 +154,8 @@ async def update_shop(shop_id: str, shop_data: ShopUpdate, user: dict = Depends(
     user_id = user.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="User ID not found in token")
-    
-    # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
-    
-    # Filter out None values
     update_data = {k: v for k, v in shop_data.dict().items() if v is not None}
     shop = await shop_service.update_shop(shop_id, update_data)
     return {"shop": shop}
@@ -196,11 +167,8 @@ async def delete_shop(shop_id: str, user: dict = Depends(require_auth())):
     user_id = user.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="User ID not found in token")
-    
-    # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
-    
     success = await shop_service.delete_shop(shop_id)
     return {"success": success}
 
@@ -211,13 +179,10 @@ async def upload_shop_logo(shop_id: str, file: UploadFile = File(...), user: dic
     user_id = user.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="User ID not found in token")
-    
-    # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
-    
     file_data = await file.read()
-    logo_url = await shop_service.upload_shop_image(shop_id, file_data, "logo")
+    logo_url  = await shop_service.upload_shop_image(shop_id, file_data, "logo")
     return {"logo_url": logo_url}
 
 
@@ -227,12 +192,9 @@ async def upload_shop_banner(shop_id: str, file: UploadFile = File(...), user: d
     user_id = user.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="User ID not found in token")
-    
-    # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
-    
-    file_data = await file.read()
+    file_data  = await file.read()
     banner_url = await shop_service.upload_shop_image(shop_id, file_data, "banner")
     return {"banner_url": banner_url}
 
@@ -243,13 +205,49 @@ async def get_shop_analytics(shop_id: str, user: dict = Depends(require_auth()))
     user_id = user.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="User ID not found in token")
-    
-    # Verify ownership
     if not shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
-    
     analytics = await shop_service.get_shop_analytics(shop_id)
     return {"analytics": analytics}
+
+
+@router.post("/{shop_id}/generate-api-key")
+async def generate_shop_api_key(shop_id: str, user: dict = Depends(require_auth())):
+    """Generate a new API key for a shop. Shop owner only."""
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
+
+    db = get_supabase()
+
+    # FIXED: was db.execute_query() which doesn't exist — use get_service_client()
+    shop_resp = (
+        db.get_service_client()
+        .table("shops")
+        .select("id")
+        .eq("id", shop_id)
+        .eq("owner_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if not shop_resp.data:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    api_key = f"lc_shop_{secrets.token_urlsafe(32)}"
+
+    try:
+        db.get_service_client().table("shop_api_keys").insert({
+            "shop_id": shop_id,
+            "api_key": api_key,
+        }).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {
+        "shop_id": shop_id,
+        "api_key": api_key,
+        "message": "API key generated successfully"
+    }
 
 
 # ============================================================================
@@ -275,40 +273,3 @@ async def feature_shop(shop_id: str, _: dict = Depends(require_admin())):
     """Feature shop on homepage (admin only)"""
     shop = await shop_service.update_shop(shop_id, {"featured": True})
     return {"shop": shop}
-@router.post("/{shop_id}/generate-api-key")
-async def generate_shop_api_key(shop_id: str, user: dict = Depends(require_auth())):
-    """
-    Generate a new API key for a shop.
-    Only shop owner can do this.
-    """
-    try:
-        user_id = user.get("sub")
-        
-        # Verify ownership
-        db = get_supabase()
-        shop_resp = (
-            db.get_service_client()
-            .table("shops")
-            .select("id")
-            .eq("id", shop_id)
-            .eq("owner_id", user_id)
-            .limit(1)
-            .execute()
-        )
-        if not shop_resp.data:
-            raise HTTPException(status_code=403, detail="Not authorized")
-
-        api_key = f"lc_shop_{secrets.token_urlsafe(32)}"
-        db.get_service_client().table("shop_api_keys").insert({
-            "shop_id": shop_id,
-            "api_key": api_key,
-        }).execute()
-        
-        return {
-            "shop_id": shop_id,
-            "api_key": api_key,
-            "message": "API key generated successfully"
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))

@@ -1,6 +1,5 @@
 """
 GET /api/v1/pos/status  — current POS connection state for a shop
-GET /api/v1/pos/square/locations — live list of Square locations
 """
 import logging
 from fastapi import APIRouter, Request, HTTPException, Depends
@@ -31,12 +30,15 @@ async def pos_status(
     if not shop_id:
         raise HTTPException(status_code=400, detail="Missing shop_id")
 
-    # Verify caller owns this shop (or is admin)
     user_id   = user.get("sub", "")
     user_role = (user.get("user_metadata") or {}).get("role", "")
+
+    # FIXED: was db.service_client (AttributeError)
+    svc = db.get_service_client()
+
     if user_role != "admin":
         shop_check = (
-            db.get_service_client().table("shops")
+            svc.table("shops")
             .select("id")
             .eq("id", shop_id)
             .eq("owner_id", user_id)
@@ -47,7 +49,7 @@ async def pos_status(
             raise HTTPException(status_code=403, detail="Not authorized for this shop")
 
     result = (
-        db.get_service_client().table("pos_connections")
+        svc.table("pos_connections")
         .select("id, status, merchant_id, location_id, token_expires_at, updated_at, access_token")
         .eq("shop_id", shop_id)
         .eq("provider", provider)
@@ -67,7 +69,6 @@ async def pos_status(
     conn         = result.data[0]
     access_token = conn.get("access_token")
 
-    # Fetch live locations from Square when connected (for location picker)
     locations = []
     if access_token and conn.get("status") == "connected":
         try:
@@ -77,13 +78,13 @@ async def pos_status(
             logger.warning(f"[POS Status] Could not fetch Square locations: {e}")
 
     return {
-        "status":          conn.get("status", "disconnected"),
-        "provider":        provider,
-        "shop_id":         shop_id,
-        "merchant_id":     conn.get("merchant_id"),
-        "location_id":     conn.get("location_id"),
+        "status":           conn.get("status", "disconnected"),
+        "provider":         provider,
+        "shop_id":          shop_id,
+        "merchant_id":      conn.get("merchant_id"),
+        "location_id":      conn.get("location_id"),
         "token_expires_at": conn.get("token_expires_at"),
-        "last_updated":    conn.get("updated_at"),
-        "has_location":    conn.get("location_id") is not None,
-        "locations":       locations,
+        "last_updated":     conn.get("updated_at"),
+        "has_location":     conn.get("location_id") is not None,
+        "locations":        locations,
     }

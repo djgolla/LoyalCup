@@ -101,7 +101,7 @@ async def square_callback(request: Request, db=Depends(get_supabase)):
 
     auto_location_id = locations[0].id if len(locations) == 1 else None
 
-    # ── FIXED: was db.service_client (AttributeError) ──────────────────────
+    # FIXED: was db.service_client (AttributeError)
     svc = db.get_service_client()
 
     existing_conn = (
