@@ -166,7 +166,7 @@ export default function Privacy() {
             <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
               If you have questions about this Privacy Policy, please contact us at:
               <br />
-              <strong>Email:</strong> privacy@loyalcup.com
+              <strong>Email:</strong> privacy@loyalcupapp.com
               <br />
               <strong>Address:</strong> NO PYSICAL ADDRESS AT THIS TIME
             </p>

@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 
 
 def _cents_to_dollars(cents: Optional[int]) -> float:
-    """Convert cents to dollars. Returns 0.0 if None."""
     if cents is None:
         return 0.0
     return round(cents / 100, 2)
@@ -21,19 +20,22 @@ async def sync_square_catalog(
     shop_id: str,
     catalog_objects: List[Dict[str, Any]],
     db,
-    source: str = "square"
+    source: str = "square",
+    images_by_id: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """
     Takes raw Square catalog objects and upserts them into LoyalCup's DB.
     Returns a summary of what was synced.
+
+    images_by_id: optional pre-built {square_image_id: url} map (from adapter).
+    If not provided, it's built from any IMAGE objects in catalog_objects.
     """
     client = db.service_client
 
-    # ---------- SEPARATE OBJECT TYPES ----------
-    raw_categories: List[Dict] = []
-    raw_items: List[Dict] = []
+    raw_categories:     List[Dict] = []
+    raw_items:          List[Dict] = []
     raw_modifier_lists: List[Dict] = []
-    raw_images: Dict[str, str] = {}  # id -> url
+    raw_images:         Dict[str, str] = dict(images_by_id or {})
 
     for obj in catalog_objects:
         t = obj.get("type")
@@ -49,152 +51,169 @@ async def sync_square_catalog(
             if url:
                 raw_images[obj["id"]] = url
 
-    # ---------- SYNC CATEGORIES ----------
+    # ── SYNC CATEGORIES ──────────────────────────────────────────────────────
     category_pos_id_to_lc_id: Dict[str, str] = {}
     categories_synced = 0
 
     for cat in raw_categories:
-        pos_id = cat["id"]
+        pos_id   = cat["id"]
         cat_data = cat.get("category_data", {})
-        name = cat_data.get("name") or "Uncategorized"
-        lc_id = str(uuid.uuid4())
+        name     = cat_data.get("name") or "Uncategorized"
 
-        existing = client.table("menu_categories") \
-            .select("id") \
-            .eq("shop_id", shop_id) \
-            .eq("pos_id", pos_id) \
-            .limit(1) \
+        existing = (
+            client.table("menu_categories")
+            .select("id")
+            .eq("shop_id", shop_id)
+            .eq("pos_id", pos_id)
+            .limit(1)
             .execute()
+        )
 
         if existing.data:
             lc_id = existing.data[0]["id"]
             client.table("menu_categories").update({
-                "name": name,
+                "name":       name,
                 "pos_source": source,
+                "is_active":  True,
             }).eq("id", lc_id).execute()
         else:
+            lc_id = str(uuid.uuid4())
             client.table("menu_categories").insert({
-                "id": lc_id,
-                "shop_id": shop_id,
-                "name": name,
-                "pos_id": pos_id,
+                "id":         lc_id,
+                "shop_id":    shop_id,
+                "name":       name,
+                "pos_id":     pos_id,
                 "pos_source": source,
                 "sort_order": categories_synced,
-                "is_active": True,
+                "is_active":  True,
             }).execute()
 
         category_pos_id_to_lc_id[pos_id] = lc_id
         categories_synced += 1
-        logger.info(f"[sync] category upserted: {name} (pos_id={pos_id})")
+        logger.info(f"[sync] category: {name} (pos_id={pos_id})")
 
-    # ---------- SYNC MODIFIER GROUPS ----------
+    # ── SYNC MODIFIER GROUPS ─────────────────────────────────────────────────
     modifier_list_pos_id_to_lc_id: Dict[str, str] = {}
     modifier_groups_synced = 0
+    modifier_options_synced = 0
 
     for ml in raw_modifier_lists:
-        pos_id = ml["id"]
-        ml_data = ml.get("modifier_list_data", {})
-        name = ml_data.get("name") or "Options"
-        selection_type = ml_data.get("selection_type", "MULTIPLE")
-        is_single = selection_type == "SINGLE"
-        lc_id = str(uuid.uuid4())
+        pos_id    = ml["id"]
+        ml_data   = ml.get("modifier_list_data", {})
+        name      = ml_data.get("name") or "Options"
+        is_single = ml_data.get("selection_type", "MULTIPLE") == "SINGLE"
 
-        existing = client.table("modifier_groups") \
-            .select("id") \
-            .eq("shop_id", shop_id) \
-            .eq("pos_id", pos_id) \
-            .limit(1) \
+        existing = (
+            client.table("modifier_groups")
+            .select("id")
+            .eq("shop_id", shop_id)
+            .eq("pos_id", pos_id)
+            .limit(1)
             .execute()
+        )
 
         if existing.data:
             lc_id = existing.data[0]["id"]
             client.table("modifier_groups").update({
-                "name": name,
+                "name":           name,
                 "min_selections": 1 if is_single else 0,
                 "max_selections": 1 if is_single else None,
-                "pos_source": source,
+                "pos_source":     source,
+                "is_active":      True,
             }).eq("id", lc_id).execute()
         else:
+            lc_id = str(uuid.uuid4())
             client.table("modifier_groups").insert({
-                "id": lc_id,
-                "shop_id": shop_id,
-                "name": name,
+                "id":             lc_id,
+                "shop_id":        shop_id,
+                "name":           name,
                 "min_selections": 1 if is_single else 0,
                 "max_selections": 1 if is_single else None,
-                "pos_id": pos_id,
-                "pos_source": source,
-                "is_active": True,
+                "pos_id":         pos_id,
+                "pos_source":     source,
+                "is_active":      True,
             }).execute()
 
         modifier_list_pos_id_to_lc_id[pos_id] = lc_id
         modifier_groups_synced += 1
 
-        # Sync individual modifier options within this list
+        # ── sync individual modifier options ──
+        # Square inline modifiers: each has their own "id" (catalog object id)
+        # and a "modifier_data" sub-object. Do NOT use "uid" — that's a different field.
         for mod in ml_data.get("modifiers") or []:
-            mod_data = mod.get("modifier_data", {})
-            mod_pos_id = mod.get("uid") or mod.get("id") or str(uuid.uuid4())
-            mod_name = mod_data.get("name") or "Option"
-            price_money = mod_data.get("price_money")
-            price = _cents_to_dollars(price_money.get("amount") if price_money else None)
+            mod_pos_id = mod.get("id")           # ← correct field, not "uid"
+            if not mod_pos_id:
+                logger.warning(f"[sync] modifier in list {pos_id} has no id, skipping")
+                continue
 
-            existing_mod = client.table("modifier_options") \
-                .select("id") \
-                .eq("modifier_group_id", lc_id) \
-                .eq("pos_id", mod_pos_id) \
-                .limit(1) \
+            mod_data    = mod.get("modifier_data") or {}
+            mod_name    = mod_data.get("name") or "Option"
+            price_money = mod_data.get("price_money")
+            price       = _cents_to_dollars(price_money.get("amount") if price_money else None)
+
+            existing_mod = (
+                client.table("modifier_options")
+                .select("id")
+                .eq("modifier_group_id", lc_id)
+                .eq("pos_id", mod_pos_id)
+                .limit(1)
                 .execute()
+            )
 
             if existing_mod.data:
                 client.table("modifier_options").update({
-                    "name": mod_name,
+                    "name":             mod_name,
                     "price_adjustment": price,
-                    "pos_source": source,
+                    "pos_source":       source,
+                    "is_active":        True,
                 }).eq("id", existing_mod.data[0]["id"]).execute()
             else:
                 client.table("modifier_options").insert({
-                    "id": str(uuid.uuid4()),
+                    "id":               str(uuid.uuid4()),
                     "modifier_group_id": lc_id,
-                    "shop_id": shop_id,
-                    "name": mod_name,
+                    "shop_id":          shop_id,
+                    "name":             mod_name,
                     "price_adjustment": price,
-                    "pos_id": mod_pos_id,
-                    "pos_source": source,
-                    "is_active": True,
+                    "pos_id":           mod_pos_id,
+                    "pos_source":       source,
+                    "is_active":        True,
                 }).execute()
 
-    # ---------- SYNC ITEMS ----------
+            modifier_options_synced += 1
+
+    # ── SYNC ITEMS ────────────────────────────────────────────────────────────
     items_synced = 0
 
     for item in raw_items:
-        pos_id = item["id"]
+        pos_id    = item["id"]
         item_data = item.get("item_data", {})
-        name = item_data.get("name") or "Item"
+        name      = item_data.get("name") or "Item"
         description = item_data.get("description")
 
-        # Resolve category
+        # Resolve category — try reporting_category first, then categories array
         category_lc_id = None
-        reporting_cat = item_data.get("reporting_category") or item_data.get("category")
-        if reporting_cat:
-            cat_pos_id = reporting_cat.get("id")
-            category_lc_id = category_pos_id_to_lc_id.get(cat_pos_id)
-        if not category_lc_id:
-            for c in (item_data.get("categories") or []):
-                found = category_pos_id_to_lc_id.get(c.get("id"))
-                if found:
-                    category_lc_id = found
-                    break
+        for cat_ref in [
+            item_data.get("reporting_category"),
+            item_data.get("category"),
+            *(item_data.get("categories") or []),
+        ]:
+            if not cat_ref:
+                continue
+            found = category_pos_id_to_lc_id.get(cat_ref.get("id"))
+            if found:
+                category_lc_id = found
+                break
 
-        # Price: use first variation — default to 0.0 if missing (NOT NULL safe)
+        # Price: first variation — default 0.0 (never None, DB constraint)
         price: float = 0.0
         variations = item_data.get("variations") or []
         if variations:
-            first_var = variations[0]
-            var_data = first_var.get("item_variation_data", {})
+            var_data    = variations[0].get("item_variation_data", {})
             price_money = var_data.get("price_money")
             if price_money:
                 price = _cents_to_dollars(price_money.get("amount"))
 
-        # Image
+        # Image — try image_ids list, then direct image_id
         image_url = None
         for img_id in (item_data.get("image_ids") or []):
             url = raw_images.get(img_id)
@@ -202,59 +221,61 @@ async def sync_square_catalog(
                 image_url = url
                 break
 
-        # Modifier groups
-        lc_modifier_group_ids = [
-            modifier_list_pos_id_to_lc_id[mid]
-            for mid in [
-                ml_ref.get("modifier_list_id")
-                for ml_ref in (item_data.get("modifier_list_info") or [])
-            ]
-            if mid and mid in modifier_list_pos_id_to_lc_id
-        ]
+        # Linked modifier groups
+        lc_modifier_group_ids = []
+        for ml_ref in (item_data.get("modifier_list_info") or []):
+            mid = ml_ref.get("modifier_list_id")
+            if mid and mid in modifier_list_pos_id_to_lc_id:
+                # Only include enabled modifier lists
+                if ml_ref.get("enabled") is not False:
+                    lc_modifier_group_ids.append(modifier_list_pos_id_to_lc_id[mid])
 
-        lc_id = str(uuid.uuid4())
-
-        existing = client.table("menu_items") \
-            .select("id") \
-            .eq("shop_id", shop_id) \
-            .eq("pos_id", pos_id) \
-            .limit(1) \
+        existing = (
+            client.table("menu_items")
+            .select("id")
+            .eq("shop_id", shop_id)
+            .eq("pos_id", pos_id)
+            .limit(1)
             .execute()
+        )
 
         if existing.data:
             lc_id = existing.data[0]["id"]
             client.table("menu_items").update({
-                "name": name,
-                "description": description,
-                "base_price": price,           # always a float now, never None
-                "image_url": image_url,
-                "category_id": category_lc_id,
-                "pos_source": source,
+                "name":               name,
+                "description":        description,
+                "base_price":         price,
+                "image_url":          image_url,
+                "category_id":        category_lc_id,
+                "pos_source":         source,
                 "modifier_group_ids": lc_modifier_group_ids,
+                "is_active":          True,
             }).eq("id", lc_id).execute()
         else:
+            lc_id = str(uuid.uuid4())
             client.table("menu_items").insert({
-                "id": lc_id,
-                "shop_id": shop_id,
-                "name": name,
-                "description": description,
-                "base_price": price,           # always a float now, never None
-                "image_url": image_url,
-                "category_id": category_lc_id,
-                "pos_id": pos_id,
-                "pos_source": source,
+                "id":                 lc_id,
+                "shop_id":            shop_id,
+                "name":               name,
+                "description":        description,
+                "base_price":         price,
+                "image_url":          image_url,
+                "category_id":        category_lc_id,
+                "pos_id":             pos_id,
+                "pos_source":         source,
                 "modifier_group_ids": lc_modifier_group_ids,
-                "is_available": True,
-                "is_active": True,
+                "is_available":       True,
+                "is_active":          True,
             }).execute()
 
         items_synced += 1
-        logger.info(f"[sync] item upserted: {name} @ ${price} (pos_id={pos_id})")
+        logger.info(f"[sync] item: {name} @ ${price} (pos_id={pos_id})")
 
     summary = {
-        "categories_synced": categories_synced,
+        "categories_synced":    categories_synced,
         "modifier_groups_synced": modifier_groups_synced,
-        "items_synced": items_synced,
+        "modifier_options_synced": modifier_options_synced,
+        "items_synced":         items_synced,
     }
     logger.info(f"[sync] Square catalog sync complete for shop {shop_id}: {summary}")
     return summary

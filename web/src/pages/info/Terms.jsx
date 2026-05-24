@@ -200,7 +200,7 @@ export default function Terms() {
             <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
               Questions about these Terms? Contact us at:
               <br />
-              <strong>Email:</strong> legal@loyalcup.com
+              <strong>Email:</strong> legal@loyalcupapp.com
               <br />
               <strong>Address:</strong> NO PHYSICAL ADDRESS AT THIS TIME
             </p>

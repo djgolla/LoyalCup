@@ -1,24 +1,81 @@
+"""
+POST /api/v1/pos/square/set-location
+
+Sets the active Square location for a shop's POS connection.
+Requires the shop owner to be authenticated.
+"""
+import logging
 from fastapi import APIRouter, Request, Depends, HTTPException
+from pydantic import BaseModel
 from app.database import get_supabase
+from app.utils.security import require_auth
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+class SetLocationRequest(BaseModel):
+    shop_id:     str
+    location_id: str
+
 
 @router.post("/api/v1/pos/square/set-location")
-async def set_square_location(request: Request, db=Depends(get_supabase)):
-    form = await request.json()
-    shop_id = form.get("shop_id")
-    location_id = form.get("location_id")
-    if not shop_id or not location_id:
-        raise HTTPException(status_code=400, detail="Missing shop_id or location_id")
-    try:
-        await db.execute_query(
-            table="pos_connections",
-            operation="update",
-            data={"location_id": location_id},
-            filters={"shop_id": shop_id, "provider": "square"},
-            use_service_role=True
+async def set_square_location(
+    body: SetLocationRequest,
+    db=Depends(get_supabase),
+    user: dict = Depends(require_auth()),
+):
+    user_id = user.get("sub", "")
+    user_role = (user.get("user_metadata") or {}).get("role", "")
+
+    # Verify the caller owns this shop
+    if user_role != "admin":
+        shop_check = (
+            db.service_client.table("shops")
+            .select("id")
+            .eq("id", body.shop_id)
+            .eq("owner_id", user_id)
+            .limit(1)
+            .execute()
         )
+        if not shop_check.data:
+            raise HTTPException(status_code=403, detail="Not authorized for this shop")
+
+    # Check POS connection exists
+    conn_check = (
+        db.service_client.table("pos_connections")
+        .select("id, status")
+        .eq("shop_id", body.shop_id)
+        .eq("provider", "square")
+        .limit(1)
+        .execute()
+    )
+    if not conn_check.data:
+        raise HTTPException(
+            status_code=404,
+            detail="No Square connection found. Please connect Square first.",
+        )
+
+    if conn_check.data[0].get("status") != "connected":
+        raise HTTPException(
+            status_code=400,
+            detail="Square is not connected. Please reconnect before setting a location.",
+        )
+
+    # Update location
+    try:
+        db.service_client.table("pos_connections").update({
+            "location_id": body.location_id,
+        }).eq("shop_id", body.shop_id).eq("provider", "square").execute()
+
+        logger.info(f"[Set Location] shop={body.shop_id} location={body.location_id}")
     except Exception as e:
-        print("DB ERROR (set-location):", str(e))
+        logger.error(f"[Set Location] DB error: {e}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-    return {"status": "updated", "provider": "square", "location_id": location_id, "shop_id": shop_id}
+
+    return {
+        "success":     True,
+        "provider":    "square",
+        "location_id": body.location_id,
+        "shop_id":     body.shop_id,
+    }

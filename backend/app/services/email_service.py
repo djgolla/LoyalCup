@@ -72,7 +72,7 @@ def _base_template(inner_html: str) -> str:
         <!-- Footer -->
         <tr>
           <td style="background:#fafafa;border-top:1px solid #e5e7eb;padding:20px 32px;text-align:center;">
-            <p style="margin:0;font-size:12px;color:#9ca3af;">This is an automated message from LoyalCup · Please do not reply</p>
+            <p style="margin:0;font-size:12px;color:#9ca3af;">Questions? Email us at <a href="mailto:hello@loyalcup.com" style="color:#d97706;">hello@loyalcup.com</a></p>
             <p style="margin:6px 0 0;font-size:12px;color:#9ca3af;">© 2026 LoyalCup · All rights reserved</p>
           </td>
         </tr>
