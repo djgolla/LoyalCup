@@ -21,12 +21,8 @@ import { apiClient } from '../services/apiClient';
 
 const SQUARE_APP_ID = process.env.EXPO_PUBLIC_SQUARE_APP_ID || '';
 
-/**
- * Generate Square card entry HTML using the correct environment + location.
- * We load the live vs sandbox SDK based on EXPO_PUBLIC_SQUARE_ENV.
- */
 const getSquareHTML = (appId, locationId) => {
-  const env = process.env.EXPO_PUBLIC_SQUARE_ENV || 'sandbox';
+  const env    = process.env.EXPO_PUBLIC_SQUARE_ENV || 'sandbox';
   const sdkUrl = env === 'production'
     ? 'https://web.squarecdn.com/v1/square.js'
     : 'https://sandbox.web.squarecdn.com/v1/square.js';
@@ -76,9 +72,9 @@ const getSquareHTML = (appId, locationId) => {
       }
     }
     document.getElementById('pay-button').addEventListener('click', async () => {
-      const btn = document.getElementById('pay-button');
+      const btn    = document.getElementById('pay-button');
       const status = document.getElementById('status');
-      if (!card) { status.textContent = 'Card form not ready. Please wait.'; return; }
+      if (!card) { status.textContent = 'Card form not ready.'; return; }
       btn.disabled = true;
       status.textContent = 'Processing...';
       status.className = '';
@@ -113,54 +109,9 @@ export default function CheckoutScreen() {
   const [globalPoints,     setGlobalPoints]     = useState(null);
   const [pointsToRedeem,   setPointsToRedeem]   = useState(0);
   const [showPointsPanel,  setShowPointsPanel]  = useState(false);
-  const [user,             setUser]             = useState(null);
+  const [shopLocationId,   setShopLocationId]   = useState(null);
+  const [locationLoading,  setLocationLoading]  = useState(false);
 
-  // Per-shop Square location — loaded from the backend POS connection
-  // (not a global env var, since each shop has their own location)
-  const [shopLocationId, setShopLocationId] = useState(null);
-  const [locationLoading, setLocationLoading] = useState(false);
-
-  useEffect(() => { loadUser(); }, []);
-  useEffect(() => { if (cart.length > 0) loadShopLocation(); }, [cart]);
-
-  const loadUser = async () => {
-    try {
-      const { data: { user: u } } = await supabase.auth.getUser();
-      if (u) {
-        setUser(u);
-        const pts = await getGlobalPoints(u.id);
-        setGlobalPoints(pts);
-      }
-    } catch (e) { console.error('loadUser:', e); }
-  };
-
-  const loadShopLocation = async () => {
-    const shopId = Object.keys(itemsByShop)[0];
-    if (!shopId) return;
-    setLocationLoading(true);
-    try {
-      // Fetch shop's Square location_id from POS status
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) return;
-
-      const res = await apiClient.get(
-        `/api/v1/pos/status?provider=square&shop_id=${shopId}`,
-        token
-      );
-      if (res?.location_id) {
-        setShopLocationId(res.location_id);
-      } else {
-        console.warn('[Checkout] Shop has no Square location set');
-      }
-    } catch (e) {
-      console.warn('[Checkout] Could not load shop location:', e.message);
-    } finally {
-      setLocationLoading(false);
-    }
-  };
-
-  // ── derived values ──────────────────────────────────────────────────────────
   const itemsByShop = cart.reduce((acc, item) => {
     const sid = item.shopId;
     if (!acc[sid]) acc[sid] = { shopId: sid, shopName: item.shopName || 'Shop', items: [] };
@@ -168,47 +119,63 @@ export default function CheckoutScreen() {
     return acc;
   }, {});
 
-  const subtotal       = cart.reduce((sum, item) => sum + (parseFloat(item.price) || 0) * (item.quantity || 1), 0);
-  const estimatedTax   = subtotal * 0.0875;
+  const subtotal        = cart.reduce((sum, item) => sum + (parseFloat(item.price) || 0) * (item.quantity || 1), 0);
+  const estimatedTax    = subtotal * 0.0875;
   const availablePoints = globalPoints?.current_balance || 0;
-  const maxRedeemable  = Math.min(availablePoints, Math.floor(subtotal * 100));
-  const pointsDiscount = pointsToRedeem * 0.01;
-  const estimatedTotal = Math.max(0, subtotal + estimatedTax - pointsDiscount);
+  const maxRedeemable   = Math.min(availablePoints, Math.floor(subtotal * 100));
+  const pointsDiscount  = pointsToRedeem * 0.01;
+  const estimatedTotal  = Math.max(0, subtotal + estimatedTax - pointsDiscount);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const pts = await getGlobalPoints(user.id);
+          setGlobalPoints(pts);
+        }
+      } catch (e) { console.error('loadUser:', e); }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (cart.length === 0) return;
+    const shopId = Object.keys(itemsByShop)[0];
+    if (!shopId) return;
+    setLocationLoading(true);
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) return;
+        const res = await apiClient.get(`/api/v1/pos/status?provider=square&shop_id=${shopId}`, token);
+        if (res?.location_id) setShopLocationId(res.location_id);
+        else console.warn('[Checkout] Shop has no Square location set');
+      } catch (e) {
+        console.warn('[Checkout] Could not load shop location:', e.message);
+      } finally {
+        setLocationLoading(false);
+      }
+    })();
+  }, [cart.length]);
 
   const getPointsChips = () => {
     if (maxRedeemable <= 0) return [];
-    const seen = new Set();
+    const seen  = new Set();
     const chips = [];
     for (const ratio of [0.25, 0.5, 0.75]) {
       const v = Math.floor(maxRedeemable * ratio);
-      if (v > 0 && !seen.has(v) && v < maxRedeemable) {
-        seen.add(v);
-        chips.push(v);
-      }
+      if (v > 0 && !seen.has(v) && v < maxRedeemable) { seen.add(v); chips.push(v); }
     }
     chips.push(maxRedeemable);
     return chips;
   };
 
-  const handleSelectPoints = (pts) => {
-    setPointsToRedeem(prev => prev === pts ? 0 : Math.min(pts, maxRedeemable));
-  };
-
   const handlePay = () => {
-    if (cart.length === 0) {
-      Alert.alert('Empty Cart', 'Nothing to order!');
-      return;
-    }
-    if (!SQUARE_APP_ID) {
-      Alert.alert('Setup Required', 'Square App ID not configured.');
-      return;
-    }
+    if (cart.length === 0) { Alert.alert('Empty Cart', 'Nothing to order!'); return; }
+    if (!SQUARE_APP_ID)    { Alert.alert('Setup Required', 'Square App ID not configured.'); return; }
     if (!shopLocationId) {
-      Alert.alert(
-        'Shop Not Ready',
-        'This shop hasn\'t finished setting up payments. Please try another shop or contact them directly.',
-        [{ text: 'OK' }]
-      );
+      Alert.alert('Shop Not Ready', "This shop hasn't finished setting up payments. Please try again shortly.", [{ text: 'OK' }]);
       return;
     }
     setShowPaymentSheet(true);
@@ -220,9 +187,7 @@ export default function CheckoutScreen() {
       if (msg.type !== 'nonce') return;
       setShowPaymentSheet(false);
       await processPayment(msg.nonce);
-    } catch (e) {
-      console.error('WebView message error:', e);
-    }
+    } catch (e) { console.error('WebView message error:', e); }
   };
 
   const processPayment = async (nonce) => {
@@ -242,13 +207,12 @@ export default function CheckoutScreen() {
         customizations: item.customizations || [],
       }));
 
-      // POST /api/v1/orders handles payment + Square order + loyalty atomically
       const result = await apiClient.post('/api/v1/orders', {
         shop_id:                  shopId,
         items:                    orderItems,
         payment_nonce:            nonce,
-        loyalty_points_to_redeem: pointsToRedeem,  // ← backend handles deduction
-        customer_note:            null,             // TODO: add note input field
+        loyalty_points_to_redeem: pointsToRedeem,
+        customer_note:            null,
       }, token);
 
       clearCart();
@@ -269,8 +233,6 @@ export default function CheckoutScreen() {
         ]
       );
     } catch (e) {
-      console.error('Payment error:', e);
-      // Surface clean message to user
       const msg = e.message || 'Your card was not charged. Please try again.';
       Alert.alert('Payment Failed', msg, [{ text: 'OK' }]);
     } finally {
@@ -278,7 +240,6 @@ export default function CheckoutScreen() {
     }
   };
 
-  // ── empty cart ──────────────────────────────────────────────────────────────
   if (cart.length === 0) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -293,7 +254,7 @@ export default function CheckoutScreen() {
           <Feather name="shopping-bag" size={72} color="#CCC" />
           <Text style={styles.emptyTitle}>Your cart is empty</Text>
           <Text style={styles.emptySubtitle}>Add items to get started</Text>
-          <TouchableOpacity style={styles.browseButton} onPress={() => router.push('/')}>
+          <TouchableOpacity style={styles.browseButton} onPress={() => router.push('/home')}>
             <Text style={styles.browseButtonText}>Browse Shops</Text>
           </TouchableOpacity>
         </View>
@@ -302,11 +263,9 @@ export default function CheckoutScreen() {
   }
 
   const pointsChips = getPointsChips();
-  const locationId  = shopLocationId || SQUARE_APP_ID; // fallback for legacy
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
           <Feather name="arrow-left" size={24} color="#000" />
@@ -317,13 +276,13 @@ export default function CheckoutScreen() {
 
       <ScrollView style={styles.scrollView} contentContainerStyle={{ paddingBottom: 200 }} showsVerticalScrollIndicator={false}>
 
-        {/* Order items per shop */}
         {Object.values(itemsByShop).map(({ shopId, shopName, items }) => (
           <View key={shopId}>
             <Text style={styles.sectionLabel}>ORDER FROM {shopName.toUpperCase()}</Text>
             <View style={styles.card}>
               {items.map((item, idx) => (
-                <View key={item.cartKey || `${item.id}-${idx}`} style={[styles.orderItem, idx < items.length - 1 && styles.orderItemBorder]}>
+                <View key={item.cartKey || `${item.id}-${idx}`}
+                  style={[styles.orderItem, idx < items.length - 1 && styles.orderItemBorder]}>
                   <View style={styles.itemLeft}>
                     <View style={styles.qtyBadge}>
                       <Text style={styles.qtyBadgeText}>{item.quantity || 1}</Text>
@@ -342,16 +301,13 @@ export default function CheckoutScreen() {
           </View>
         ))}
 
-        {/* Points redemption */}
         {availablePoints > 0 && (
           <>
             <Text style={styles.sectionLabel}>LOYALTY POINTS</Text>
             <View style={styles.card}>
               <TouchableOpacity style={styles.pointsToggle} onPress={() => setShowPointsPanel(!showPointsPanel)} activeOpacity={0.7}>
                 <View style={styles.pointsToggleLeft}>
-                  <View style={styles.pointsIcon}>
-                    <Feather name="award" size={18} color="#fff" />
-                  </View>
+                  <View style={styles.pointsIcon}><Feather name="award" size={18} color="#fff" /></View>
                   <View>
                     <Text style={styles.pointsToggleTitle}>
                       {pointsToRedeem > 0 ? `${pointsToRedeem} pts → -$${pointsDiscount.toFixed(2)}` : 'Redeem Points'}
@@ -361,25 +317,19 @@ export default function CheckoutScreen() {
                 </View>
                 <Feather name={showPointsPanel ? 'chevron-up' : 'chevron-down'} size={20} color="#666" />
               </TouchableOpacity>
-
               {showPointsPanel && (
                 <View style={styles.pointsPanel}>
                   <View style={styles.pointsChips}>
                     {pointsChips.map((n, i) => {
-                      const isMax = n === maxRedeemable;
+                      const isMax  = n === maxRedeemable;
                       const active = pointsToRedeem === n;
                       return (
-                        <TouchableOpacity
-                          key={i}
-                          style={[styles.chip, active && styles.chipActive]}
-                          onPress={() => handleSelectPoints(n)}
-                        >
+                        <TouchableOpacity key={i} style={[styles.chip, active && styles.chipActive]}
+                          onPress={() => setPointsToRedeem(prev => prev === n ? 0 : n)}>
                           <Text style={[styles.chipText, active && styles.chipTextActive]}>
                             {isMax && pointsChips.length > 1 ? `Max (${n})` : `${n} pts`}
                           </Text>
-                          <Text style={[styles.chipSub, active && styles.chipSubActive]}>
-                            -${(n * 0.01).toFixed(2)}
-                          </Text>
+                          <Text style={[styles.chipSub, active && styles.chipSubActive]}>-${(n * 0.01).toFixed(2)}</Text>
                         </TouchableOpacity>
                       );
                     })}
@@ -395,7 +345,6 @@ export default function CheckoutScreen() {
           </>
         )}
 
-        {/* Price summary */}
         <Text style={styles.sectionLabel}>SUMMARY</Text>
         <View style={styles.card}>
           <View style={styles.priceRow}>
@@ -430,13 +379,11 @@ export default function CheckoutScreen() {
           <Text style={styles.infoText}>Loyalty points are earned automatically after your order completes.</Text>
         </View>
         <View style={[styles.infoBox, { marginTop: 8 }]}>
-          <Feather name="info" size={14} color="#999" />
-          <Text style={[styles.infoText, { color: '#999' }]}>All sales are final. For exceptions contact the shop directly.</Text>
+          <Feather name="lock" size={14} color="#999" />
+          <Text style={[styles.infoText, { color: '#999' }]}>Payment secured by Square. We never store your card number.</Text>
         </View>
-
       </ScrollView>
 
-      {/* Pay button */}
       <View style={styles.footer}>
         <TouchableOpacity
           style={[styles.payButton, (loading || locationLoading) && styles.payButtonDisabled]}
@@ -461,7 +408,6 @@ export default function CheckoutScreen() {
         <Text style={styles.poweredBy}>Secured by Square · Powered by LoyalCup</Text>
       </View>
 
-      {/* Square card entry modal */}
       <Modal
         visible={showPaymentSheet}
         animationType="slide"
@@ -503,66 +449,66 @@ export default function CheckoutScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAFAFA' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  headerButton: { width: 40, height: 40, justifyContent: 'center' },
-  headerTitle: { fontSize: 20, fontWeight: '700', color: '#000' },
-  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
-  emptyTitle: { fontSize: 22, fontWeight: '700', color: '#000', marginTop: 16, marginBottom: 6 },
-  emptySubtitle: { fontSize: 15, color: '#666', marginBottom: 28 },
-  browseButton: { backgroundColor: '#000', paddingHorizontal: 32, paddingVertical: 16, borderRadius: 14 },
-  browseButtonText: { color: '#FFF', fontWeight: '700', fontSize: 15 },
-  scrollView: { flex: 1 },
-  sectionLabel: { fontSize: 11, fontWeight: '700', color: '#999', letterSpacing: 1.5, marginTop: 20, marginBottom: 8, marginHorizontal: 16 },
-  card: { backgroundColor: '#FFF', marginHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: '#F0F0F0', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
-  orderItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
-  orderItemBorder: { borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
-  itemLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 12 },
-  qtyBadge: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  qtyBadgeText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
-  itemInfo: { flex: 1 },
-  itemName: { fontSize: 15, fontWeight: '600', color: '#000', marginBottom: 2 },
-  itemCustom: { fontSize: 12, color: '#00704A' },
-  itemPrice: { fontSize: 15, fontWeight: '600', color: '#000' },
-  pointsToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
-  pointsToggleLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  pointsIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#00704A', justifyContent: 'center', alignItems: 'center' },
-  pointsToggleTitle: { fontSize: 15, fontWeight: '600', color: '#000' },
-  pointsToggleSub: { fontSize: 12, color: '#666', marginTop: 2 },
-  pointsPanel: { paddingHorizontal: 16, paddingBottom: 16, borderTopWidth: 1, borderTopColor: '#F5F5F5' },
-  pointsChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 14, marginBottom: 12 },
-  chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: '#E5E5E5', backgroundColor: '#FAFAFA', alignItems: 'center' },
-  chipActive: { backgroundColor: '#000', borderColor: '#000' },
-  chipText: { fontSize: 13, fontWeight: '600', color: '#000' },
-  chipTextActive: { color: '#FFF' },
-  chipSub: { fontSize: 11, color: '#999', marginTop: 2 },
-  chipSubActive: { color: '#AAA' },
-  clearPoints: { fontSize: 13, fontWeight: '600', color: '#FF3B30' },
-  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
-  taxLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  estBadge: { backgroundColor: '#F0F0F0', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
-  estBadgeText: { fontSize: 10, fontWeight: '600', color: '#999' },
-  priceLabel: { fontSize: 15, color: '#666' },
-  priceValue: { fontSize: 15, fontWeight: '600', color: '#000' },
-  totalRow: { borderBottomWidth: 0, paddingTop: 14, paddingBottom: 8 },
-  totalLabel: { fontSize: 17, fontWeight: '700', color: '#000' },
-  totalValue: { fontSize: 17, fontWeight: '700', color: '#000' },
-  taxNote: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingBottom: 14 },
-  taxNoteText: { fontSize: 12, color: '#999', flex: 1 },
-  infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginHorizontal: 16, marginTop: 12, backgroundColor: '#FFF', borderRadius: 12, borderWidth: 1, borderColor: '#F0F0F0', padding: 14 },
-  infoText: { flex: 1, fontSize: 13, color: '#00704A', lineHeight: 18 },
-  footer: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFF', padding: 20, paddingBottom: 30, borderTopWidth: 1, borderTopColor: '#F0F0F0' },
-  payButton: { backgroundColor: '#000', padding: 18, borderRadius: 14 },
-  payButtonDisabled: { opacity: 0.5 },
-  payButtonInner: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10 },
-  payButtonText: { color: '#FFF', fontWeight: '700', fontSize: 18 },
-  poweredBy: { textAlign: 'center', fontSize: 12, color: '#999', marginTop: 10 },
-  modalContainer: { flex: 1, backgroundColor: '#FFF' },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  modalAmount: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  modalAmountLabel: { fontSize: 15, color: '#666' },
-  modalAmountValue: { fontSize: 24, fontWeight: '700', color: '#000' },
-  webView: { flex: 1, backgroundColor: '#FFF' },
-  modalFooter: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 16, borderTopWidth: 1, borderTopColor: '#F0F0F0' },
-  modalFooterText: { flex: 1, fontSize: 12, color: '#999', lineHeight: 17 },
+  container:           { flex: 1, backgroundColor: '#FAFAFA' },
+  header:              { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  headerButton:        { width: 40, height: 40, justifyContent: 'center' },
+  headerTitle:         { fontSize: 20, fontWeight: '700', color: '#000' },
+  emptyContainer:      { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
+  emptyTitle:          { fontSize: 22, fontWeight: '700', color: '#000', marginTop: 16, marginBottom: 6 },
+  emptySubtitle:       { fontSize: 15, color: '#666', marginBottom: 28 },
+  browseButton:        { backgroundColor: '#000', paddingHorizontal: 32, paddingVertical: 16, borderRadius: 14 },
+  browseButtonText:    { color: '#FFF', fontWeight: '700', fontSize: 15 },
+  scrollView:          { flex: 1 },
+  sectionLabel:        { fontSize: 11, fontWeight: '700', color: '#999', letterSpacing: 1.5, marginTop: 20, marginBottom: 8, marginHorizontal: 16 },
+  card:                { backgroundColor: '#FFF', marginHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: '#F0F0F0', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  orderItem:           { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
+  orderItemBorder:     { borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
+  itemLeft:            { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 12 },
+  qtyBadge:            { width: 28, height: 28, borderRadius: 14, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  qtyBadgeText:        { color: '#FFF', fontSize: 13, fontWeight: '700' },
+  itemInfo:            { flex: 1 },
+  itemName:            { fontSize: 15, fontWeight: '600', color: '#000', marginBottom: 2 },
+  itemCustom:          { fontSize: 12, color: '#00704A' },
+  itemPrice:           { fontSize: 15, fontWeight: '600', color: '#000' },
+  pointsToggle:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
+  pointsToggleLeft:    { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  pointsIcon:          { width: 36, height: 36, borderRadius: 18, backgroundColor: '#00704A', justifyContent: 'center', alignItems: 'center' },
+  pointsToggleTitle:   { fontSize: 15, fontWeight: '600', color: '#000' },
+  pointsToggleSub:     { fontSize: 12, color: '#666', marginTop: 2 },
+  pointsPanel:         { paddingHorizontal: 16, paddingBottom: 16, borderTopWidth: 1, borderTopColor: '#F5F5F5' },
+  pointsChips:         { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 14, marginBottom: 12 },
+  chip:                { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: '#E5E5E5', backgroundColor: '#FAFAFA', alignItems: 'center' },
+  chipActive:          { backgroundColor: '#000', borderColor: '#000' },
+  chipText:            { fontSize: 13, fontWeight: '600', color: '#000' },
+  chipTextActive:      { color: '#FFF' },
+  chipSub:             { fontSize: 11, color: '#999', marginTop: 2 },
+  chipSubActive:       { color: '#AAA' },
+  clearPoints:         { fontSize: 13, fontWeight: '600', color: '#FF3B30' },
+  priceRow:            { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
+  taxLabelRow:         { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  estBadge:            { backgroundColor: '#F0F0F0', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  estBadgeText:        { fontSize: 10, fontWeight: '600', color: '#999' },
+  priceLabel:          { fontSize: 15, color: '#666' },
+  priceValue:          { fontSize: 15, fontWeight: '600', color: '#000' },
+  totalRow:            { borderBottomWidth: 0, paddingTop: 14, paddingBottom: 8 },
+  totalLabel:          { fontSize: 17, fontWeight: '700', color: '#000' },
+  totalValue:          { fontSize: 17, fontWeight: '700', color: '#000' },
+  taxNote:             { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingBottom: 14 },
+  taxNoteText:         { fontSize: 12, color: '#999', flex: 1 },
+  infoBox:             { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginHorizontal: 16, marginTop: 12, backgroundColor: '#FFF', borderRadius: 12, borderWidth: 1, borderColor: '#F0F0F0', padding: 14 },
+  infoText:            { flex: 1, fontSize: 13, color: '#00704A', lineHeight: 18 },
+  footer:              { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFF', padding: 20, paddingBottom: 30, borderTopWidth: 1, borderTopColor: '#F0F0F0' },
+  payButton:           { backgroundColor: '#000', padding: 18, borderRadius: 14 },
+  payButtonDisabled:   { opacity: 0.5 },
+  payButtonInner:      { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10 },
+  payButtonText:       { color: '#FFF', fontWeight: '700', fontSize: 18 },
+  poweredBy:           { textAlign: 'center', fontSize: 12, color: '#999', marginTop: 10 },
+  modalContainer:      { flex: 1, backgroundColor: '#FFF' },
+  modalHeader:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  modalAmount:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  modalAmountLabel:    { fontSize: 15, color: '#666' },
+  modalAmountValue:    { fontSize: 24, fontWeight: '700', color: '#000' },
+  webView:             { flex: 1, backgroundColor: '#FFF' },
+  modalFooter:         { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 16, borderTopWidth: 1, borderTopColor: '#F0F0F0' },
+  modalFooterText:     { flex: 1, fontSize: 12, color: '#999', lineHeight: 17 },
 });
