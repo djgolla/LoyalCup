@@ -1,14 +1,16 @@
+"""
+Orders routes — atomic Square payment + order creation + loyalty + notifications.
+Refunds and order disputes are handled on the Square terminal — not here.
+"""
 from fastapi import APIRouter, HTTPException, Query, Depends
-from fastapi.responses import Response
-from typing import List, Optional
+from typing import Optional
 from datetime import datetime
 from pydantic import BaseModel, validator
 import logging
 
-from app.services.square_order_service import process_payment, push_order_to_pos
+from app.services.square_order_service import process_payment
 from app.services.loyalty_service import award_points_for_order
-from app.services.email_service import email_service
-from app.services.push_service import send_order_push
+from app.services.notification_service import notify_customer_status_change
 from app.utils.security import require_auth, require_shop_worker
 from app.database import get_supabase
 
@@ -17,42 +19,53 @@ logger = logging.getLogger(__name__)
 
 
 class OrderItem(BaseModel):
-    menu_item_id: str
-    quantity: int
-    unit_price: float = 0.0
-    base_price: float = 0.0
-    customizations: List[dict] = []
+    menu_item_id:   str
+    quantity:       int
+    unit_price:     float = 0.0
+    base_price:     float = 0.0
+    customizations: list  = []
 
     @validator("quantity")
     def qty_positive(cls, v):
-        if v <= 0:
-            raise ValueError("Quantity must be positive")
+        if v <= 0: raise ValueError("Quantity must be positive")
         return v
 
 
 class CreateOrderRequest(BaseModel):
-    shop_id: str
-    items: List[OrderItem]
-    payment_nonce: str                   # required — Square card token from mobile SDK
+    shop_id:                  str
+    items:                    list
+    payment_nonce:            str
     loyalty_points_to_redeem: int = 0
-    customer_note: Optional[str] = None
+    customer_note:            Optional[str] = None
 
     @validator("items")
     def items_not_empty(cls, v):
-        if not v:
-            raise ValueError("Order must have at least one item")
+        if not v: raise ValueError("Order must have at least one item")
         return v
 
     @validator("loyalty_points_to_redeem")
     def loyalty_non_negative(cls, v):
-        if v < 0:
-            raise ValueError("Cannot redeem negative points")
+        if v < 0: raise ValueError("Cannot redeem negative points")
+        return v
+
+    @validator("customer_note")
+    def note_max_length(cls, v):
+        if v and len(v) > 500: raise ValueError("Note too long (max 500 chars)")
         return v
 
 
 class UpdateStatusRequest(BaseModel):
     status: str
 
+    @validator("status")
+    def valid_status(cls, v):
+        valid = {"confirmed","accepted","preparing","ready","completed","cancelled"}
+        if v not in valid:
+            raise ValueError(f"Invalid status. Must be one of: {', '.join(valid)}")
+        return v
+
+
+# ── POST /orders — full atomic checkout ──────────────────────────────────────
 
 @router.post("/orders")
 async def create_order(
@@ -60,14 +73,8 @@ async def create_order(
     user: dict = Depends(require_auth()),
 ):
     """
-    Full atomic order flow:
-      1. Validate shop + loyalty balance
-      2. Charge card via Square (creates Square order + charges nonce)
-      3. Save order + items to Supabase (status = confirmed)
-      4. Deduct loyalty points redeemed
-      5. Award loyalty points earned
-      6. Send order confirmation email
-      7. Return confirmation with order_id + total_charged
+    Atomic flow: validate → charge Square → save order → award loyalty → notify.
+    Refunds/disputes go through the Square terminal — not our system.
     """
     customer_id = user.get("sub")
     if not customer_id:
@@ -79,7 +86,7 @@ async def create_order(
     shop_resp = (
         db.get_service_client()
         .table("shops")
-        .select("id, status, name")
+        .select("id, status, name, square_merchant_id")
         .eq("id", request.shop_id)
         .limit(1)
         .execute()
@@ -89,12 +96,14 @@ async def create_order(
     shop = shop_resp.data[0]
     if shop.get("status") != "active":
         raise HTTPException(status_code=400, detail="This shop is not currently accepting orders")
+    if not shop.get("square_merchant_id"):
+        raise HTTPException(status_code=400, detail="This shop hasn't completed Square setup yet. Try again shortly.")
 
-    # ── Validate loyalty points ──────────────────────────────────────────────
+    # ── Validate loyalty balance ─────────────────────────────────────────────
     loyalty_discount_cents = 0
     actual_balance         = 0
     if request.loyalty_points_to_redeem > 0:
-        loyalty_resp = (
+        lb = (
             db.get_service_client()
             .table("loyalty_balances")
             .select("points_balance")
@@ -103,31 +112,29 @@ async def create_order(
             .limit(1)
             .execute()
         )
-        actual_balance = (loyalty_resp.data[0].get("points_balance") or 0) if loyalty_resp.data else 0
+        actual_balance = (lb.data[0].get("points_balance") or 0) if lb.data else 0
         if request.loyalty_points_to_redeem > actual_balance:
             raise HTTPException(
                 status_code=400,
-                detail=f"Insufficient points. You have {actual_balance} pts.",
+                detail=f"Not enough points. You have {actual_balance} pts, trying to redeem {request.loyalty_points_to_redeem}."
             )
         loyalty_discount_cents = request.loyalty_points_to_redeem  # 1 pt = 1¢
 
     items_data = [
         {
-            "menu_item_id":   item.menu_item_id,
-            "quantity":       item.quantity,
-            "unit_price":     item.unit_price or item.base_price,
-            "base_price":     item.base_price or item.unit_price,
-            "customizations": item.customizations,
+            "menu_item_id":   item["menu_item_id"],
+            "quantity":       item["quantity"],
+            "unit_price":     item.get("unit_price") or item.get("base_price") or 0,
+            "base_price":     item.get("base_price")  or item.get("unit_price") or 0,
+            "customizations": item.get("customizations") or [],
         }
-        for item in request.items
+        for item in (request.items if isinstance(request.items[0], dict) else [i.dict() for i in request.items])
     ]
 
-    subtotal_dollars = sum(
-        item["unit_price"] * item["quantity"] for item in items_data
-    )
+    subtotal_dollars = sum(i["unit_price"] * i["quantity"] for i in items_data)
 
     try:
-        # ── Charge card via Square ───────────────────────────────────────────
+        # ── Charge Square ────────────────────────────────────────────────────
         payment_result = await process_payment(
             db=db,
             shop_id=request.shop_id,
@@ -146,14 +153,14 @@ async def create_order(
         charged_dollars   = charged_cents / 100
         tax_dollars       = tax_cents / 100
 
-        # ── Save order to Supabase ───────────────────────────────────────────
+        # ── Save to Supabase ─────────────────────────────────────────────────
         order_insert = {
-            "customer_id": customer_id,
-            "shop_id":     request.shop_id,
-            "status":      "confirmed",
-            "subtotal":    subtotal_dollars,
-            "tax":         tax_dollars,
-            "total":       charged_dollars,
+            "customer_id":     customer_id,
+            "shop_id":         request.shop_id,
+            "status":          "confirmed",
+            "subtotal":        subtotal_dollars,
+            "tax":             tax_dollars,
+            "total":           charged_dollars,
             "discount_amount": loyalty_discount_cents / 100 if loyalty_discount_cents else 0,
             "metadata": {
                 "square_order_id":         square_order_id,
@@ -161,7 +168,7 @@ async def create_order(
                 "pos_provider":            "square",
                 "currency":                currency,
                 "loyalty_points_redeemed": request.loyalty_points_to_redeem,
-                "payment_method":          "card_in_app" if square_payment_id else "loyalty_free",
+                "payment_method":          "card" if square_payment_id else "loyalty_free",
                 "customer_note":           request.customer_note,
             },
         }
@@ -177,8 +184,8 @@ async def create_order(
         order    = order_resp.data
         order_id = order["id"]
 
-        # ── Save order items ─────────────────────────────────────────────────
-        order_items_rows = [
+        # ── Order items ──────────────────────────────────────────────────────
+        rows = [
             {
                 "order_id":       order_id,
                 "menu_item_id":   item["menu_item_id"],
@@ -189,17 +196,9 @@ async def create_order(
             }
             for item in items_data
         ]
-        db.get_service_client().table("order_items").insert(order_items_rows).execute()
+        db.get_service_client().table("order_items").insert(rows).execute()
 
-        # patch real order id into metadata
-        try:
-            db.get_service_client().table("orders").update({
-                "metadata": {**order["metadata"], "loyalcup_order_id": order_id}
-            }).eq("id", order_id).execute()
-        except Exception:
-            pass
-
-        # ── Deduct loyalty points redeemed ───────────────────────────────────
+        # ── Deduct redeemed points ───────────────────────────────────────────
         if request.loyalty_points_to_redeem > 0:
             try:
                 db.get_service_client().table("loyalty_balances").update({
@@ -212,10 +211,10 @@ async def create_order(
                     "order_id":    order_id,
                     "type":        "redeem",
                     "points":      -request.loyalty_points_to_redeem,
-                    "description": f"Redeemed {request.loyalty_points_to_redeem} pts on order",
+                    "description": f"Redeemed {request.loyalty_points_to_redeem} pts",
                 }).execute()
             except Exception as e:
-                logger.warning(f"[Orders] Point deduction failed for {order_id}: {e}")
+                logger.warning(f"[Orders] Points deduction failed order={order_id}: {e}")
 
         # ── Award points earned ──────────────────────────────────────────────
         try:
@@ -227,31 +226,32 @@ async def create_order(
                 order_total=charged_dollars,
             )
         except Exception as e:
-            logger.warning(f"[Orders] Points award failed for {order_id}: {e}")
+            logger.warning(f"[Orders] Points award failed order={order_id}: {e}")
 
-        # ── Confirmation email ───────────────────────────────────────────────
+        # ── Confirmation push ────────────────────────────────────────────────
         try:
-            full_order = await _get_order(db, order_id)
-            if full_order:
-                customer_email = full_order.get("customer", {}).get("email") or user.get("email")
-                shop_name      = full_order.get("shops", {}).get("name", "the shop")
-                if customer_email:
-                    await email_service.send_order_confirmation_rich(
-                        to_email=customer_email,
-                        order_id=order_id,
-                        shop_name=shop_name,
-                        items=full_order.get("items", []),
-                        subtotal=subtotal_dollars,
-                        tax=tax_dollars,
-                        total=charged_dollars,
-                        customer_note=request.customer_note,
-                    )
+            profile = (
+                db.get_service_client()
+                .table("profiles")
+                .select("push_token")
+                .eq("id", customer_id)
+                .single()
+                .execute()
+                .data or {}
+            )
+            await notify_customer_status_change(
+                push_token=profile.get("push_token"),
+                phone=None,  # no SMS on confirm, only on ready
+                status="confirmed",
+                shop_name=shop.get("name", ""),
+                order_id=order_id,
+            )
         except Exception as e:
-            logger.warning(f"[Orders] Email failed for {order_id}: {e}")
+            logger.warning(f"[Orders] Confirm push failed: {e}")
 
         logger.info(
-            f"[Orders] SUCCESS order={order_id} "
-            f"square_payment={square_payment_id} charged=${charged_dollars:.2f}"
+            f"[Orders] SUCCESS order={order_id} square_payment={square_payment_id} "
+            f"charged=${charged_dollars:.2f} customer={customer_id[:8]}"
         )
 
         return {
@@ -262,7 +262,7 @@ async def create_order(
             "tax":             tax_dollars,
             "currency":        currency,
             "status":          "confirmed",
-            "message":         "Order placed! It will print on the Square terminal now.",
+            "message":         "Order placed! It will print on the Square terminal.",
         }
 
     except HTTPException:
@@ -277,21 +277,7 @@ async def create_order(
         raise HTTPException(status_code=500, detail="Payment processing failed. Please try again.")
 
 
-async def _get_order(db, order_id: str):
-    """Internal helper — get full order with joins for email."""
-    try:
-        resp = (
-            db.get_service_client()
-            .table("orders")
-            .select("*, shops(name), order_items(*, menu_items(name))")
-            .eq("id", order_id)
-            .single()
-            .execute()
-        )
-        return resp.data
-    except Exception:
-        return None
-
+# ── GET /orders ───────────────────────────────────────────────────────────────
 
 @router.get("/orders")
 async def get_customer_orders(
@@ -300,32 +286,43 @@ async def get_customer_orders(
     limit: int = Query(50, le=100),
 ):
     try:
+        db          = get_supabase()
         customer_id = user.get("sub")
-        db = get_supabase()
-        from app.services.order_service import order_service
-        order_service.db = db
-        orders = await order_service.list_orders(
-            customer_id=customer_id, status=status, limit=limit
+        q = (
+            db.get_service_client()
+            .table("orders")
+            .select("*, shops(name, logo_url), order_items(quantity, unit_price, total_price, customizations, menu_items(name, image_url))")
+            .eq("customer_id", customer_id)
+            .order("created_at", desc=True)
+            .limit(limit)
         )
-        return {"orders": orders}
+        if status:
+            q = q.eq("status", status)
+        result = q.execute()
+        return {"orders": result.data or []}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/orders/history")
-async def get_customer_order_history(
+async def get_order_history(
     user: dict = Depends(require_auth()),
     limit: int = Query(20, le=100),
 ):
     try:
+        db          = get_supabase()
         customer_id = user.get("sub")
-        db = get_supabase()
-        from app.services.order_service import order_service
-        order_service.db = db
-        orders = await order_service.get_order_history(
-            customer_id=customer_id, limit=limit
+        result = (
+            db.get_service_client()
+            .table("orders")
+            .select("id, status, total, subtotal, created_at, shops(name, logo_url), order_items(quantity, menu_items(name))")
+            .eq("customer_id", customer_id)
+            .in_("status", ["completed", "cancelled"])
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
         )
-        return {"orders": orders}
+        return {"orders": result.data or []}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -333,16 +330,22 @@ async def get_customer_order_history(
 @router.get("/orders/{order_id}")
 async def get_order_details(order_id: str, user: dict = Depends(require_auth())):
     try:
-        db = get_supabase()
-        from app.services.order_service import order_service
-        order_service.db = db
-        order = await order_service.get_order(order_id)
+        db    = get_supabase()
+        order = (
+            db.get_service_client()
+            .table("orders")
+            .select("*, shops(name, logo_url, phone, address), order_items(quantity, unit_price, total_price, customizations, menu_items(name, image_url, description))")
+            .eq("id", order_id)
+            .single()
+            .execute()
+            .data
+        )
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
 
         customer_id = user.get("sub")
-        user_role   = user.get("user_metadata", {}).get("role", "customer")
-        if order.get("customer_id") != customer_id and user_role not in ["admin", "shop_worker", "shop_owner"]:
+        user_role   = (user.get("user_metadata") or {}).get("role", "customer")
+        if order.get("customer_id") != customer_id and user_role not in ("admin", "shop_worker", "shop_owner"):
             raise HTTPException(status_code=403, detail="Access denied")
 
         return {"order": order}
@@ -352,135 +355,121 @@ async def get_order_details(order_id: str, user: dict = Depends(require_auth()))
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/orders/{order_id}/status")
-async def get_order_status(order_id: str, user: dict = Depends(require_auth())):
-    try:
-        db = get_supabase()
-        from app.services.order_service import order_service
-        order_service.db = db
-        order = await order_service.get_order(order_id)
-        if not order:
-            raise HTTPException(status_code=404, detail="Order not found")
-
-        customer_id = user.get("sub")
-        user_role   = user.get("user_metadata", {}).get("role", "customer")
-        if order.get("customer_id") != customer_id and user_role not in ["admin", "shop_worker", "shop_owner"]:
-            raise HTTPException(status_code=403, detail="Access denied")
-
-        return {"status": order.get("status"), "updated_at": order.get("updated_at")}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/orders/{order_id}/cancel")
-async def cancel_order(order_id: str, user: dict = Depends(require_auth())):
-    try:
-        customer_id = user.get("sub")
-        db = get_supabase()
-        from app.services.order_service import order_service
-        order_service.db = db
-        order = await order_service.cancel_order(order_id, customer_id)
-        return {"message": "Order cancelled", "order": order}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
+# ── Shop order management ─────────────────────────────────────────────────────
 
 @router.get("/shops/{shop_id}/orders")
 async def get_shop_orders(
     shop_id: str,
     user: dict = Depends(require_shop_worker()),
     status: Optional[str] = None,
-    date: Optional[str] = None,
     limit: int = Query(50, le=100),
 ):
     try:
         db = get_supabase()
-        from app.services.order_service import order_service
-        order_service.db = db
-        orders = await order_service.get_shop_orders(shop_id=shop_id, status=status, limit=limit)
-        if date:
-            orders = [o for o in orders if o.get("created_at", "").startswith(date)]
-        return {"orders": orders}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/shops/{shop_id}/orders/queue")
-async def get_order_queue(shop_id: str, user: dict = Depends(require_shop_worker())):
-    try:
-        db = get_supabase()
-        from app.services.order_service import order_service
-        order_service.db = db
-        result = {"pending": [], "confirmed": [], "accepted": [], "preparing": [], "ready": []}
-        for status in result.keys():
-            result[status] = await order_service.list_orders(shop_id=shop_id, status=status, limit=50)
-        return result
+        q  = (
+            db.get_service_client()
+            .table("orders")
+            .select("id, status, total, subtotal, created_at, metadata, order_items(quantity, unit_price, customizations, menu_items(name))")
+            .eq("shop_id", shop_id)
+            .order("created_at", ascending=True)
+            .limit(limit)
+        )
+        if status:
+            q = q.eq("status", status)
+        result = q.execute()
+        return {"orders": result.data or []}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.put("/shops/{shop_id}/orders/{order_id}/status")
 async def update_order_status(
-    shop_id: str,
+    shop_id:  str,
     order_id: str,
-    request: UpdateStatusRequest,
+    request:  UpdateStatusRequest,
     user: dict = Depends(require_shop_worker()),
 ):
+    """
+    Barista marks order status. Fires push + SMS to customer.
+    SMS only on 'ready'. Everything else is push-only.
+    Refunds/disputes → Square terminal (not here).
+    """
     try:
-        db = get_supabase()
-        from app.services.order_service import order_service
-        order_service.db = db
-
-        order_before = await order_service.get_order(order_id)
-        if not order_before:
+        db    = get_supabase()
+        order = (
+            db.get_service_client()
+            .table("orders")
+            .select("id, shop_id, customer_id, status, metadata")
+            .eq("id", order_id)
+            .single()
+            .execute()
+            .data
+        )
+        if not order:
             raise HTTPException(status_code=404, detail="Order not found")
-        if order_before.get("shop_id") != shop_id:
-            raise HTTPException(status_code=403, detail="Order does not belong to this shop")
+        if order.get("shop_id") != shop_id:
+            raise HTTPException(status_code=403, detail="Order doesn't belong to this shop")
 
-        updated_order = await order_service.update_order_status(order_id, request.status)
-        shop_name     = order_before.get("shops", {}).get("name", "the shop")
-        customer_id   = order_before.get("customer_id")
+        valid_transitions = {
+            "confirmed":  {"accepted", "cancelled"},
+            "accepted":   {"preparing", "cancelled"},
+            "preparing":  {"ready", "cancelled"},
+            "ready":      {"completed"},
+            "completed":  set(),
+            "cancelled":  set(),
+        }
+        current = order.get("status", "confirmed")
+        if request.status not in valid_transitions.get(current, set()):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot move from '{current}' to '{request.status}'"
+            )
 
-        # Status update email
-        try:
-            if request.status in {"accepted", "ready", "cancelled"}:
-                customer_email = order_before.get("customer", {}).get("email")
-                if customer_email:
-                    await email_service.send_order_status_update_rich(
-                        to_email=customer_email,
-                        order_id=order_id,
-                        shop_name=shop_name,
-                        status=request.status,
-                        items=order_before.get("items", []),
-                        total=float(order_before.get("total", 0)),
-                    )
-        except Exception as e:
-            logger.warning(f"[Orders] Status email failed: {e}")
+        # Update status
+        db.get_service_client().table("orders").update({
+            "status": request.status,
+            "updated_at": datetime.utcnow().isoformat(),
+        }).eq("id", order_id).execute()
 
-        # Push notification to customer
-        try:
-            if customer_id:
-                profile = db.get_service_client().table("profiles") \
-                    .select("push_token").eq("id", customer_id).single().execute()
-                push_token = (profile.data or {}).get("push_token")
-                if push_token:
-                    await send_order_push(
-                        push_token=push_token,
-                        order_id=order_id,
-                        status=request.status,
-                        shop_name=shop_name,
-                    )
-        except Exception as e:
-            logger.warning(f"[Orders] Push failed: {e}")
+        # Notify customer (push + SMS if ready)
+        customer_id = order.get("customer_id")
+        if customer_id:
+            try:
+                profile = (
+                    db.get_service_client()
+                    .table("profiles")
+                    .select("push_token, phone")
+                    .eq("id", customer_id)
+                    .single()
+                    .execute()
+                    .data or {}
+                )
+                shop = (
+                    db.get_service_client()
+                    .table("shops")
+                    .select("name")
+                    .eq("id", shop_id)
+                    .single()
+                    .execute()
+                    .data or {}
+                )
+                await notify_customer_status_change(
+                    push_token=profile.get("push_token"),
+                    phone=profile.get("phone"),          # SMS on ready
+                    status=request.status,
+                    shop_name=shop.get("name", ""),
+                    order_id=order_id,
+                )
+            except Exception as e:
+                logger.warning(f"[Orders] Notification failed order={order_id}: {e}")
 
-        return {"message": "Status updated", "order": updated_order}
+        logger.info(f"[Orders] status updated order={order_id} {current}→{request.status} by worker={user.get('sub','?')[:8]}")
+        return {"success": True, "order_id": order_id, "status": request.status}
+
     except HTTPException:
         raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        logger.exception(f"[Orders] update_status error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

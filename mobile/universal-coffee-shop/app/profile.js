@@ -1,384 +1,200 @@
-// profile screen
-// universal-coffee-shop/app/profile.js
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import {
+  StyleSheet, Text, View, TouchableOpacity, ScrollView,
+  ActivityIndicator, Alert, Image,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
-import { getGlobalPoints, getAllShopPoints } from '../services/loyaltyService';
 
 export default function ProfileScreen() {
-  const router = useRouter();
+  const router        = useRouter();
   const { user, signOut } = useAuth();
-  const [profile, setProfile] = useState(null);
-  const [globalPoints, setGlobalPoints] = useState(null);
-  const [shopPoints, setShopPoints] = useState([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadProfileData();
-  }, []);
+  const [profile,     setProfile]     = useState(null);
+  const [points,      setPoints]      = useState(0);
+  const [shopBreakdown, setShopBreakdown] = useState([]);
+  const [orderCount,  setOrderCount]  = useState(0);
+  const [loading,     setLoading]     = useState(true);
 
-  const loadProfileData = async () => {
+  useEffect(() => { if (user?.id) loadData(); }, [user?.id]);
+
+  const loadData = async () => {
     try {
-      if (!user?.id) return;
-
-      // Load profile from Supabase
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('full_name, phone, avatar_url')
-        .eq('id', user.id)
-        .single();
-
-      // Load loyalty points
-      const [global, shops] = await Promise.all([
-        getGlobalPoints(user.id),
-        getAllShopPoints(user.id)
+      const [profileResp, loyaltyResp, orderResp] = await Promise.all([
+        supabase.from('profiles').select('full_name, phone, avatar_url').eq('id', user.id).single(),
+        // loyalty_balances — one row per shop the user has engaged with
+        supabase.from('loyalty_balances').select('points_balance, shops(name)').eq('customer_id', user.id),
+        supabase.from('orders').select('id', { count: 'exact', head: true }).eq('customer_id', user.id).neq('status', 'cancelled'),
       ]);
 
-      setProfile(profileData);
-      setGlobalPoints(global);
-      setShopPoints(shops);
-    } catch (error) {
-      console.error('Failed to load profile:', error);
+      setProfile(profileResp.data);
+      setOrderCount(orderResp.count || 0);
+
+      const balances = loyaltyResp.data || [];
+      const total    = balances.reduce((s, b) => s + (b.points_balance || 0), 0);
+      setPoints(total);
+      setShopBreakdown(
+        balances
+          .filter(b => (b.points_balance || 0) > 0)
+          .sort((a, b) => b.points_balance - a.points_balance)
+          .slice(0, 3)
+      );
+    } catch (e) {
+      console.error('[Profile] loadData error:', e);
     } finally {
       setLoading(false);
     }
   };
 
-  const getTotalPoints = () => {
-    const global = globalPoints?.current_balance || 0;
-    const shopTotal = shopPoints.reduce((sum, sp) => sum + (sp.current_balance || 0), 0);
-    return global + shopTotal;
+  const handleLogout = () => {
+    Alert.alert('Sign Out', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign Out', style: 'destructive', onPress: async () => {
+          try { await signOut(); router.replace('/login'); }
+          catch (e) { Alert.alert('Error', 'Failed to sign out'); }
+        }
+      },
+    ]);
   };
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOut();
-              router.replace('/login');
-            } catch (error) {
-              console.error('Logout error:', error);
-              Alert.alert('Error', 'Failed to logout');
-            }
-          },
-        },
-      ]
-    );
-  };
+  if (loading) return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.centered}><ActivityIndicator size="large" color="#00704A" /></View>
+    </SafeAreaView>
+  );
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#000" />
-          <Text style={styles.loadingText}>Loading profile...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const displayName = profile?.full_name || user?.email?.split('@')[0] || 'You';
+  const initials    = displayName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+
         {/* Header */}
         <View style={styles.header}>
-          <View style={styles.backButton} />
+          <TouchableOpacity onPress={() => router.back()}><Feather name="arrow-left" size={22} color="#000" /></TouchableOpacity>
           <Text style={styles.headerTitle}>Profile</Text>
-          <View style={styles.backButton} />
+          <View style={{ width: 22 }} />
         </View>
 
-        {/* Profile Section */}
+        {/* Avatar + name */}
         <View style={styles.profileSection}>
-          <View style={styles.avatar}>
-            <Feather name="user" size={48} color="#000" />
-          </View>
-          <Text style={styles.userName}>{profile?.full_name || user?.email || 'User'}</Text>
+          {profile?.avatar_url
+            ? <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
+            : <View style={styles.avatar}><Text style={styles.avatarInitials}>{initials}</Text></View>
+          }
+          <Text style={styles.userName}>{displayName}</Text>
           <Text style={styles.userEmail}>{user?.email}</Text>
-          {profile?.phone && (
-            <Text style={styles.userPhone}>{profile.phone}</Text>
-          )}
-        </View>
+          {profile?.phone && <Text style={styles.userPhone}>{profile.phone}</Text>}
 
-        {/* Loyalty Card */}
-        <View style={styles.loyaltyCard}>
-          <View style={styles.loyaltyHeader}>
-            <Feather name="award" size={24} color="#FFF" />
-            <Text style={styles.loyaltyTitle}>LOYALTY POINTS</Text>
+          {/* Quick stats */}
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{orderCount}</Text>
+              <Text style={styles.statLabel}>Orders</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{points.toLocaleString()}</Text>
+              <Text style={styles.statLabel}>Points</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{shopBreakdown.length}</Text>
+              <Text style={styles.statLabel}>Shops</Text>
+            </View>
           </View>
-          <Text style={styles.loyaltyPoints}>{getTotalPoints()}</Text>
-          
-          {/* Points Breakdown */}
-          {(globalPoints?.current_balance > 0 || shopPoints.length > 0) && (
-            <View style={styles.pointsBreakdown}>
-              {globalPoints?.current_balance > 0 && (
-                <Text style={styles.pointsDetail}>
-                  Global: {globalPoints.current_balance} pts
-                </Text>
-              )}
-              {shopPoints.length > 0 && (
-                <Text style={styles.pointsDetail}>
-                  Shop: {shopPoints.reduce((sum, sp) => sum + sp.current_balance, 0)} pts
-                </Text>
-              )}
+        </View>
+
+        {/* Loyalty card */}
+        <View style={styles.loyaltyCard}>
+          <View style={styles.loyaltyCardHeader}>
+            <Feather name="award" size={20} color="#fff" />
+            <Text style={styles.loyaltyCardLabel}>TOTAL LOYALTY POINTS</Text>
+          </View>
+          <Text style={styles.loyaltyCardPoints}>{points.toLocaleString()}</Text>
+
+          {shopBreakdown.length > 0 && (
+            <View style={styles.loyaltyBreakdown}>
+              {shopBreakdown.map((b, i) => (
+                <View key={i} style={styles.loyaltyBreakdownRow}>
+                  <Text style={styles.loyaltyBreakdownShop} numberOfLines={1}>{b.shops?.name || 'Shop'}</Text>
+                  <Text style={styles.loyaltyBreakdownPts}>{b.points_balance} pts</Text>
+                </View>
+              ))}
             </View>
           )}
 
-          <TouchableOpacity 
-            style={styles.rewardsButton}
-            onPress={() => router.push('/rewards')}>
-            <Text style={styles.rewardsButtonText}>VIEW REWARDS</Text>
-            <Feather name="arrow-right" size={16} color="#000" />
+          <TouchableOpacity style={styles.loyaltyViewBtn} onPress={() => router.push('/order-history')}>
+            <Text style={styles.loyaltyViewBtnText}>VIEW ORDER HISTORY</Text>
+            <Feather name="arrow-right" size={14} color="#00704A" />
           </TouchableOpacity>
         </View>
 
-        {/* Menu Section */}
+        {/* Menu */}
         <View style={styles.menuSection}>
-          <TouchableOpacity 
-            style={styles.menuItem}
-            onPress={() => router.push('/order-history')}>
-            <View style={styles.menuItemLeft}>
-              <View style={styles.menuIconContainer}>
-                <Feather name="list" size={20} color="#00704A" />
+          {[
+            { icon: 'list',       label: 'Order History',   route: '/order-history' },
+            { icon: 'heart',      label: 'Favorite Shops',  route: '/favorites' },
+            { icon: 'help-circle',label: 'Help & Support',  route: '/support' },
+          ].map(({ icon, label, route }) => (
+            <TouchableOpacity key={route} style={styles.menuRow} onPress={() => router.push(route)}>
+              <View style={styles.menuRowLeft}>
+                <View style={styles.menuIconWrap}><Feather name={icon} size={18} color="#00704A" /></View>
+                <Text style={styles.menuRowText}>{label}</Text>
               </View>
-              <Text style={styles.menuItemText}>Order History</Text>
-            </View>
-            <Feather name="chevron-right" size={20} color="#CCC" />
-          </TouchableOpacity>
+              <Feather name="chevron-right" size={18} color="#CCC" />
+            </TouchableOpacity>
+          ))}
 
-          <TouchableOpacity 
-            style={styles.menuItem}
-            onPress={() => router.push('/favorites')}>
-            <View style={styles.menuItemLeft}>
-              <View style={styles.menuIconContainer}>
-                <Feather name="heart" size={20} color="#00704A" />
-              </View>
-              <Text style={styles.menuItemText}>Favorite Shops</Text>
-            </View>
-            <Feather name="chevron-right" size={20} color="#CCC" />
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.menuItem}
-            onPress={() => router.push('/settings')}>
-            <View style={styles.menuItemLeft}>
-              <View style={styles.menuIconContainer}>
-                <Feather name="settings" size={20} color="#00704A" />
-              </View>
-              <Text style={styles.menuItemText}>Settings</Text>
-            </View>
-            <Feather name="chevron-right" size={20} color="#CCC" />
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.menuItem}
-            onPress={() => router.push('/support')}>
-            <View style={styles.menuItemLeft}>
-              <View style={styles.menuIconContainer}>
-                <Feather name="help-circle" size={20} color="#00704A" />
-              </View>
-              <Text style={styles.menuItemText}>Help & Support</Text>
-            </View>
-            <Feather name="chevron-right" size={20} color="#CCC" />
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[styles.menuItem, styles.logoutItem]}
-            onPress={handleLogout}>
-            <View style={styles.menuItemLeft}>
-              <View style={[styles.menuIconContainer, styles.logoutIconContainer]}>
-                <Feather name="log-out" size={20} color="#EF4444" />
-              </View>
-              <Text style={[styles.menuItemText, styles.logoutText]}>Logout</Text>
+          <TouchableOpacity style={[styles.menuRow, styles.logoutRow]} onPress={handleLogout}>
+            <View style={styles.menuRowLeft}>
+              <View style={[styles.menuIconWrap, { backgroundColor: '#FEE2E2' }]}><Feather name="log-out" size={18} color="#EF4444" /></View>
+              <Text style={[styles.menuRowText, { color: '#EF4444' }]}>Sign Out</Text>
             </View>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>LoyalCup v1.0.0</Text>
-          <Text style={styles.footerSubtext}>© 2026 All rights reserved</Text>
-        </View>
+        <Text style={styles.version}>LoyalCup · © 2026</Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#666',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 2,
-    borderBottomColor: '#000',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  profileSection: {
-    alignItems: 'center',
-    paddingVertical: 30,
-    paddingHorizontal: 20,
-  },
-  avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#F0F0F0',
-    borderWidth: 3,
-    borderColor: '#00704A',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  userName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 5,
-  },
-  userEmail: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 3,
-  },
-  userPhone: {
-    fontSize: 14,
-    color: '#999',
-  },
-  loyaltyCard: {
-    margin: 20,
-    padding: 24,
-    backgroundColor: '#00704A',
-    borderRadius: 20,
-  },
-  loyaltyHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    gap: 8,
-  },
-  loyaltyTitle: {
-    color: '#FFF',
-    fontSize: 14,
-    fontWeight: 'bold',
-    letterSpacing: 2,
-  },
-  loyaltyPoints: {
-    color: '#FFF',
-    fontSize: 56,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  pointsBreakdown: {
-    marginBottom: 16,
-  },
-  pointsDetail: {
-    color: '#E0E0E0',
-    fontSize: 13,
-    marginBottom: 2,
-  },
-  rewardsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    backgroundColor: '#FFF',
-    borderRadius: 25,
-    gap: 8,
-  },
-  rewardsButtonText: {
-    color: '#00704A',
-    fontSize: 14,
-    fontWeight: 'bold',
-    letterSpacing: 1,
-  },
-  menuSection: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    backgroundColor: '#F9F9F9',
-    borderRadius: 12,
-    marginBottom: 10,
-  },
-  menuItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  menuIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#E8F5E9',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  menuItemText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-  },
-  logoutItem: {
-    backgroundColor: '#FEE2E2',
-    marginTop: 10,
-  },
-  logoutIconContainer: {
-    backgroundColor: '#FEE2E2',
-  },
-  logoutText: {
-    color: '#EF4444',
-  },
-  footer: {
-    alignItems: 'center',
-    paddingVertical: 30,
-  },
-  footerText: {
-    fontSize: 14,
-    color: '#999',
-    marginBottom: 4,
-  },
-  footerSubtext: {
-    fontSize: 12,
-    color: '#CCC',
-  },
+  container:             { flex: 1, backgroundColor: '#FAFAFA' },
+  centered:              { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  header:                { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  headerTitle:           { fontSize: 20, fontWeight: '800', color: '#000' },
+  profileSection:        { alignItems: 'center', paddingVertical: 28, paddingHorizontal: 20, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  avatar:                { width: 90, height: 90, borderRadius: 45, backgroundColor: '#00704A', justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
+  avatarInitials:        { fontSize: 32, fontWeight: '800', color: '#FFF' },
+  userName:              { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 3 },
+  userEmail:             { fontSize: 13, color: '#999', marginBottom: 2 },
+  userPhone:             { fontSize: 13, color: '#999', marginBottom: 14 },
+  statsRow:              { flexDirection: 'row', alignItems: 'center', marginTop: 6, backgroundColor: '#F9F9F9', borderRadius: 16, paddingVertical: 14, paddingHorizontal: 24, gap: 0 },
+  statItem:              { flex: 1, alignItems: 'center' },
+  statValue:             { fontSize: 22, fontWeight: '800', color: '#000' },
+  statLabel:             { fontSize: 11, color: '#999', fontWeight: '600', marginTop: 2 },
+  statDivider:           { width: 1, height: 30, backgroundColor: '#E5E5E5' },
+  loyaltyCard:           { margin: 16, padding: 22, backgroundColor: '#00704A', borderRadius: 20 },
+  loyaltyCardHeader:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  loyaltyCardLabel:      { color: '#A7F3D0', fontSize: 11, fontWeight: '700', letterSpacing: 1.5 },
+  loyaltyCardPoints:     { color: '#FFF', fontSize: 52, fontWeight: '900', marginBottom: 12 },
+  loyaltyBreakdown:      { marginBottom: 14, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)', paddingTop: 12, gap: 6 },
+  loyaltyBreakdownRow:   { flexDirection: 'row', justifyContent: 'space-between' },
+  loyaltyBreakdownShop:  { color: '#A7F3D0', fontSize: 13, flex: 1 },
+  loyaltyBreakdownPts:   { color: '#FFF', fontSize: 13, fontWeight: '700' },
+  loyaltyViewBtn:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 11, backgroundColor: '#FFF', borderRadius: 22 },
+  loyaltyViewBtnText:    { color: '#00704A', fontSize: 13, fontWeight: '800', letterSpacing: 0.8 },
+  menuSection:           { margin: 16, gap: 8 },
+  menuRow:               { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFF', borderRadius: 14, paddingVertical: 15, paddingHorizontal: 16 },
+  menuRowLeft:           { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  menuIconWrap:          { width: 38, height: 38, borderRadius: 19, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
+  menuRowText:           { fontSize: 15, fontWeight: '600', color: '#000' },
+  logoutRow:             { backgroundColor: '#FEF2F2', marginTop: 8 },
+  version:               { textAlign: 'center', fontSize: 12, color: '#CCC', paddingBottom: 8 },
 });
