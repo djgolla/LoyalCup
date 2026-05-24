@@ -1,21 +1,15 @@
 from datetime import datetime
 from typing import Dict, List, Optional, Any
-import uuid
 
 
 class OrderService:
     """Service layer for order operations"""
 
-    # Tax rate is informational only — real tax comes from Square.
-    # Used for cash/manual orders only.
-    TAX_RATE = 0.0875  # 8.75% fallback
+    TAX_RATE = 0.0875  # fallback for cash/manual orders — Square calculates real tax
 
-    # Status transitions:
-    # confirmed = paid via Square mobile (order charged, now needs to be made)
-    # pending   = not yet paid (cash, future use)
     VALID_TRANSITIONS = {
-        "confirmed":  ["accepted", "cancelled"],   # ← paid mobile order
-        "pending":    ["accepted", "cancelled"],   # ← cash / legacy
+        "confirmed":  ["accepted", "cancelled"],
+        "pending":    ["accepted", "cancelled"],
         "accepted":   ["preparing", "cancelled"],
         "preparing":  ["ready", "cancelled"],
         "ready":      ["picked_up"],
@@ -26,8 +20,6 @@ class OrderService:
 
     def __init__(self, supabase_client=None):
         self.db = supabase_client
-
-    # ── Pricing ───────────────────────────────────────────────────────────────
 
     def calculate_item_price(self, base_price: float, customizations: List[Dict]) -> float:
         total = base_price
@@ -40,14 +32,14 @@ class OrderService:
         """Fallback totals when Square hasn't calculated yet (cash orders)."""
         subtotal = 0.0
         for item in items:
-            quantity = item.get("quantity", 1)
-            base_price = item.get("base_price", 0.0)
+            quantity       = item.get("quantity", 1)
+            base_price     = item.get("base_price", 0.0)
             customizations = item.get("customizations", [])
-            item_price = self.calculate_item_price(base_price, customizations)
-            subtotal += item_price * quantity
+            item_price     = self.calculate_item_price(base_price, customizations)
+            subtotal      += item_price * quantity
         subtotal = round(subtotal, 2)
-        tax = round(subtotal * self.TAX_RATE, 2)
-        total = round(subtotal + tax, 2)
+        tax      = round(subtotal * self.TAX_RATE, 2)
+        total    = round(subtotal + tax, 2)
         return {"subtotal": subtotal, "tax": tax, "total": total}
 
     def validate_status_transition(self, current_status: str, new_status: str) -> bool:
@@ -61,34 +53,29 @@ class OrderService:
         return int(total * points_per_dollar)
 
     def can_cancel_order(self, status: str) -> bool:
-        """Customers can only cancel orders that haven't been accepted yet."""
         return status in ("pending", "confirmed")
 
-    # ── DB operations ─────────────────────────────────────────────────────────
-
     async def create_order(
-        self, shop_id: str, customer_id: str, items: List[Dict[str, Any]],
+        self,
+        shop_id: str,
+        customer_id: str,
+        items: List[Dict[str, Any]],
         status: str = "pending",
         subtotal: Optional[float] = None,
         tax: Optional[float] = None,
         total: Optional[float] = None,
         metadata: Optional[Dict] = None,
     ) -> Dict[str, Any]:
-        """
-        Create a new order with items.
-        When called from the payments route, pass in Square-calculated totals + status='confirmed'.
-        When called without payment (cash), totals are calculated locally.
-        """
         if not self.db:
             raise RuntimeError("Database not initialized")
 
-        # Use provided totals (from Square) or calculate locally
         if subtotal is None or total is None:
-            calc = self.calculate_order_totals(items)
+            calc     = self.calculate_order_totals(items)
             subtotal = subtotal if subtotal is not None else calc["subtotal"]
-            tax = tax if tax is not None else calc["tax"]
-            total = total if total is not None else calc["total"]
+            tax      = tax      if tax      is not None else calc["tax"]
+            total    = total    if total    is not None else calc["total"]
 
+        # orders real columns: customer_id, shop_id, status, subtotal, tax, total, metadata
         order_data: Dict[str, Any] = {
             "shop_id":     shop_id,
             "customer_id": customer_id,
@@ -112,13 +99,12 @@ class OrderService:
         order    = response.data[0]
         order_id = order["id"]
 
-        # Insert order items
         order_items = []
         for item in items:
             unit_price = item.get("unit_price") or self.calculate_item_price(
                 item.get("base_price", 0.0), item.get("customizations", [])
             )
-            quantity   = max(1, item.get("quantity", 1))
+            quantity = max(1, item.get("quantity", 1))
             order_items.append({
                 "order_id":       order_id,
                 "menu_item_id":   item.get("menu_item_id"),
@@ -203,7 +189,7 @@ class OrderService:
         if not order_response.data:
             raise ValueError(f"Order {order_id} not found")
 
-        order = order_response.data
+        order          = order_response.data
         current_status = order.get("status")
 
         if not self.validate_status_transition(current_status, new_status):
@@ -222,19 +208,17 @@ class OrderService:
         updated_order = update_response.data[0] if update_response.data else order
 
         # Award loyalty points on completion
+        # Uses award_points_for_order function directly — loyalty_service has no class instance
         if new_status == "completed":
             try:
-                from app.services.loyalty_service import loyalty_service
-                if not loyalty_service.db:
-                    loyalty_service.db = self.db
-                shop_points, global_points = await loyalty_service.calculate_points(
-                    order["total"], order["shop_id"]
+                from app.services.loyalty_service import award_points_for_order
+                await award_points_for_order(
+                    db=self.db,
+                    order_id=order_id,
+                    customer_id=order["customer_id"],
+                    shop_id=order["shop_id"],
+                    order_total=float(order.get("total", 0)),
                 )
-                if shop_points > 0 or global_points > 0:
-                    await loyalty_service.award_points(
-                        order["customer_id"], order["shop_id"], order_id,
-                        shop_points, global_points,
-                    )
             except Exception as e:
                 print(f"[Loyalty] Failed to award points for order {order_id}: {e}")
 

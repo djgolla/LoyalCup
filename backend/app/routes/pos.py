@@ -10,6 +10,12 @@ POST /api/v1/pos/square/set-location — set active location
 GET  /api/v1/pos/offers          — list active offers for a shop
 POST /api/v1/pos/offers          — create offer
 PATCH/DELETE /api/v1/pos/offers/{id}
+
+pos_connections real columns:
+  id, shop_id, provider, status, access_token, refresh_token,
+  merchant_id, location_id, created_at, updated_at,
+  token_expires_at, last_synced_at
+  (NO last_updated column)
 """
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -26,18 +32,13 @@ router = APIRouter(prefix="/api/v1/pos", tags=["pos"])
 logger = logging.getLogger(__name__)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Helper — verify caller owns / is associated with the shop
-# ─────────────────────────────────────────────────────────────────────────────
-
 def _assert_shop_access(user: dict, shop_id: str, db: SupabaseClient) -> None:
     """Raise 403 if user has no relationship to this shop."""
     user_id   = user.get("sub")
     user_role = (user.get("user_metadata") or {}).get("role", "customer")
     if user_role == "admin":
-        return  # admins can access anything
+        return
 
-    # Check profile.shop_id OR shops.owner_id
     profile = (
         db.get_service_client()
         .table("profiles")
@@ -63,10 +64,6 @@ def _assert_shop_access(user: dict, shop_id: str, db: SupabaseClient) -> None:
     raise HTTPException(status_code=403, detail="Access denied to this shop")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# GET /status
-# ─────────────────────────────────────────────────────────────────────────────
-
 @router.get("/status")
 async def get_pos_status(
     shop_id:  str = Query(...),
@@ -77,12 +74,12 @@ async def get_pos_status(
     """
     Returns POS connection status.
     Called by mobile checkout (to get location_id) and web dashboard.
-    Auth required — customers need it to fetch location_id for their order's shop.
     """
+    # pos_connections: updated_at and last_synced_at — NOT last_updated
     conn = (
         db.get_service_client()
         .table("pos_connections")
-        .select("provider, status, location_id, merchant_id, last_updated")
+        .select("provider, status, location_id, merchant_id, last_synced_at")
         .eq("shop_id", shop_id)
         .eq("provider", provider)
         .limit(1)
@@ -105,13 +102,9 @@ async def get_pos_status(
         "connected":    c.get("status") == "connected",
         "location_id":  c.get("location_id"),
         "merchant_id":  c.get("merchant_id"),
-        "last_updated": c.get("last_updated"),
+        "last_updated": c.get("last_synced_at"),  # keep response key for frontend compat
     }
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# GET /readiness — full setup check for dashboard
-# ─────────────────────────────────────────────────────────────────────────────
 
 @router.get("/readiness")
 async def get_pos_readiness(
@@ -158,10 +151,6 @@ async def get_pos_readiness(
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# GET /locations
-# ─────────────────────────────────────────────────────────────────────────────
-
 @router.get("/locations")
 async def list_locations(
     shop_id:  str = Query(...),
@@ -200,10 +189,6 @@ async def list_locations(
         raise HTTPException(status_code=500, detail="Failed to fetch locations from Square")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# POST /connect — start OAuth, return authorization_url
-# ─────────────────────────────────────────────────────────────────────────────
-
 @router.post("/connect")
 async def connect_pos(
     provider: str = Query("square"),
@@ -212,7 +197,6 @@ async def connect_pos(
 ):
     user_id = user.get("sub")
 
-    # Resolve shop_id for this owner
     profile = (
         db.get_service_client()
         .table("profiles")
@@ -224,7 +208,6 @@ async def connect_pos(
     )
     shop_id = profile.get("shop_id")
     if not shop_id:
-        # Try shops table
         shop = (
             db.get_service_client()
             .table("shops")
@@ -244,7 +227,7 @@ async def connect_pos(
     if not adapter:
         raise HTTPException(status_code=400, detail=f"Unsupported POS provider: {provider}")
 
-    redirect_uri     = f"{settings.api_base_url}/api/v1/pos/callback/{provider}"
+    redirect_uri      = f"{settings.api_base_url}/api/v1/pos/callback/{provider}"
     authorization_url = adapter.get_authorization_url(
         shop_id=shop_id,
         redirect_uri=redirect_uri,
@@ -252,10 +235,6 @@ async def connect_pos(
     )
     return {"authorization_url": authorization_url, "shop_id": shop_id}
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# POST /sync — trigger catalog sync
-# ─────────────────────────────────────────────────────────────────────────────
 
 class SyncRequest(BaseModel):
     shop_id:  str
@@ -299,9 +278,9 @@ async def sync_catalog(
             access_token=access_token,
             location_id=conn.get("location_id"),
         )
-        # bump last_updated
+        # bump last_synced_at — the real column name on pos_connections
         db.get_service_client().table("pos_connections").update({
-            "last_updated": datetime.utcnow().isoformat()
+            "last_synced_at": datetime.utcnow().isoformat()
         }).eq("shop_id", body.shop_id).eq("provider", body.provider).execute()
 
         return result
@@ -309,10 +288,6 @@ async def sync_catalog(
         logger.error(f"[POS] sync failed shop={body.shop_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# POST /square/set-location
-# ─────────────────────────────────────────────────────────────────────────────
 
 class SetLocationRequest(BaseModel):
     shop_id:     str
@@ -326,25 +301,24 @@ async def set_square_location(
 ):
     _assert_shop_access(user, body.shop_id, db)
 
+    # pos_connections uses updated_at not last_updated
     db.get_service_client().table("pos_connections").update({
-        "location_id":  body.location_id,
-        "last_updated": datetime.utcnow().isoformat(),
+        "location_id": body.location_id,
+        "updated_at":  datetime.utcnow().isoformat(),
     }).eq("shop_id", body.shop_id).eq("provider", "square").execute()
 
     return {"success": True, "location_id": body.location_id}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# OFFERS — shop promotional offers shown on mobile home + shop screens
-# ─────────────────────────────────────────────────────────────────────────────
+# ── OFFERS ────────────────────────────────────────────────────────────────────
 
 class CreateOfferRequest(BaseModel):
     shop_id:        str
     title:          str
     description:    Optional[str] = None
-    discount_type:  Optional[str] = None  # "percent" | "flat" | None
+    discount_type:  Optional[str] = None
     discount_value: Optional[float] = None
-    expires_at:     Optional[str] = None  # ISO datetime string
+    expires_at:     Optional[str] = None
     is_active:      bool = True
 
     @validator("title")
@@ -375,7 +349,6 @@ async def get_shop_offers(
     active_only: bool = Query(False),
     db: SupabaseClient = Depends(get_supabase),
 ):
-    """Public — mobile home screen and shop detail screen call this."""
     q = (
         db.get_service_client()
         .table("shop_offers")
@@ -426,7 +399,6 @@ async def update_offer(
     user: dict = Depends(require_auth()),
     db: SupabaseClient = Depends(get_supabase),
 ):
-    # Fetch to verify ownership
     existing = (
         db.get_service_client()
         .table("shop_offers")
