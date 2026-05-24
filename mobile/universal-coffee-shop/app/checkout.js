@@ -2,7 +2,7 @@
  * Checkout screen
  * - Square Web Payments SDK via WebView (per-shop location, not global)
  * - Loyalty points redemption handled atomically by backend
- * - POST /api/v1/orders → Square creates order + charges card + awards points
+ * - POST /api/v1/payments/create → Square creates order + charges card + awards points
  */
 import React, { useState, useEffect } from 'react';
 import {
@@ -126,6 +126,7 @@ export default function CheckoutScreen() {
   const pointsDiscount  = pointsToRedeem * 0.01;
   const estimatedTotal  = Math.max(0, subtotal + estimatedTax - pointsDiscount);
 
+  // Load user's loyalty points balance
   useEffect(() => {
     (async () => {
       try {
@@ -138,17 +139,22 @@ export default function CheckoutScreen() {
     })();
   }, []);
 
+  // FIX Bug 3: watch the actual shopId, not just cart.length,
+  // so locationId refreshes if user switches shops
+  const activeShopId = cart.length > 0 ? Object.keys(itemsByShop)[0] : null;
+
   useEffect(() => {
-    if (cart.length === 0) return;
-    const shopId = Object.keys(itemsByShop)[0];
-    if (!shopId) return;
+    if (!activeShopId) {
+      setShopLocationId(null);
+      return;
+    }
     setLocationLoading(true);
     (async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
         if (!token) return;
-        const res = await apiClient.get(`/api/v1/pos/status?provider=square&shop_id=${shopId}`, token);
+        const res = await apiClient.get(`/api/v1/pos/status?provider=square&shop_id=${activeShopId}`, token);
         if (res?.location_id) setShopLocationId(res.location_id);
         else console.warn('[Checkout] Shop has no Square location set');
       } catch (e) {
@@ -157,7 +163,7 @@ export default function CheckoutScreen() {
         setLocationLoading(false);
       }
     })();
-  }, [cart.length]);
+  }, [activeShopId]); // ← fixed: watch activeShopId, not cart.length
 
   const getPointsChips = () => {
     if (maxRedeemable <= 0) return [];
@@ -207,7 +213,9 @@ export default function CheckoutScreen() {
         customizations: item.customizations || [],
       }));
 
-      const result = await apiClient.post('/api/v1/orders', {
+      // FIX Bug 1: POST to /api/v1/payments/create (not /api/v1/orders)
+      // /api/v1/orders is cash/manual only — card payments go through payments/create
+      const result = await apiClient.post('/api/v1/payments/create', {
         shop_id:                  shopId,
         items:                    orderItems,
         payment_nonce:            nonce,
@@ -218,8 +226,9 @@ export default function CheckoutScreen() {
       clearCart();
       setPointsToRedeem(0);
 
-      const orderId   = result.order_id || result.order?.id;
-      const charged   = result.total_charged ?? estimatedTotal;
+      const orderId   = result.order_id;
+      // FIX Bug 2: payments/create returns "charged", not "total_charged"
+      const charged   = result.charged ?? estimatedTotal;
       const pointsMsg = pointsToRedeem > 0
         ? `\n💰 Saved $${pointsDiscount.toFixed(2)} with points`
         : '\n⭐ Loyalty points are on their way!';
@@ -460,7 +469,7 @@ const styles = StyleSheet.create({
   browseButtonText:    { color: '#FFF', fontWeight: '700', fontSize: 15 },
   scrollView:          { flex: 1 },
   sectionLabel:        { fontSize: 11, fontWeight: '700', color: '#999', letterSpacing: 1.5, marginTop: 20, marginBottom: 8, marginHorizontal: 16 },
-  card:                { backgroundColor: '#FFF', marginHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: '#F0F0F0', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  card:                { backgroundColor: '#FFF', marginHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: '#F0F0F0', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
   orderItem:           { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
   orderItemBorder:     { borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
   itemLeft:            { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 12 },

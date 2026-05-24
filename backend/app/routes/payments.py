@@ -2,7 +2,7 @@
 POST /api/v1/payments/create
 
 Full payment flow:
-  1. Validate loyalty redemption against actual balance
+  1. Validate loyalty redemption against actual balance (customer_global_points)
   2. Create Square order (tax calculated by Square at shop's location)
   3. Charge the card (or skip charge if fully covered by loyalty)
   4. Save order + items to Supabase
@@ -25,9 +25,10 @@ logger = logging.getLogger(__name__)
 
 
 class PaymentItem(BaseModel):
-    menu_item_id: str
-    quantity: int
-    unit_price: float
+    menu_item_id:   str
+    quantity:       int
+    unit_price:     float
+    base_price:     Optional[float] = None  # alias sent by mobile — ignored, unit_price is authoritative
     customizations: List[dict] = []
 
     @validator("quantity")
@@ -44,11 +45,11 @@ class PaymentItem(BaseModel):
 
 
 class CreatePaymentRequest(BaseModel):
-    shop_id: str
-    items: List[PaymentItem]
-    payment_nonce: str
+    shop_id:                  str
+    items:                    List[PaymentItem]
+    payment_nonce:            str
     loyalty_points_to_redeem: int = 0
-    customer_note: Optional[str] = None
+    customer_note:            Optional[str] = None
 
     @validator("items")
     def items_not_empty(cls, v):
@@ -80,7 +81,7 @@ async def create_payment(
 
     db = get_supabase()
 
-    # ── Validate shop exists and is active ──────────────────────────────────
+    # ── Validate shop ────────────────────────────────────────────────────────
     shop_resp = (
         db.get_service_client()
         .table("shops")
@@ -95,33 +96,34 @@ async def create_payment(
     if shop.get("status") != "active":
         raise HTTPException(status_code=400, detail="This shop is not currently accepting orders")
 
-    # ── Validate loyalty points redemption ───────────────────────────────────
-    # loyalty_balances real columns: user_id, shop_id, points
+    # ── Validate loyalty redemption ──────────────────────────────────────────
+    # Source of truth: customer_global_points (same table mobile reads)
+    # 100 points = $1 = 100 cents discount
     loyalty_discount_cents = 0
-    actual_balance = 0
+    actual_global_balance  = 0
+
     if request.loyalty_points_to_redeem > 0:
-        loyalty_resp = (
+        pts_resp = (
             db.get_service_client()
-            .table("loyalty_balances")
-            .select("points")
-            .eq("user_id", customer_id)
-            .eq("shop_id", request.shop_id)
+            .table("customer_global_points")
+            .select("current_balance")
+            .eq("customer_id", customer_id)
             .limit(1)
             .execute()
         )
-        actual_balance = (loyalty_resp.data[0].get("points") or 0) if loyalty_resp.data else 0
-        if request.loyalty_points_to_redeem > actual_balance:
+        actual_global_balance = (
+            (pts_resp.data[0].get("current_balance") or 0)
+            if pts_resp.data else 0
+        )
+        if request.loyalty_points_to_redeem > actual_global_balance:
             raise HTTPException(
                 status_code=400,
-                detail=f"Insufficient loyalty points. You have {actual_balance} points.",
+                detail=f"Insufficient loyalty points. You have {actual_global_balance} points.",
             )
         loyalty_discount_cents = request.loyalty_points_to_redeem  # 1 point = 1 cent
 
-    items_data = [item.dict() for item in request.items]
-
-    subtotal_dollars = sum(
-        item["unit_price"] * item.get("quantity", 1) for item in items_data
-    )
+    items_data       = [item.dict(exclude={"base_price"}) for item in request.items]
+    subtotal_dollars = sum(item["unit_price"] * item.get("quantity", 1) for item in items_data)
 
     try:
         # ── Charge via Square ────────────────────────────────────────────────
@@ -140,38 +142,33 @@ async def create_payment(
         square_order_id   = payment_result["square_order_id"]
         square_payment_id = payment_result.get("square_payment_id")
         currency          = payment_result["currency"]
-
-        charged_dollars = charged_cents / 100
-        tax_dollars     = tax_cents / 100
+        charged_dollars   = charged_cents / 100
+        tax_dollars       = tax_cents / 100
 
         # ── Save order ───────────────────────────────────────────────────────
-        # orders real columns: customer_id, shop_id, status, subtotal, tax, total, metadata
-        # NO discount_amount column — store it in metadata
         order_metadata = {
-            "square_order_id":         square_order_id,
-            "square_payment_id":       square_payment_id,
-            "pos_provider":            "square",
-            "currency":                currency,
-            "loyalty_points_redeemed": request.loyalty_points_to_redeem,
-            "payment_method":          "card_in_app" if square_payment_id else "loyalty_free",
+            "square_order_id":          square_order_id,
+            "square_payment_id":        square_payment_id,
+            "pos_provider":             "square",
+            "currency":                 currency,
+            "loyalty_points_redeemed":  request.loyalty_points_to_redeem,
+            "payment_method":           "card_in_app" if square_payment_id else "loyalty_free",
         }
         if request.loyalty_points_to_redeem > 0:
             order_metadata["discount_amount"] = loyalty_discount_cents / 100
 
-        order_insert = {
-            "customer_id": customer_id,
-            "shop_id":     request.shop_id,
-            "status":      "confirmed",
-            "subtotal":    subtotal_dollars,
-            "tax":         tax_dollars,
-            "total":       charged_dollars,
-            "metadata":    order_metadata,
-        }
-
         order_resp = (
             db.get_service_client()
             .table("orders")
-            .insert(order_insert)
+            .insert({
+                "customer_id": customer_id,
+                "shop_id":     request.shop_id,
+                "status":      "confirmed",
+                "subtotal":    subtotal_dollars,
+                "tax":         tax_dollars,
+                "total":       charged_dollars,
+                "metadata":    order_metadata,
+            })
             .select()
             .single()
             .execute()
@@ -180,7 +177,7 @@ async def create_payment(
         order_id = order["id"]
 
         # ── Save order items ─────────────────────────────────────────────────
-        order_items = [
+        db.get_service_client().table("order_items").insert([
             {
                 "order_id":       order_id,
                 "menu_item_id":   item["menu_item_id"],
@@ -190,32 +187,36 @@ async def create_payment(
                 "customizations": item.get("customizations", []),
             }
             for item in items_data
-        ]
-        db.get_service_client().table("order_items").insert(order_items).execute()
+        ]).execute()
 
-        # ── Update order metadata with real order ID ─────────────────────────
-        try:
-            db.get_service_client().table("orders").update({
-                "metadata": {**order["metadata"], "loyalcup_order_id": order_id}
-            }).eq("id", order_id).execute()
-        except Exception:
-            pass  # non-fatal
-
-        # ── Deduct redeemed loyalty points ───────────────────────────────────
-        # loyalty_balances real columns: user_id, shop_id, points
-        # loyalty_transactions real columns: user_id, shop_id, order_id, points_change, type
+        # ── Deduct redeemed points from customer_global_points ───────────────
+        # Must happen before award so balance is accurate if this request is retried
         if request.loyalty_points_to_redeem > 0:
             try:
-                db.get_service_client().table("loyalty_balances").update({
-                    "points": actual_balance - request.loyalty_points_to_redeem
-                }).eq("user_id", customer_id).eq("shop_id", request.shop_id).execute()
+                new_balance = actual_global_balance - request.loyalty_points_to_redeem
+                db.get_service_client().table("customer_global_points").update({
+                    "current_balance": new_balance,
+                    "total_spent": (
+                        db.get_service_client()
+                        .table("customer_global_points")
+                        .select("total_spent")
+                        .eq("customer_id", customer_id)
+                        .single()
+                        .execute()
+                        .data or {}
+                    ).get("total_spent", 0) + request.loyalty_points_to_redeem,
+                }).eq("customer_id", customer_id).execute()
 
-                db.get_service_client().table("loyalty_transactions").insert({
-                    "user_id":       customer_id,
+                # Record redemption transaction
+                db.get_service_client().table("points_transactions").insert({
+                    "customer_id":   customer_id,
                     "shop_id":       request.shop_id,
                     "order_id":      order_id,
-                    "type":          "redeem",
-                    "points_change": -request.loyalty_points_to_redeem,
+                    "type":          "redeemed",
+                    "points_type":   "global",
+                    "amount":        -request.loyalty_points_to_redeem,
+                    "balance_after": new_balance,
+                    "description":   f"Redeemed {request.loyalty_points_to_redeem} pts for ${loyalty_discount_cents/100:.2f} off",
                 }).execute()
             except Exception as e:
                 logger.warning(f"[Payment] Point deduction failed for order {order_id}: {e}")
@@ -235,14 +236,15 @@ async def create_payment(
         logger.info(
             f"[Payment] SUCCESS order={order_id} "
             f"square_payment={square_payment_id} "
-            f"charged=${charged_dollars:.2f}"
+            f"charged=${charged_dollars:.2f} "
+            f"pts_redeemed={request.loyalty_points_to_redeem}"
         )
 
         return {
             "success":         True,
             "order_id":        order_id,
             "square_order_id": square_order_id,
-            "charged":         charged_dollars,
+            "charged":         charged_dollars,   # ← what checkout.js reads
             "tax":             tax_dollars,
             "currency":        currency,
             "status":          "confirmed",

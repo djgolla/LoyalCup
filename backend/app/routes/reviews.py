@@ -1,5 +1,6 @@
 """
 Reviews — customers review shops after completing an order.
+Real schema: reviews.user_id, reviews.body (NOT customer_id, NOT comment)
 """
 import logging
 from typing import Optional
@@ -17,23 +18,22 @@ class CreateReviewRequest(BaseModel):
     shop_id:  str
     order_id: Optional[str] = None
     rating:   int = Field(..., ge=1, le=5)
-    comment:  Optional[str] = None
+    body:     Optional[str] = None  # real column is "body"
 
 
 class UpdateReviewRequest(BaseModel):
-    rating:  Optional[int] = Field(None, ge=1, le=5)
-    comment: Optional[str] = None
+    rating: Optional[int] = Field(None, ge=1, le=5)
+    body:   Optional[str] = None
 
 
 @router.post("/reviews")
 async def create_review(body: CreateReviewRequest, user: dict = Depends(require_auth())):
-    customer_id = user.get("sub")
-    if not customer_id:
+    user_id = user.get("sub")
+    if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     db = get_supabase()
 
-    # If order_id provided, verify it belongs to this customer + is completed/picked_up
     if body.order_id:
         order_resp = (
             db.get_service_client()
@@ -46,7 +46,7 @@ async def create_review(body: CreateReviewRequest, user: dict = Depends(require_
         if not order_resp.data:
             raise HTTPException(status_code=404, detail="Order not found")
         order = order_resp.data
-        if order["customer_id"] != customer_id:
+        if order["customer_id"] != user_id:
             raise HTTPException(status_code=403, detail="Not your order")
         if order["status"] not in ("picked_up", "completed"):
             raise HTTPException(status_code=400, detail="Can only review completed orders")
@@ -58,11 +58,11 @@ async def create_review(body: CreateReviewRequest, user: dict = Depends(require_
             db.get_service_client()
             .table("reviews")
             .insert({
-                "shop_id":     body.shop_id,
-                "customer_id": customer_id,
-                "order_id":    body.order_id,
-                "rating":      body.rating,
-                "comment":     body.comment,
+                "shop_id":  body.shop_id,
+                "user_id":  user_id,       # real column: user_id
+                "order_id": body.order_id,
+                "rating":   body.rating,
+                "body":     body.body,     # real column: body
             })
             .select()
             .single()
@@ -83,30 +83,32 @@ async def get_shop_reviews(
 ):
     db = get_supabase()
     try:
+        # join on user_id to get reviewer profile
         resp = (
             db.get_service_client()
             .table("reviews")
-            .select("*, customer:profiles(full_name, avatar_url)")
+            .select("*, reviewer:profiles!reviews_user_id_fkey(full_name, avatar_url)")
             .eq("shop_id", shop_id)
             .order("created_at", desc=True)
             .range(offset, offset + limit - 1)
             .execute()
         )
 
-        stats_resp = (
+        # use shops table avg_rating + review_count (denormalized columns)
+        shop_resp = (
             db.get_service_client()
-            .table("shop_review_stats")
-            .select("*")
-            .eq("shop_id", shop_id)
-            .limit(1)
+            .table("shops")
+            .select("avg_rating, review_count")
+            .eq("id", shop_id)
+            .single()
             .execute()
         )
-        stats = stats_resp.data[0] if stats_resp.data else {"review_count": 0, "avg_rating": None}
+        shop_data = shop_resp.data or {}
 
         return {
             "reviews":      resp.data or [],
-            "review_count": stats["review_count"],
-            "avg_rating":   stats["avg_rating"],
+            "review_count": shop_data.get("review_count", 0),
+            "avg_rating":   shop_data.get("avg_rating"),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -114,14 +116,14 @@ async def get_shop_reviews(
 
 @router.get("/reviews/my")
 async def get_my_reviews(user: dict = Depends(require_auth()), limit: int = Query(20, le=100)):
-    customer_id = user.get("sub")
+    user_id = user.get("sub")
     db = get_supabase()
     try:
         resp = (
             db.get_service_client()
             .table("reviews")
             .select("*, shops(name, logo_url)")
-            .eq("customer_id", customer_id)
+            .eq("user_id", user_id)   # real column: user_id
             .order("created_at", desc=True)
             .limit(limit)
             .execute()
@@ -133,14 +135,14 @@ async def get_my_reviews(user: dict = Depends(require_auth()), limit: int = Quer
 
 @router.delete("/reviews/{review_id}")
 async def delete_review(review_id: str, user: dict = Depends(require_auth())):
-    customer_id = user.get("sub")
-    user_role   = user.get("user_metadata", {}).get("role", "customer")
+    user_id   = user.get("sub")
+    user_role = user.get("user_metadata", {}).get("role", "customer")
     db = get_supabase()
 
     review_resp = (
         db.get_service_client()
         .table("reviews")
-        .select("id, customer_id")
+        .select("id, user_id")
         .eq("id", review_id)
         .single()
         .execute()
@@ -148,7 +150,7 @@ async def delete_review(review_id: str, user: dict = Depends(require_auth())):
     if not review_resp.data:
         raise HTTPException(status_code=404, detail="Review not found")
 
-    if review_resp.data["customer_id"] != customer_id and user_role != "admin":
+    if review_resp.data["user_id"] != user_id and user_role != "admin":
         raise HTTPException(status_code=403, detail="Not authorized")
 
     db.get_service_client().table("reviews").delete().eq("id", review_id).execute()
