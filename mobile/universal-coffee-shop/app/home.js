@@ -1,6 +1,6 @@
 /**
  * Home screen — shop discovery
- * Filters: All · Nearby (device GPS) · Open Now (hours JSON) · Popular (order_count)
+ * Filters: All · Nearby (device GPS) · Open Now (hours JSON) · Popular (review_count)
  * Shows active shop offers inline on cards
  */
 import React, { useState, useEffect, useRef } from 'react';
@@ -16,8 +16,6 @@ import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { supabase } from '../lib/supabase';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
 const deg2rad = (d) => d * (Math.PI / 180);
 
 const haversineKm = (lat1, lon1, lat2, lon2) => {
@@ -31,11 +29,11 @@ const haversineKm = (lat1, lon1, lat2, lon2) => {
 
 const isOpenNow = (shop) => {
   const hours = shop.hours;
-  if (!hours) return null; // unknown
+  if (!hours) return null;
   try {
-    const now     = new Date();
-    const day     = ['sun','mon','tue','wed','thu','fri','sat'][now.getDay()];
-    const todayH  = hours[day];
+    const now    = new Date();
+    const day    = ['sun','mon','tue','wed','thu','fri','sat'][now.getDay()];
+    const todayH = hours[day];
     if (!todayH || todayH.closed) return false;
     const [oH, oM] = (todayH.open  || '00:00').split(':').map(Number);
     const [cH, cM] = (todayH.close || '23:59').split(':').map(Number);
@@ -50,16 +48,13 @@ const getGreeting = (name) => {
   return name ? `${time}, ${name.split(' ')[0]}! ☕` : `${time}! ☕`;
 };
 
-// ── Shop Card ─────────────────────────────────────────────────────────────────
-
 const ShopCard = ({ item, onPress, distanceKm }) => {
-  const open   = isOpenNow(item);
-  const rating = item.avg_rating ? parseFloat(item.avg_rating).toFixed(1) : null;
+  const open        = isOpenNow(item);
+  const rating      = item.avg_rating ? parseFloat(item.avg_rating).toFixed(1) : null;
   const activeOffer = item.shop_offers?.find(o => o.is_active);
 
   return (
     <TouchableOpacity style={styles.shopCard} onPress={onPress} activeOpacity={0.75}>
-      {/* Active offer ribbon */}
       {activeOffer && (
         <View style={styles.offerRibbon}>
           <Feather name="tag" size={10} color="#fff" />
@@ -105,10 +100,16 @@ const ShopCard = ({ item, onPress, distanceKm }) => {
               </Text>
             </View>
           )}
-          {(item.order_count || 0) > 0 && (
+          {(item.review_count || 0) > 0 && (
             <View style={styles.shopBadge}>
-              <Feather name="trending-up" size={11} color="#6b7280" />
-              <Text style={styles.shopBadgeText}>{item.order_count} orders</Text>
+              <Feather name="message-circle" size={11} color="#6b7280" />
+              <Text style={styles.shopBadgeText}>{item.review_count} reviews</Text>
+            </View>
+          )}
+          {item.featured && (
+            <View style={[styles.shopBadge, { backgroundColor: '#FEF3C7' }]}>
+              <Feather name="zap" size={11} color="#d97706" />
+              <Text style={[styles.shopBadgeText, { color: '#d97706' }]}>Featured</Text>
             </View>
           )}
         </View>
@@ -117,12 +118,10 @@ const ShopCard = ({ item, onPress, distanceKm }) => {
   );
 };
 
-// ── Main Screen ───────────────────────────────────────────────────────────────
-
 export default function HomeScreen() {
-  const router          = useRouter();
-  const { user }        = useAuth();
-  const { getItemCount} = useCart();
+  const router           = useRouter();
+  const { user }         = useAuth();
+  const { getItemCount } = useCart();
 
   const [shops,          setShops]          = useState([]);
   const [filteredShops,  setFilteredShops]  = useState([]);
@@ -136,13 +135,13 @@ export default function HomeScreen() {
   const locationGranted  = useRef(false);
 
   const filters = [
-    { key: 'all',     label: 'All',      icon: 'grid' },
-    { key: 'nearby',  label: 'Nearby',   icon: 'map-pin' },
-    { key: 'open',    label: 'Open Now', icon: 'clock' },
-    { key: 'popular', label: 'Popular',  icon: 'trending-up' },
+    { key: 'all',      label: 'All',      icon: 'grid' },
+    { key: 'nearby',   label: 'Nearby',   icon: 'map-pin' },
+    { key: 'open',     label: 'Open Now', icon: 'clock' },
+    { key: 'popular',  label: 'Popular',  icon: 'trending-up' },
+    { key: 'featured', label: 'Featured', icon: 'zap' },
   ];
 
-  // ── Load user profile for greeting ─────────────────────────────────────────
   useEffect(() => {
     if (!user?.id) return;
     supabase.from('profiles').select('full_name').eq('id', user.id).single()
@@ -150,7 +149,6 @@ export default function HomeScreen() {
       .catch(() => {});
   }, [user?.id]);
 
-  // ── Location permission ─────────────────────────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
@@ -160,24 +158,23 @@ export default function HomeScreen() {
           const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
           setUserLocation({ lat: loc.coords.latitude, lon: loc.coords.longitude });
         }
-      } catch (e) {
+      } catch {
         // location optional — silent fail
       }
     })();
   }, []);
 
-  // ── Load shops ──────────────────────────────────────────────────────────────
   const loadShops = async () => {
     try {
       const { data, error } = await supabase
         .from('shops')
         .select(`
-          id, name, description, address, logo_url, hours, lat, lon,
-          avg_rating, order_count, status,
+          id, name, description, address, city, state, logo_url, banner_url,
+          hours, lat, lng, avg_rating, review_count, featured, status,
           shop_offers ( id, title, description, is_active )
         `)
         .eq('status', 'active')
-        .order('order_count', { ascending: false });
+        .order('featured', { ascending: false });
 
       if (error) throw error;
       setShops(data || []);
@@ -190,33 +187,30 @@ export default function HomeScreen() {
 
   useEffect(() => { loadShops(); }, []);
 
-  // ── Compute distances when location or shops change ─────────────────────────
   useEffect(() => {
     if (!userLocation || !shops.length) return;
     const d = {};
     shops.forEach(shop => {
-      if (shop.lat && shop.lon) {
-        d[shop.id] = haversineKm(userLocation.lat, userLocation.lon, shop.lat, shop.lon);
+      if (shop.lat && shop.lng) {
+        d[shop.id] = haversineKm(userLocation.lat, userLocation.lon, shop.lat, shop.lng);
       }
     });
     setDistances(d);
   }, [userLocation, shops]);
 
-  // ── Filter logic ─────────────────────────────────────────────────────────────
   useEffect(() => {
     let result = [...shops];
 
-    // Search
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter(s =>
         s.name?.toLowerCase().includes(q) ||
         s.description?.toLowerCase().includes(q) ||
-        s.address?.toLowerCase().includes(q)
+        s.address?.toLowerCase().includes(q) ||
+        s.city?.toLowerCase().includes(q)
       );
     }
 
-    // Filter
     switch (selectedFilter) {
       case 'nearby':
         if (!userLocation) {
@@ -235,7 +229,11 @@ export default function HomeScreen() {
         break;
 
       case 'popular':
-        result = [...result].sort((a, b) => (b.order_count || 0) - (a.order_count || 0));
+        result = [...result].sort((a, b) => (b.review_count || 0) - (a.review_count || 0));
+        break;
+
+      case 'featured':
+        result = result.filter(s => s.featured === true);
         break;
 
       default:
@@ -266,7 +264,6 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <View>
@@ -288,7 +285,6 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Search */}
         <View style={styles.searchContainer}>
           <View style={styles.searchBar}>
             <Feather name="search" size={18} color="#999" />
@@ -308,7 +304,6 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Filter chips */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersRow}>
           {filters.map(f => (
             <TouchableOpacity
@@ -325,7 +320,6 @@ export default function HomeScreen() {
         </ScrollView>
       </View>
 
-      {/* Shop list */}
       {filteredShops.length === 0 ? (
         <View style={styles.emptyState}>
           <Feather name="coffee" size={60} color="#DDD" />
@@ -337,6 +331,8 @@ export default function HomeScreen() {
               ? 'No shops appear open right now'
               : selectedFilter === 'nearby'
               ? 'No shops found near you'
+              : selectedFilter === 'featured'
+              ? 'No featured shops right now'
               : 'Check back soon!'}
           </Text>
           {(searchQuery || selectedFilter !== 'all') && (
@@ -372,46 +368,46 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:           { flex: 1, backgroundColor: '#FAFAFA' },
-  centered:            { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText:         { marginTop: 12, fontSize: 15, color: '#999' },
-  header:              { backgroundColor: '#FFF', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  headerTop:           { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  greeting:            { fontSize: 22, fontWeight: '800', color: '#000' },
-  subGreeting:         { fontSize: 13, color: '#999', marginTop: 2 },
-  headerButtons:       { flexDirection: 'row', gap: 10 },
-  headerButton:        { width: 42, height: 42, borderRadius: 21, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center', position: 'relative' },
-  headerBadge:         { position: 'absolute', top: -3, right: -3, backgroundColor: '#FF3B30', borderRadius: 9, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 },
-  headerBadgeText:     { color: '#FFF', fontSize: 11, fontWeight: '800' },
-  searchContainer:     { marginBottom: 12 },
-  searchBar:           { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, gap: 10 },
-  searchInput:         { flex: 1, fontSize: 15, color: '#000' },
-  filtersRow:          { flexDirection: 'row', gap: 8, paddingBottom: 4 },
-  filterChip:          { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#F5F5F5', borderRadius: 20 },
-  filterChipActive:    { backgroundColor: '#00704A' },
-  filterChipText:      { fontSize: 13, fontWeight: '600', color: '#666' },
-  filterChipTextActive:{ color: '#FFF' },
-  resultsCount:        { paddingTop: 4, paddingBottom: 8, fontSize: 12, fontWeight: '600', color: '#999' },
-  shopsList:           { paddingHorizontal: 16, paddingBottom: 24 },
-  shopCard:            { backgroundColor: '#FFF', borderRadius: 16, marginBottom: 14, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3 },
-  offerRibbon:         { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#f59e0b', paddingHorizontal: 12, paddingVertical: 5 },
-  offerRibbonText:     { color: '#fff', fontSize: 11, fontWeight: '700' },
-  shopImageContainer:  { width: '100%', height: 130, position: 'relative' },
-  shopImage:           { width: '100%', height: '100%' },
-  shopImagePlaceholder:{ width: '100%', height: '100%', backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
-  openBadge:           { position: 'absolute', top: 10, right: 10, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  openBadgeText:       { color: '#FFF', fontSize: 11, fontWeight: '700' },
-  shopCardContent:     { padding: 14 },
-  shopName:            { fontSize: 18, fontWeight: '800', color: '#000', marginBottom: 3 },
-  shopDescription:     { fontSize: 13, color: '#666', lineHeight: 18, marginBottom: 8 },
-  shopDetailRow:       { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 10 },
-  shopDetailText:      { fontSize: 12, color: '#999', flex: 1 },
-  shopFooter:          { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  shopBadge:           { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#F5F5F5', borderRadius: 8 },
-  shopBadgeText:       { fontSize: 11, fontWeight: '600', color: '#555' },
-  emptyState:          { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
-  emptyTitle:          { fontSize: 20, fontWeight: '700', color: '#000', marginTop: 16, marginBottom: 6 },
-  emptySubtitle:       { fontSize: 14, color: '#999', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
-  clearButton:         { paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#00704A', borderRadius: 25 },
-  clearButtonText:     { color: '#FFF', fontSize: 14, fontWeight: '700' },
+  container:            { flex: 1, backgroundColor: '#FAFAFA' },
+  centered:             { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText:          { marginTop: 12, fontSize: 15, color: '#999' },
+  header:               { backgroundColor: '#FFF', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  headerTop:            { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  greeting:             { fontSize: 22, fontWeight: '800', color: '#000' },
+  subGreeting:          { fontSize: 13, color: '#999', marginTop: 2 },
+  headerButtons:        { flexDirection: 'row', gap: 10 },
+  headerButton:         { width: 42, height: 42, borderRadius: 21, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center', position: 'relative' },
+  headerBadge:          { position: 'absolute', top: -3, right: -3, backgroundColor: '#FF3B30', borderRadius: 9, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 },
+  headerBadgeText:      { color: '#FFF', fontSize: 11, fontWeight: '800' },
+  searchContainer:      { marginBottom: 12 },
+  searchBar:            { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, gap: 10 },
+  searchInput:          { flex: 1, fontSize: 15, color: '#000' },
+  filtersRow:           { flexDirection: 'row', gap: 8, paddingBottom: 4 },
+  filterChip:           { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#F5F5F5', borderRadius: 20 },
+  filterChipActive:     { backgroundColor: '#00704A' },
+  filterChipText:       { fontSize: 13, fontWeight: '600', color: '#666' },
+  filterChipTextActive: { color: '#FFF' },
+  resultsCount:         { paddingTop: 4, paddingBottom: 8, fontSize: 12, fontWeight: '600', color: '#999' },
+  shopsList:            { paddingHorizontal: 16, paddingBottom: 24 },
+  shopCard:             { backgroundColor: '#FFF', borderRadius: 16, marginBottom: 14, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 2 },
+  offerRibbon:          { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#f59e0b', paddingHorizontal: 12, paddingVertical: 5 },
+  offerRibbonText:      { color: '#fff', fontSize: 11, fontWeight: '700' },
+  shopImageContainer:   { width: '100%', height: 130, position: 'relative' },
+  shopImage:            { width: '100%', height: '100%' },
+  shopImagePlaceholder: { width: '100%', height: '100%', backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
+  openBadge:            { position: 'absolute', top: 10, right: 10, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  openBadgeText:        { color: '#FFF', fontSize: 11, fontWeight: '700' },
+  shopCardContent:      { padding: 14 },
+  shopName:             { fontSize: 18, fontWeight: '800', color: '#000', marginBottom: 3 },
+  shopDescription:      { fontSize: 13, color: '#666', lineHeight: 18, marginBottom: 8 },
+  shopDetailRow:        { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 10 },
+  shopDetailText:       { fontSize: 12, color: '#999', flex: 1 },
+  shopFooter:           { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  shopBadge:            { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#F5F5F5', borderRadius: 8 },
+  shopBadgeText:        { fontSize: 11, fontWeight: '600', color: '#555' },
+  emptyState:           { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
+  emptyTitle:           { fontSize: 20, fontWeight: '700', color: '#000', marginTop: 16, marginBottom: 6 },
+  emptySubtitle:        { fontSize: 14, color: '#999', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+  clearButton:          { paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#00704A', borderRadius: 25 },
+  clearButtonText:      { color: '#FFF', fontSize: 14, fontWeight: '700' },
 });
