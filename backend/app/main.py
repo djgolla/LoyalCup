@@ -32,7 +32,7 @@ from app.routes import (
     menu_sync,
 )
 from app.routes import pos_sync
-from app.routes import pos_square_webhook   # ← NEW
+from app.routes import pos_square_webhook
 
 setup_logging(level="INFO" if settings.environment == "production" else "DEBUG")
 logger = get_logger(__name__)
@@ -111,9 +111,10 @@ app.include_router(pos_connect.router)
 app.include_router(pos_square_callback.router)
 app.include_router(pos_square_set_location.router)
 app.include_router(pos_sync.router)
-app.include_router(pos_square_webhook.router)   # ← NEW
+app.include_router(pos_square_webhook.router)
 app.include_router(reviews.router)
 app.include_router(menu_sync.router)
+
 
 @app.get("/")
 async def root():
@@ -135,8 +136,9 @@ async def health_check():
         "checks": {},
     }
     try:
-        supabase = get_supabase()
-        supabase.table("profiles").select("id").limit(1).execute()
+        # FIXED: use get_service_client() — supabase is a SupabaseClient wrapper, not a raw client
+        db = get_supabase()
+        db.get_service_client().table("profiles").select("id").limit(1).execute()
         health_status["checks"]["database"] = "healthy"
     except Exception as e:
         health_status["checks"]["database"] = f"unhealthy: {str(e)}"
@@ -153,8 +155,8 @@ async def health_check():
 @app.get("/api/health/ready")
 async def readiness_check():
     try:
-        supabase = get_supabase()
-        supabase.table("profiles").select("id").limit(1).execute()
+        db = get_supabase()
+        db.get_service_client().table("profiles").select("id").limit(1).execute()
         return {"status": "ready"}
     except Exception as e:
         return JSONResponse(content={"status": "not_ready", "error": str(e)}, status_code=503)

@@ -10,37 +10,58 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
 export default function ProfileScreen() {
-  const router        = useRouter();
+  const router            = useRouter();
   const { user, signOut } = useAuth();
 
-  const [profile,     setProfile]     = useState(null);
-  const [points,      setPoints]      = useState(0);
-  const [shopBreakdown, setShopBreakdown] = useState([]);
-  const [orderCount,  setOrderCount]  = useState(0);
-  const [loading,     setLoading]     = useState(true);
+  const [profile,        setProfile]        = useState(null);
+  const [globalPoints,   setGlobalPoints]   = useState(0);
+  const [shopBreakdown,  setShopBreakdown]  = useState([]);
+  const [orderCount,     setOrderCount]     = useState(0);
+  const [loading,        setLoading]        = useState(true);
 
   useEffect(() => { if (user?.id) loadData(); }, [user?.id]);
 
   const loadData = async () => {
     try {
-      const [profileResp, loyaltyResp, orderResp] = await Promise.all([
-        supabase.from('profiles').select('full_name, phone, avatar_url').eq('id', user.id).single(),
-        // loyalty_balances — one row per shop the user has engaged with
-        supabase.from('loyalty_balances').select('points_balance, shops(name)').eq('customer_id', user.id),
-        supabase.from('orders').select('id', { count: 'exact', head: true }).eq('customer_id', user.id).neq('status', 'cancelled'),
+      const [profileResp, globalPtsResp, shopPtsResp, orderResp] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('full_name, phone, avatar_url')
+          .eq('id', user.id)
+          .single(),
+
+        // FIXED: was querying non-existent 'loyalty_balances' table
+        // Global points live in customer_global_points
+        supabase
+          .from('customer_global_points')
+          .select('current_balance')
+          .eq('customer_id', user.id)
+          .maybeSingle(),
+
+        // Shop-specific breakdown — shows which shops the customer has points at
+        supabase
+          .from('customer_shop_points')
+          .select('current_balance, shops(name)')
+          .eq('customer_id', user.id)
+          .gt('current_balance', 0)
+          .order('current_balance', { ascending: false })
+          .limit(3),
+
+        supabase
+          .from('orders')
+          .select('id', { count: 'exact', head: true })
+          .eq('customer_id', user.id)
+          .neq('status', 'cancelled'),
       ]);
 
       setProfile(profileResp.data);
       setOrderCount(orderResp.count || 0);
-
-      const balances = loyaltyResp.data || [];
-      const total    = balances.reduce((s, b) => s + (b.points_balance || 0), 0);
-      setPoints(total);
+      setGlobalPoints(globalPtsResp.data?.current_balance || 0);
       setShopBreakdown(
-        balances
-          .filter(b => (b.points_balance || 0) > 0)
-          .sort((a, b) => b.points_balance - a.points_balance)
-          .slice(0, 3)
+        (shopPtsResp.data || []).map(b => ({
+          shopName: b.shops?.name || 'Shop',
+          balance:  b.current_balance || 0,
+        }))
       );
     } catch (e) {
       console.error('[Profile] loadData error:', e);
@@ -52,10 +73,12 @@ export default function ProfileScreen() {
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: async () => {
-          try { await signOut(); router.replace('/login'); }
-          catch (e) { Alert.alert('Error', 'Failed to sign out'); }
-        }
+      {
+        text: 'Sign Out', style: 'destructive',
+        onPress: async () => {
+          try { await signOut(); router.replace('/launch'); }
+          catch { Alert.alert('Error', 'Failed to sign out'); }
+        },
       },
     ]);
   };
@@ -75,7 +98,9 @@ export default function ProfileScreen() {
 
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}><Feather name="arrow-left" size={22} color="#000" /></TouchableOpacity>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Feather name="arrow-left" size={22} color="#000" />
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>Profile</Text>
           <View style={{ width: 22 }} />
         </View>
@@ -98,7 +123,7 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{points.toLocaleString()}</Text>
+              <Text style={styles.statValue}>{globalPoints.toLocaleString()}</Text>
               <Text style={styles.statLabel}>Points</Text>
             </View>
             <View style={styles.statDivider} />
@@ -113,23 +138,25 @@ export default function ProfileScreen() {
         <View style={styles.loyaltyCard}>
           <View style={styles.loyaltyCardHeader}>
             <Feather name="award" size={20} color="#fff" />
-            <Text style={styles.loyaltyCardLabel}>TOTAL LOYALTY POINTS</Text>
+            <Text style={styles.loyaltyCardLabel}>GLOBAL LOYALTY POINTS</Text>
           </View>
-          <Text style={styles.loyaltyCardPoints}>{points.toLocaleString()}</Text>
+          <Text style={styles.loyaltyCardPoints}>{globalPoints.toLocaleString()}</Text>
+          <Text style={styles.loyaltyCardSub}>= ${(globalPoints * 0.01).toFixed(2)} in savings</Text>
 
           {shopBreakdown.length > 0 && (
             <View style={styles.loyaltyBreakdown}>
+              <Text style={styles.loyaltyBreakdownTitle}>SHOP POINTS</Text>
               {shopBreakdown.map((b, i) => (
                 <View key={i} style={styles.loyaltyBreakdownRow}>
-                  <Text style={styles.loyaltyBreakdownShop} numberOfLines={1}>{b.shops?.name || 'Shop'}</Text>
-                  <Text style={styles.loyaltyBreakdownPts}>{b.points_balance} pts</Text>
+                  <Text style={styles.loyaltyBreakdownShop} numberOfLines={1}>{b.shopName}</Text>
+                  <Text style={styles.loyaltyBreakdownPts}>{b.balance.toLocaleString()} pts</Text>
                 </View>
               ))}
             </View>
           )}
 
-          <TouchableOpacity style={styles.loyaltyViewBtn} onPress={() => router.push('/order-history')}>
-            <Text style={styles.loyaltyViewBtnText}>VIEW ORDER HISTORY</Text>
+          <TouchableOpacity style={styles.loyaltyViewBtn} onPress={() => router.push('/rewards')}>
+            <Text style={styles.loyaltyViewBtnText}>VIEW REWARDS</Text>
             <Feather name="arrow-right" size={14} color="#00704A" />
           </TouchableOpacity>
         </View>
@@ -137,9 +164,10 @@ export default function ProfileScreen() {
         {/* Menu */}
         <View style={styles.menuSection}>
           {[
-            { icon: 'list',       label: 'Order History',   route: '/order-history' },
-            { icon: 'heart',      label: 'Favorite Shops',  route: '/favorites' },
-            { icon: 'help-circle',label: 'Help & Support',  route: '/support' },
+            { icon: 'list',        label: 'Order History',  route: '/order-history' },
+            { icon: 'award',       label: 'Rewards',        route: '/rewards' },
+            { icon: 'heart',       label: 'Favorite Shops', route: '/favorites' },
+            { icon: 'help-circle', label: 'Help & Support', route: '/support' },
           ].map(({ icon, label, route }) => (
             <TouchableOpacity key={route} style={styles.menuRow} onPress={() => router.push(route)}>
               <View style={styles.menuRowLeft}>
@@ -152,7 +180,9 @@ export default function ProfileScreen() {
 
           <TouchableOpacity style={[styles.menuRow, styles.logoutRow]} onPress={handleLogout}>
             <View style={styles.menuRowLeft}>
-              <View style={[styles.menuIconWrap, { backgroundColor: '#FEE2E2' }]}><Feather name="log-out" size={18} color="#EF4444" /></View>
+              <View style={[styles.menuIconWrap, { backgroundColor: '#FEE2E2' }]}>
+                <Feather name="log-out" size={18} color="#EF4444" />
+              </View>
               <Text style={[styles.menuRowText, { color: '#EF4444' }]}>Sign Out</Text>
             </View>
           </TouchableOpacity>
@@ -175,16 +205,18 @@ const styles = StyleSheet.create({
   userName:              { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 3 },
   userEmail:             { fontSize: 13, color: '#999', marginBottom: 2 },
   userPhone:             { fontSize: 13, color: '#999', marginBottom: 14 },
-  statsRow:              { flexDirection: 'row', alignItems: 'center', marginTop: 6, backgroundColor: '#F9F9F9', borderRadius: 16, paddingVertical: 14, paddingHorizontal: 24, gap: 0 },
+  statsRow:              { flexDirection: 'row', alignItems: 'center', marginTop: 6, backgroundColor: '#F9F9F9', borderRadius: 16, paddingVertical: 14, paddingHorizontal: 24 },
   statItem:              { flex: 1, alignItems: 'center' },
   statValue:             { fontSize: 22, fontWeight: '800', color: '#000' },
   statLabel:             { fontSize: 11, color: '#999', fontWeight: '600', marginTop: 2 },
   statDivider:           { width: 1, height: 30, backgroundColor: '#E5E5E5' },
   loyaltyCard:           { margin: 16, padding: 22, backgroundColor: '#00704A', borderRadius: 20 },
-  loyaltyCardHeader:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  loyaltyCardHeader:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   loyaltyCardLabel:      { color: '#A7F3D0', fontSize: 11, fontWeight: '700', letterSpacing: 1.5 },
-  loyaltyCardPoints:     { color: '#FFF', fontSize: 52, fontWeight: '900', marginBottom: 12 },
+  loyaltyCardPoints:     { color: '#FFF', fontSize: 52, fontWeight: '900', marginBottom: 2 },
+  loyaltyCardSub:        { color: '#A7F3D0', fontSize: 13, marginBottom: 14 },
   loyaltyBreakdown:      { marginBottom: 14, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)', paddingTop: 12, gap: 6 },
+  loyaltyBreakdownTitle: { color: 'rgba(255,255,255,0.5)', fontSize: 10, fontWeight: '700', letterSpacing: 1.2, marginBottom: 4 },
   loyaltyBreakdownRow:   { flexDirection: 'row', justifyContent: 'space-between' },
   loyaltyBreakdownShop:  { color: '#A7F3D0', fontSize: 13, flex: 1 },
   loyaltyBreakdownPts:   { color: '#FFF', fontSize: 13, fontWeight: '700' },
