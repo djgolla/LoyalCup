@@ -1,12 +1,13 @@
+// web/src/layout/ShopOwnerLayout.jsx
+
 /**
  * ShopOwnerLayout
  *
  * Gate logic:
  *   1. Not subscribed       → Subscribe wall (can't pass)
  *   2. Suspended            → Suspended wall (can't pass)
- *   3. Subscribed, no shop  → Setup redirect
- *   4. Active, no Square    → Dashboard accessible BUT banner + ordering disabled
- *   5. Active, Square ok    → Full access
+ *   3. Subscribed, no Square → Force Square setup wall
+ *   4. Active, Square ok    → Full access
  */
 import { Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import ShopOwnerSidebar from '../components/navigation/ShopOwnerSidebar';
@@ -42,7 +43,7 @@ export default function ShopOwnerLayout() {
     );
   }
 
-  // ── No shop yet ──────────────────────────────────────────────────────────
+  // ── No shop yet ─────────────────────────────────────────────────────────
   if (!shop) {
     const role = user?.user_metadata?.role;
     if (role === 'applicant' || role === 'shop_owner') {
@@ -104,35 +105,33 @@ export default function ShopOwnerLayout() {
     );
   }
 
-  // web/src/layout/ShopOwnerLayout.jsx - Replace the active section at bottom
+  // ── Active — determine banner state ──────────────────────────────────────
+  const isPastDue       = shop.subscription_status === 'past_due';
+  const squareConnected = !!shop.square_merchant_id;
 
-    // ── Active — determine banner state ──────────────────────────────────────
-    const isPastDue       = shop.subscription_status === 'past_due';
-    const squareConnected = !!shop.square_merchant_id;
-
-    // ── FORCE SQUARE SETUP BEFORE DASHBOARD ACCESS ──────────────────────────
-    if (squareConnected === false && location.pathname !== '/shop-owner/connect-square' && location.pathname !== '/shop-owner/settings') {
-      return (
-        <div className="min-h-screen bg-gray-50 dark:bg-neutral-950 flex items-center justify-center px-4">
-          <div className="max-w-md w-full bg-white dark:bg-neutral-900 rounded-2xl shadow-xl border border-blue-200 dark:border-blue-800 p-10 text-center">
-            <div className="w-20 h-20 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
-              <Terminal className="w-10 h-10 text-white" />
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">Connect Square POS</h1>
-            <p className="text-gray-500 dark:text-gray-400 mb-6">
-              Your subscription is active! Now connect Square to start accepting orders.
-            </p>
-            <button
-              onClick={() => navigate('/shop-owner/connect-square')}
-              className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl font-bold hover:opacity-90 transition flex items-center justify-center gap-2"
-            >
-              <Terminal size={18} /> Connect Square
-            </button>
-            <p className="mt-3 text-xs text-gray-400">Takes 2 minutes · All your items will sync automatically</p>
+  // ── FORCE SQUARE SETUP BEFORE DASHBOARD ACCESS ──────────────────────────
+  if (squareConnected === false && location.pathname !== '/shop-owner/connect-square' && location.pathname !== '/shop-owner/settings') {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-neutral-950 flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-white dark:bg-neutral-900 rounded-2xl shadow-xl border border-blue-200 dark:border-blue-800 p-10 text-center">
+          <div className="w-20 h-20 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+            <Terminal className="w-10 h-10 text-white" />
           </div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">Connect Square POS</h1>
+          <p className="text-gray-500 dark:text-gray-400 mb-6">
+            Your subscription is active! Now connect Square to start accepting orders.
+          </p>
+          <button
+            onClick={() => navigate('/shop-owner/connect-square')}
+            className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl font-bold hover:opacity-90 transition flex items-center justify-center gap-2"
+          >
+            <Terminal size={18} /> Connect Square
+          </button>
+          <p className="mt-3 text-xs text-gray-400">Takes 2 minutes · All your items will sync automatically</p>
         </div>
-      );
-    }
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-full overflow-hidden">
@@ -148,28 +147,6 @@ export default function ShopOwnerLayout() {
         <main className="p-6">
           <Outlet />
         </main>
-      </div>
-    </div>
-  );
-}
-
-function SquareSetupBanner({ onSetup }) {
-  return (
-    <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-6 py-3">
-      <div className="max-w-5xl mx-auto flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-3 text-sm">
-          <Terminal size={16} className="shrink-0" />
-          <span className="font-semibold">Square POS required to accept orders.</span>
-          <span className="opacity-90 hidden sm:inline">
-            Connect Square to start receiving mobile orders — they'll print on your terminal automatically.
-          </span>
-        </div>
-        <button
-          onClick={onSetup}
-          className="shrink-0 bg-white text-amber-600 font-bold px-4 py-1.5 rounded-lg text-sm hover:bg-amber-50 transition"
-        >
-          Connect Square →
-        </button>
       </div>
     </div>
   );

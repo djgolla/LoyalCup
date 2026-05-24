@@ -1,3 +1,5 @@
+// web/src/pages/shop-owner/Subscribe.jsx
+
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -9,6 +11,7 @@ import { toast } from 'sonner';
 import { useShop } from '../../context/ShopContext';
 import { useAuth } from '../../context/AuthContext';
 import supabase from '../../lib/supabase';
+import PageLoader from '../../components/ui/PageLoader';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -24,6 +27,7 @@ export default function Subscribe() {
   const [subscribed,     setSubscribed]     = useState(false);
   const [session,        setSession]        = useState(null);
   const [sessionLoading, setSessionLoading] = useState(true);
+  const [isProcessing,   setIsProcessing]   = useState(false);
 
   // Load session on mount
   useEffect(() => {
@@ -40,6 +44,7 @@ export default function Subscribe() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Handle Stripe redirect back - WITH POLLING
   useEffect(() => {
     const success   = searchParams.get('success');
     const cancelled = searchParams.get('cancelled');
@@ -57,7 +62,6 @@ export default function Subscribe() {
       const timeout = setTimeout(async () => {
         clearInterval(pollInterval);
         await refreshSession?.();
-        // GO TO SQUARE SETUP, NOT DASHBOARD
         navigate('/shop-owner/connect-square', { replace: true });
       }, 10000);
 
@@ -78,6 +82,15 @@ export default function Subscribe() {
       setSubscribed(true);
     }
   }, [shop]);
+
+  // If processing Stripe callback, show loading screen
+  if (isProcessing) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <PageLoader />
+      </div>
+    );
+  }
 
   const handleSubscribe = async () => {
     try {
@@ -186,7 +199,7 @@ export default function Subscribe() {
               whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
               onClick={handleManageBilling}
               disabled={portalLoading}
-              className="px-8 py-4 bg-gray-100 dark:bg-neutral-800 text-gray-700 dark:text-gray-300 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-neutral-700 transition flex items-center gap-2 justify-center disabled:opacity-50"
+              className="px-8 py-4 bg-gray-100 dark:bg-neutral-800 text-gray-700 dark:text-gray-300 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-neutral-700 transition flex items-center gap-2 justify-center"
             >
               <ExternalLink className="w-4 h-4" />
               {portalLoading ? 'Opening...' : 'Manage Billing'}
@@ -291,7 +304,7 @@ export default function Subscribe() {
               value={promoCode}
               onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
               placeholder="Enter code..."
-              className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition font-mono tracking-wider uppercase"
+              className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition font-mono text-sm"
             />
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
               Discounts are applied at checkout and locked in permanently
@@ -332,7 +345,7 @@ export default function Subscribe() {
               <li className="flex gap-2"><span className="font-bold text-amber-600">1.</span> You're redirected to Stripe's secure checkout</li>
               <li className="flex gap-2"><span className="font-bold text-amber-600">2.</span> Enter your card + promo code (if you have one)</li>
               <li className="flex gap-2"><span className="font-bold text-amber-600">3.</span> Subscription activates instantly</li>
-              <li className="flex gap-2"><span className="font-bold text-amber-600">4.</span> Full dashboard access unlocked 🎉</li>
+              <li className="flex gap-2"><span className="font-bold text-amber-600">4.</span> Connect Square and go live! 🎉</li>
             </ol>
           </div>
         </motion.div>
