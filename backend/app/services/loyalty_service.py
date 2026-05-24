@@ -54,14 +54,6 @@ async def award_points_for_order(
         if not use_global:
             filter_kwargs["shop_id"] = shop_id
 
-        # Upsert the balance
-        existing_resp = (
-            db.get_service_client()
-            .table(table)
-            .select("*")
-            .eq("customer_id", customer_id)
-            .__class__
-        )
         # Build query dynamically
         q = db.get_service_client().table(table).select("*").eq("customer_id", customer_id)
         if not use_global:
