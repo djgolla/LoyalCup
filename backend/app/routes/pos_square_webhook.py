@@ -41,9 +41,9 @@ def _verify_square_signature(body: bytes, signature: str, url: str) -> bool:
 
 @router.post("/api/v1/pos/square/webhook")
 async def square_webhook(request: Request):
-    body = await request.body()
+    body      = await request.body()
     signature = request.headers.get("x-square-hmacsha256-signature", "")
-    url = str(request.url)
+    url       = str(request.url)
 
     if not _verify_square_signature(body, signature, url):
         logger.warning("[SquareWebhook] Signature mismatch — rejecting")
@@ -63,14 +63,14 @@ async def square_webhook(request: Request):
     data = payload.get("data", {}).get("object", {})
 
     if event_type == "order.fulfillment.updated":
-        fulfillment = data.get("fulfillment", {})
-        new_state = fulfillment.get("state")
+        fulfillment     = data.get("fulfillment", {})
+        new_state       = fulfillment.get("state")
         square_order_id = fulfillment.get("order_id")
         await _sync_by_square_order_id(square_order_id, new_state)
         return {"received": True}
 
-    order_obj = data.get("order_updated") or data.get("order") or {}
-    state = order_obj.get("state")
+    order_obj    = data.get("order_updated") or data.get("order") or {}
+    state        = order_obj.get("state")
     reference_id = order_obj.get("reference_id")
 
     if not reference_id or not state:
@@ -93,9 +93,9 @@ async def _sync_by_square_order_id(square_order_id: str, state: str):
     if not loyalcup_status:
         return
     try:
-        db = get_supabase()
+        db   = get_supabase()
         resp = (
-            db.service_client
+            db.get_service_client()  # FIXED: was db.service_client
             .table("orders")
             .select("id, status")
             .eq("metadata->>square_order_id", square_order_id)
@@ -111,10 +111,11 @@ async def _sync_by_square_order_id(square_order_id: str, state: str):
 async def _update_order_status(order_id: str, new_status: str, source: str = "webhook"):
     STATUS_ORDER = ["pending", "accepted", "preparing", "ready", "picked_up", "completed", "cancelled"]
     try:
-        db = get_supabase()
+        db   = get_supabase()
+        svc  = db.get_service_client()  # FIXED: was db.service_client
+
         resp = (
-            db.service_client
-            .table("orders")
+            svc.table("orders")
             .select("id, status")
             .eq("id", order_id)
             .limit(1)
@@ -130,15 +131,15 @@ async def _update_order_status(order_id: str, new_status: str, source: str = "we
             logger.debug(f"[SquareWebhook] Order {order_id} already terminal ({current}) — skipping")
             return
 
-        current_idx = STATUS_ORDER.index(current) if current in STATUS_ORDER else -1
-        new_idx = STATUS_ORDER.index(new_status) if new_status in STATUS_ORDER else -1
+        current_idx = STATUS_ORDER.index(current)  if current  in STATUS_ORDER else -1
+        new_idx     = STATUS_ORDER.index(new_status) if new_status in STATUS_ORDER else -1
 
         if new_idx <= current_idx:
             logger.debug(f"[SquareWebhook] Skipping backward transition {current} → {new_status}")
             return
 
-        db.service_client.table("orders").update({
-            "status": new_status,
+        svc.table("orders").update({
+            "status":     new_status,
             "updated_at": datetime.utcnow().isoformat(),
         }).eq("id", order_id).execute()
 

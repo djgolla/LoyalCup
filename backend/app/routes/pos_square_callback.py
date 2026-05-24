@@ -29,7 +29,6 @@ async def square_callback(request: Request, db=Depends(get_supabase)):
 
     frontend_base = settings.frontend_url
 
-    # Square sends ?error=access_denied if user cancels
     if error:
         logger.warning(f"[Square Callback] OAuth error from Square: {error}")
         return RedirectResponse(
@@ -41,7 +40,6 @@ async def square_callback(request: Request, db=Depends(get_supabase)):
             url=f"{frontend_base}/shop-owner/connect-square?status=error&reason=missing_params"
         )
 
-    # Decode state
     try:
         state_json = json.loads(base64.urlsafe_b64decode(state.encode()).decode())
     except Exception as e:
@@ -59,12 +57,10 @@ async def square_callback(request: Request, db=Depends(get_supabase)):
             url=f"{frontend_base}/shop-owner/connect-square?status=error&reason=invalid_shop"
         )
 
-    # Exchange code for tokens
-    # CRITICAL: redirect_uri must EXACTLY match what was sent during /connect — use settings value
     try:
         tokens = await _square.exchange_code_for_tokens(
             code=code,
-            redirect_uri=settings.square_callback_url,  # ← must match /connect exactly
+            redirect_uri=settings.square_callback_url,
         )
     except Exception as e:
         logger.error(f"[Square Callback] Token exchange failed: {e}")
@@ -75,7 +71,7 @@ async def square_callback(request: Request, db=Depends(get_supabase)):
     access_token  = tokens.get("access_token")
     refresh_token = tokens.get("refresh_token")
     token_expiry  = tokens.get("expires_at")
-    merchant_id   = tokens.get("merchant_id")  # Square returns this in the token response
+    merchant_id   = tokens.get("merchant_id")
 
     if not access_token:
         logger.error("[Square Callback] No access_token in Square response")
@@ -83,7 +79,6 @@ async def square_callback(request: Request, db=Depends(get_supabase)):
             url=f"{frontend_base}/shop-owner/connect-square?status=error&reason=no_access_token"
         )
 
-    # Fetch merchant profile (if merchant_id not in token response)
     if not merchant_id:
         try:
             import httpx
@@ -98,20 +93,19 @@ async def square_callback(request: Request, db=Depends(get_supabase)):
         except Exception as e:
             logger.warning(f"[Square Callback] Could not fetch merchant profile: {e}")
 
-    # List locations
     try:
         locations = await _square.list_locations(access_token)
     except Exception as e:
         logger.warning(f"[Square Callback] Could not list locations: {e}")
         locations = []
 
-    # Auto-select location if only one
     auto_location_id = locations[0].id if len(locations) == 1 else None
 
-    # Upsert pos_connection
-    client = db.service_client
+    # ── FIXED: was db.service_client (AttributeError) ──────────────────────
+    svc = db.get_service_client()
+
     existing_conn = (
-        client.table("pos_connections")
+        svc.table("pos_connections")
         .select("id")
         .eq("shop_id", shop_id)
         .eq("provider", "square")
@@ -127,29 +121,22 @@ async def square_callback(request: Request, db=Depends(get_supabase)):
         "access_token":     access_token,
         "refresh_token":    refresh_token,
         "token_expires_at": token_expiry,
-        "location_id":      auto_location_id,  # set if only 1 location, else user picks
+        "location_id":      auto_location_id,
     }
 
     if existing_conn.data:
-        client.table("pos_connections").update(conn_payload).eq(
+        svc.table("pos_connections").update(conn_payload).eq(
             "id", existing_conn.data[0]["id"]
         ).execute()
     else:
-        client.table("pos_connections").insert(conn_payload).execute()
+        svc.table("pos_connections").insert(conn_payload).execute()
 
-    # Update shop with merchant_id
-    shop_update: dict = {"square_merchant_id": merchant_id}
-    existing_shop = (
-        client.table("shops").select("logo_url").eq("id", shop_id).limit(1).execute()
-    )
-    client.table("shops").update(shop_update).eq("id", shop_id).execute()
+    svc.table("shops").update({"square_merchant_id": merchant_id}).eq("id", shop_id).execute()
 
-    # Sync catalog using adapter (paginated, de-duped)
     sync_summary: dict = {}
     items_count = 0
     try:
         snapshot = await _square.fetch_catalog(access_token)
-        # Build flat list of objects for sync_square_catalog
         catalog_objects = []
         for cat in snapshot.categories:
             catalog_objects.append(cat.raw)
@@ -175,7 +162,6 @@ async def square_callback(request: Request, db=Depends(get_supabase)):
 
     synced = "true" if "error" not in sync_summary else "partial"
 
-    # If multiple locations, frontend needs to show picker
     location_param = ""
     if len(locations) > 1:
         location_param = "&needs_location=true"
