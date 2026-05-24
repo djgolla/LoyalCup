@@ -1,14 +1,5 @@
-// web/src/layout/ShopOwnerLayout.jsx
+// web/src/layout/ShopOwnerLayout.jsx - PASTE THIS ENTIRE FILE
 
-/**
- * ShopOwnerLayout
- *
- * Gate logic:
- *   1. Not subscribed       → Subscribe wall (can't pass)
- *   2. Suspended            → Suspended wall (can't pass)
- *   3. Subscribed, no Square → Force Square setup wall
- *   4. Active, Square ok    → Full access
- */
 import { Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import ShopOwnerSidebar from '../components/navigation/ShopOwnerSidebar';
 import { useShop } from '../context/ShopContext';
@@ -16,7 +7,6 @@ import { useAuth } from '../context/AuthContext';
 import PageLoader from '../components/ui/PageLoader';
 import { CheckCircle, CreditCard, Zap, AlertTriangle, Terminal } from 'lucide-react';
 
-// Routes always accessible regardless of Square status
 const SETUP_ROUTES = [
   '/shop-owner/subscribe',
   '/shop-owner/settings',
@@ -26,13 +16,12 @@ const SETUP_ROUTES = [
 
 export default function ShopOwnerLayout() {
   const { shop, loading } = useShop();
-  const { user }          = useAuth();
-  const location          = useLocation();
-  const navigate          = useNavigate();
+  const { user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   if (loading) return <PageLoader />;
 
-  // ── Subscribe always accessible ─────────────────────────────────────────
   if (location.pathname === '/shop-owner/subscribe') {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-neutral-950">
@@ -43,7 +32,6 @@ export default function ShopOwnerLayout() {
     );
   }
 
-  // ── No shop yet ─────────────────────────────────────────────────────────
   if (!shop) {
     const role = user?.user_metadata?.role;
     if (role === 'applicant' || role === 'shop_owner') {
@@ -52,7 +40,6 @@ export default function ShopOwnerLayout() {
     return <Navigate to="/shop-application" replace />;
   }
 
-  // ── Pending payment ──────────────────────────────────────────────────────
   if (shop.status === 'pending_payment' || shop.status === 'pending') {
     const isAllowed = SETUP_ROUTES.some(r => location.pathname.startsWith(r));
     if (!isAllowed) {
@@ -84,7 +71,6 @@ export default function ShopOwnerLayout() {
     }
   }
 
-  // ── Suspended ────────────────────────────────────────────────────────────
   if (shop.status === 'suspended') {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-neutral-950 flex items-center justify-center px-4">
@@ -105,11 +91,9 @@ export default function ShopOwnerLayout() {
     );
   }
 
-  // ── Active — determine banner state ──────────────────────────────────────
-  const isPastDue       = shop.subscription_status === 'past_due';
+  const isPastDue = shop.subscription_status === 'past_due';
   const squareConnected = !!shop.square_merchant_id;
 
-  // ── FORCE SQUARE SETUP BEFORE DASHBOARD ACCESS ──────────────────────────
   if (squareConnected === false && location.pathname !== '/shop-owner/connect-square' && location.pathname !== '/shop-owner/settings') {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-neutral-950 flex items-center justify-center px-4">
@@ -137,13 +121,9 @@ export default function ShopOwnerLayout() {
     <div className="flex h-screen w-full overflow-hidden">
       <ShopOwnerSidebar />
       <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-[#181818]">
-
-        {/* Past due — top priority banner */}
         {isPastDue && (
           <PastDueBanner onManage={() => navigate('/shop-owner/subscribe')} />
         )}
-
-        {/* Square connected — show dashboard */}
         <main className="p-6">
           <Outlet />
         </main>

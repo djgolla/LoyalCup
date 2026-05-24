@@ -1,12 +1,9 @@
-// web/src/pages/shop-owner/Subscribe.jsx
+// web/src/pages/shop-owner/Subscribe.jsx - PASTE THIS ENTIRE FILE
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import {
-  CreditCard, Check, Tag, ArrowRight, Sparkles,
-  Coffee, Shield, Zap, AlertCircle, ExternalLink, LogIn
-} from 'lucide-react';
+import { CreditCard, Check, Tag, ArrowRight, Coffee, Shield, Zap, AlertCircle, ExternalLink, LogIn } from 'lucide-react';
 import { toast } from 'sonner';
 import { useShop } from '../../context/ShopContext';
 import { useAuth } from '../../context/AuthContext';
@@ -20,16 +17,17 @@ export default function Subscribe() {
   const [searchParams] = useSearchParams();
   const { shop, loadShop } = useShop();
   const { refreshSession } = useAuth();
-
-  const [promoCode,      setPromoCode]      = useState('');
-  const [loading,        setLoading]        = useState(false);
-  const [portalLoading,  setPortalLoading]  = useState(false);
-  const [subscribed,     setSubscribed]     = useState(false);
-  const [session,        setSession]        = useState(null);
+  const [promoCode, setPromoCode] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [subscribed, setSubscribed] = useState(false);
+  const [session, setSession] = useState(null);
   const [sessionLoading, setSessionLoading] = useState(true);
-  const [isProcessing,   setIsProcessing]   = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const pollIntervalRef = useRef(null);
+  const pollTimeoutRef = useRef(null);
+  const toastShownRef = useRef(false);
 
-  // Load session on mount
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
@@ -44,33 +42,31 @@ export default function Subscribe() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Handle Stripe redirect back - WITH POLLING
   useEffect(() => {
-    const success   = searchParams.get('success');
+    const success = searchParams.get('success');
     const cancelled = searchParams.get('cancelled');
 
-    if (success === 'true') {
+    if (success === 'true' && !toastShownRef.current) {
+      toastShownRef.current = true;
       setIsProcessing(true);
-      toast.success('🎉 Payment received! Setting up Square...');
-      
-      // Poll for shop status update (webhook takes a moment)
-      const pollInterval = setInterval(async () => {
-        await loadShop();
-      }, 1000);
+      toast.success('🎉 Payment received! Setting up your account...');
 
-      // Give it 10 seconds max, then navigate to Square setup
-      const timeout = setTimeout(async () => {
-        clearInterval(pollInterval);
+      pollIntervalRef.current = setInterval(async () => {
+        await loadShop();
+      }, 800);
+
+      pollTimeoutRef.current = setTimeout(async () => {
+        clearInterval(pollIntervalRef.current);
         await refreshSession?.();
         navigate('/shop-owner/connect-square', { replace: true });
-      }, 10000);
+      }, 15000);
 
       return () => {
-        clearInterval(pollInterval);
-        clearTimeout(timeout);
+        clearInterval(pollIntervalRef.current);
+        clearTimeout(pollTimeoutRef.current);
       };
     }
-    
+
     if (cancelled === 'true') {
       toast.info('Checkout cancelled. You can subscribe anytime.');
       navigate('/shop-owner/subscribe', { replace: true });
@@ -78,16 +74,27 @@ export default function Subscribe() {
   }, [searchParams, navigate, refreshSession, loadShop]);
 
   useEffect(() => {
+    if (isProcessing && shop?.status === 'active') {
+      clearInterval(pollIntervalRef.current);
+      clearTimeout(pollTimeoutRef.current);
+      setIsProcessing(false);
+      navigate('/shop-owner/connect-square', { replace: true });
+    }
+  }, [isProcessing, shop?.status, navigate]);
+
+  useEffect(() => {
     if (shop?.subscription_status === 'active' || shop?.status === 'active') {
       setSubscribed(true);
     }
   }, [shop]);
 
-  // If processing Stripe callback, show loading screen
   if (isProcessing) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <PageLoader />
+      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-neutral-950">
+        <div className="text-center">
+          <PageLoader />
+          <p className="mt-6 text-gray-500 dark:text-gray-400">Activating your subscription...</p>
+        </div>
       </div>
     );
   }
@@ -95,7 +102,6 @@ export default function Subscribe() {
   const handleSubscribe = async () => {
     try {
       setLoading(true);
-
       const { data: { session: freshSession } } = await supabase.auth.getSession();
       if (!freshSession?.access_token) {
         toast.error('Your session has expired. Please log in again.');
@@ -113,7 +119,6 @@ export default function Subscribe() {
       });
 
       const data = await res.json();
-
       if (!res.ok) {
         throw new Error(data.detail || `Error ${res.status}: Failed to start checkout`);
       }
@@ -130,7 +135,6 @@ export default function Subscribe() {
     try {
       setPortalLoading(true);
       const { data: { session: freshSession } } = await supabase.auth.getSession();
-
       if (!freshSession?.access_token) {
         toast.error('Session expired. Please log in again.');
         navigate('/login');
@@ -147,7 +151,6 @@ export default function Subscribe() {
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail);
-
       window.open(data.portal_url, '_blank');
     } catch (err) {
       toast.error(err.message || 'Failed to open billing portal');
@@ -167,7 +170,6 @@ export default function Subscribe() {
     'Your rate locked in forever',
   ];
 
-  // ── Already subscribed ────────────────────────────────────────────────────
   if (subscribed) {
     return (
       <div className="max-w-2xl mx-auto py-12">
@@ -223,7 +225,6 @@ export default function Subscribe() {
         </p>
       </motion.div>
 
-      {/* Session warning */}
       {noSession && (
         <motion.div
           initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
@@ -246,7 +247,6 @@ export default function Subscribe() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Left: Features */}
         <motion.div
           initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}
           className="bg-white dark:bg-neutral-900 rounded-2xl p-8 border-2 border-gray-100 dark:border-neutral-800 shadow-lg"
@@ -282,7 +282,6 @@ export default function Subscribe() {
           </div>
         </motion.div>
 
-        {/* Right: Checkout */}
         <motion.div
           initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}
           className="bg-white dark:bg-neutral-900 rounded-2xl p-8 border-2 border-amber-200 dark:border-amber-800 shadow-xl"
