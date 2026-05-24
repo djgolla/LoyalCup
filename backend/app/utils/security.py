@@ -1,7 +1,6 @@
 """
 Security utilities for JWT validation and role-based access control.
 """
-import base64
 from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -11,30 +10,16 @@ from app.config import settings
 security = HTTPBearer()
 
 
-def _get_decoded_secret() -> bytes:
-    """
-    Supabase signs JWTs by base64url-decoding the secret first.
-    python-jose must receive the decoded bytes to verify correctly.
-    """
-    secret = settings.jwt_secret
-    # Add padding if needed for base64 decoding
-    padded = secret + "=" * (4 - len(secret) % 4) if len(secret) % 4 else secret
-    try:
-        return base64.b64decode(padded)
-    except Exception:
-        # If it's not valid base64, use as-is (fallback for plain text secrets)
-        return secret.encode("utf-8")
-
-
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
     """
     Verify JWT token from Supabase Auth.
+    Supabase JWT secrets are plain strings — do NOT base64-decode them.
     """
     try:
         token = credentials.credentials
         payload = jwt.decode(
             token,
-            _get_decoded_secret(),
+            settings.jwt_secret,
             algorithms=[settings.jwt_algorithm],
             options={"verify_aud": False},
         )
