@@ -1,4 +1,4 @@
-// order tracking screen — real-time, review prompt, Square POS aware
+// order tracking screen — real-time status, review prompt, Square POS aware
 import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity,
@@ -30,8 +30,7 @@ const STATUS_MSGS = {
   cancelled: 'This order was cancelled.',
 };
 
-const shortId = (id) => id?.slice(0, 8)?.toUpperCase() || '—';
-
+const shortId   = (id) => id?.slice(0, 8)?.toUpperCase() || '—';
 const formatDate = (d) => {
   if (!d) return '';
   return new Date(d).toLocaleDateString('en-US', {
@@ -55,27 +54,37 @@ const normalizeItems = (order) => {
 };
 
 // ── Review Modal ──────────────────────────────────────────────────────────────
+// FIX Bug 1: routes through POST /api/v1/reviews so it hits the real schema
+// (user_id + body columns, validated server-side)
 function ReviewModal({ orderId, shopId, onClose, onSubmitted }) {
   const [rating,     setRating]     = useState(5);
-  const [comment,    setComment]    = useState('');
+  const [body,       setBody]       = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const submit = async () => {
     try {
       setSubmitting(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { Alert.alert('Sign in required'); return; }
-      const { error } = await supabase.from('reviews').upsert({
-        shop_id:     shopId,
-        customer_id: user.id,
-        order_id:    orderId,
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) { Alert.alert('Sign in required'); return; }
+
+      // Route through the API — uses real schema: user_id + body
+      await apiClient.post('/api/v1/reviews', {
+        shop_id:  shopId,
+        order_id: orderId,
         rating,
-        comment: comment.trim() || null,
-      }, { onConflict: 'order_id,customer_id' });
-      if (error) throw error;
+        body: body.trim() || null,
+      }, session.access_token);
+
       onSubmitted();
     } catch (e) {
-      Alert.alert('Error', e.message || 'Could not submit review');
+      const msg = e.message || 'Could not submit review';
+      // 409 = already reviewed this order
+      if (msg.includes('409') || msg.toLowerCase().includes('already')) {
+        Alert.alert('Already Reviewed', 'You already left a review for this order.');
+        onClose();
+      } else {
+        Alert.alert('Error', msg);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -104,8 +113,8 @@ function ReviewModal({ orderId, shopId, onClose, onSubmitted }) {
           placeholderTextColor="#9ca3af"
           multiline
           maxLength={300}
-          value={comment}
-          onChangeText={setComment}
+          value={body}
+          onChangeText={setBody}
         />
         <View style={styles.modalButtons}>
           <TouchableOpacity style={styles.modalSkip} onPress={onClose}>
@@ -149,9 +158,8 @@ export default function OrderTrackingScreen() {
   const loadOrder = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) return;
-      const data = await apiClient.get(`/api/v1/orders/${id}`, token);
+      if (!session?.access_token) return;
+      const data = await apiClient.get(`/api/v1/orders/${id}`, session.access_token);
       setOrder(data.order || data);
     } catch (err) {
       console.error('[OrderTracking] loadOrder error:', err);
@@ -163,10 +171,12 @@ export default function OrderTrackingScreen() {
   useEffect(() => {
     if (!id) return;
     loadOrder();
+    // Poll every 15s as fallback — realtime handles most updates
     const interval = setInterval(loadOrder, 15000);
     return () => clearInterval(interval);
   }, [id]);
 
+  // Realtime subscription for instant status updates
   useEffect(() => {
     if (!id) return;
     const channel = supabase
@@ -235,6 +245,12 @@ export default function OrderTrackingScreen() {
   const isCompleted      = ['completed', 'picked_up'].includes(currentStatus);
   const isReady          = currentStatus === 'ready';
 
+  // FIX Bug 2: discount_amount is in metadata, not top-level
+  const discountAmount     = parseFloat(order.metadata?.discount_amount || order.discount_amount || 0);
+  // FIX Bug 3: points earned also stored in metadata by payments.py
+  const pointsEarned       = order.metadata?.loyalty_points_earned || 0;
+  const pointsRedeemed     = order.metadata?.loyalty_points_redeemed || 0;
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
@@ -255,6 +271,7 @@ export default function OrderTrackingScreen() {
           </Animated.View>
         )}
 
+        {/* Shop + status */}
         <View style={styles.card}>
           <View style={styles.shopRow}>
             {shopLogo
@@ -280,6 +297,7 @@ export default function OrderTrackingScreen() {
           <Text style={styles.statusMsg}>{STATUS_MSGS[currentStatus] || currentStatus}</Text>
         </View>
 
+        {/* Progress tracker */}
         {!isCancelled && (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Progress</Text>
@@ -321,6 +339,7 @@ export default function OrderTrackingScreen() {
           </View>
         )}
 
+        {/* Items */}
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Items</Text>
           {items.map((item, i) => (
@@ -347,6 +366,7 @@ export default function OrderTrackingScreen() {
           ))}
         </View>
 
+        {/* Payment summary */}
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Payment</Text>
           <View style={styles.totalRow}>
@@ -356,13 +376,16 @@ export default function OrderTrackingScreen() {
           {parseFloat(order.tax || 0) > 0 && (
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Tax</Text>
-              <Text style={styles.totalValue}>${parseFloat(order.tax || 0).toFixed(2)}</Text>
+              <Text style={styles.totalValue}>${parseFloat(order.tax).toFixed(2)}</Text>
             </View>
           )}
-          {parseFloat(order.discount_amount || 0) > 0 && (
+          {/* FIX Bug 2: read from metadata */}
+          {discountAmount > 0 && (
             <View style={styles.totalRow}>
-              <Text style={[styles.totalLabel, { color: '#059669' }]}>Points Discount</Text>
-              <Text style={[styles.totalValue, { color: '#059669' }]}>-${parseFloat(order.discount_amount).toFixed(2)}</Text>
+              <Text style={[styles.totalLabel, { color: '#059669' }]}>
+                Points Discount ({pointsRedeemed > 0 ? `${pointsRedeemed} pts` : ''})
+              </Text>
+              <Text style={[styles.totalValue, { color: '#059669' }]}>-${discountAmount.toFixed(2)}</Text>
             </View>
           )}
           <View style={[styles.totalRow, styles.totalRowFinal]}>
@@ -373,10 +396,11 @@ export default function OrderTrackingScreen() {
             <Feather name="lock" size={12} color="#6b7280" />
             <Text style={styles.squareBadgeText}>Paid securely via Square</Text>
           </View>
-          {(order.loyalty_points_earned || 0) > 0 && (
+          {/* FIX Bug 3: only show if we actually have the value */}
+          {pointsEarned > 0 && (
             <View style={styles.pointsBadge}>
               <Feather name="award" size={14} color="#d97706" />
-              <Text style={styles.pointsBadgeText}>+{order.loyalty_points_earned} points earned</Text>
+              <Text style={styles.pointsBadgeText}>+{pointsEarned} points earned</Text>
             </View>
           )}
         </View>
@@ -410,7 +434,7 @@ export default function OrderTrackingScreen() {
           onSubmitted={() => {
             setShowReview(false);
             setReviewed(true);
-            Alert.alert('Thanks!', 'Your review has been submitted.');
+            Alert.alert('Thanks! ⭐', 'Your review has been submitted.');
           }}
         />
       )}
