@@ -286,28 +286,23 @@ async def generate_shop_api_key(shop_id: str, user: dict = Depends(require_auth(
         
         # Verify ownership
         db = get_supabase()
-        shop = await db.execute_query(
-            table="shops",
-            operation="select",
-            filters={"id": shop_id, "owner_id": user_id}
+        shop_resp = (
+            db.get_service_client()
+            .table("shops")
+            .select("id")
+            .eq("id", shop_id)
+            .eq("owner_id", user_id)
+            .limit(1)
+            .execute()
         )
-        
-        if not shop or len(shop) == 0:
+        if not shop_resp.data:
             raise HTTPException(status_code=403, detail="Not authorized")
-        
-        # Generate secure API key
+
         api_key = f"lc_shop_{secrets.token_urlsafe(32)}"
-        
-        # Store API key (hashed for security)
-        await db.execute_query(
-            table="shop_api_keys",
-            operation="insert",
-            data={
-                "shop_id": shop_id,
-                "api_key": api_key,  # In production, hash this!
-                "created_at": "now()"
-            }
-        )
+        db.get_service_client().table("shop_api_keys").insert({
+            "shop_id": shop_id,
+            "api_key": api_key,
+        }).execute()
         
         return {
             "shop_id": shop_id,

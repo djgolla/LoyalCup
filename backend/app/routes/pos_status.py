@@ -36,7 +36,7 @@ async def pos_status(
     user_role = (user.get("user_metadata") or {}).get("role", "")
     if user_role != "admin":
         shop_check = (
-            db.service_client.table("shops")
+            db.get_service_client().table("shops")
             .select("id")
             .eq("id", shop_id)
             .eq("owner_id", user_id)
@@ -47,7 +47,7 @@ async def pos_status(
             raise HTTPException(status_code=403, detail="Not authorized for this shop")
 
     result = (
-        db.service_client.table("pos_connections")
+        db.get_service_client().table("pos_connections")
         .select("id, status, merchant_id, location_id, token_expires_at, updated_at, access_token")
         .eq("shop_id", shop_id)
         .eq("provider", provider)

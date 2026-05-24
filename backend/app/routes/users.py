@@ -17,8 +17,10 @@ auth_service = AuthService()
 
 # Request/Response Models
 class UpdateProfileRequest(BaseModel):
-    full_name: Optional[str] = None
+    full_name:  Optional[str] = None
     avatar_url: Optional[str] = None
+    push_token: Optional[str] = None
+    phone:      Optional[str] = None
 
 
 class UpdateRoleRequest(BaseModel):
