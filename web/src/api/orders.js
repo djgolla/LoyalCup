@@ -1,76 +1,95 @@
 /**
  * Orders API Client
- * API methods for order management
+ * All requests require a token — the backend identifies the customer from the JWT.
  */
+import supabase from '../lib/supabase';
 
 const API_BASE = '/api/v1';
+
+const authHeaders = (token) => ({
+  'Content-Type': 'application/json',
+  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+});
 
 // ============================================================================
 // CUSTOMER ENDPOINTS
 // ============================================================================
 
-export async function createOrder(orderData) {
-  const response = await fetch(`${API_BASE}/orders`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(orderData),
+/**
+ * Get the current user's orders.
+ * Backend: GET /api/v1/orders  (customer identified from JWT — no customerId in URL)
+ */
+export async function getCustomerOrders(token, status) {
+  const params = new URLSearchParams();
+  if (status) params.append('status', status);
+  const response = await fetch(`${API_BASE}/orders?${params}`, {
+    headers: authHeaders(token),
   });
   return response.json();
 }
 
-export async function getCustomerOrders(customerId) {
-  const response = await fetch(`${API_BASE}/customers/${customerId}/orders`);
+export async function getOrder(orderId, token) {
+  const response = await fetch(`${API_BASE}/orders/${orderId}`, {
+    headers: authHeaders(token),
+  });
   return response.json();
 }
 
-export async function getOrder(orderId) {
-  const response = await fetch(`${API_BASE}/orders/${orderId}`);
-  return response.json();
-}
-
-export async function cancelOrder(orderId) {
-  const response = await fetch(`${API_BASE}/orders/${orderId}/cancel`, {
-    method: 'PUT',
+export async function getOrderHistory(token) {
+  const response = await fetch(`${API_BASE}/orders/history`, {
+    headers: authHeaders(token),
   });
   return response.json();
 }
 
 // ============================================================================
-// SHOP ENDPOINTS - Orders Management
+// SHOP ENDPOINTS  (shop workers/owners — require token)
 // ============================================================================
 
-export async function getShopOrders(shopId, filters = {}) {
+export async function getShopOrders(shopId, token, filters = {}) {
   const params = new URLSearchParams();
   if (filters.status) params.append('status', filters.status);
-  if (filters.from_date) params.append('from_date', filters.from_date);
-  if (filters.to_date) params.append('to_date', filters.to_date);
-  
-  const response = await fetch(`${API_BASE}/shops/${shopId}/orders?${params}`);
-  return response.json();
-}
-
-export async function updateOrderStatus(shopId, orderId, status) {
-  const response = await fetch(`${API_BASE}/shops/${shopId}/orders/${orderId}/status`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status }),
+  const response = await fetch(`${API_BASE}/shops/${shopId}/orders?${params}`, {
+    headers: authHeaders(token),
   });
   return response.json();
 }
 
-export async function getShopOrderStats(shopId, period = 'today') {
-  const response = await fetch(`${API_BASE}/shops/${shopId}/orders/stats?period=${period}`);
+export async function updateOrderStatus(shopId, orderId, status, token) {
+  const response = await fetch(`${API_BASE}/shops/${shopId}/orders/${orderId}/status`, {
+    method:  'PUT',
+    headers: authHeaders(token),
+    body:    JSON.stringify({ status }),
+  });
   return response.json();
 }
 
 // ============================================================================
-// REAL-TIME SUBSCRIPTIONS
+// REAL-TIME SUBSCRIPTIONS  (Supabase realtime — no backend call needed)
 // ============================================================================
 
-// Use with Supabase real-time subscriptions
+/**
+ * Subscribe to live order updates for a shop.
+ * Returns an unsubscribe function — call it on component unmount.
+ *
+ * Usage:
+ *   const unsub = subscribeToShopOrders(shopId, (payload) => { ... });
+ *   return () => unsub();
+ */
 export function subscribeToShopOrders(shopId, callback) {
-  // This will be implemented with Supabase realtime
-  // For now, return a dummy unsubscribe function
-  console.log('Subscribing to orders for shop:', shopId);
-  return () => console.log('Unsubscribed from orders');
+  const channel = supabase
+    .channel(`shop_orders_${shopId}`)
+    .on(
+      'postgres_changes',
+      {
+        event:  '*',
+        schema: 'public',
+        table:  'orders',
+        filter: `shop_id=eq.${shopId}`,
+      },
+      callback,
+    )
+    .subscribe();
+
+  return () => supabase.removeChannel(channel);
 }

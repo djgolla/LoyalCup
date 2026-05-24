@@ -1,9 +1,16 @@
 /**
  * Shop API Client
- * API methods for shop management
+ * All mutating requests require an auth token.
+ * Pass `token` from: const { data: { session } } = await supabase.auth.getSession()
+ *                    token = session.access_token
  */
 
 const API_BASE = '/api/v1';
+
+const authHeaders = (token) => ({
+  'Content-Type': 'application/json',
+  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+});
 
 // ============================================================================
 // PUBLIC ENDPOINTS
@@ -11,9 +18,8 @@ const API_BASE = '/api/v1';
 
 export async function listShops(filters = {}) {
   const params = new URLSearchParams();
-  if (filters.city) params.append('city', filters.city);
+  if (filters.city)   params.append('city',   filters.city);
   if (filters.search) params.append('search', filters.search);
-  
   const response = await fetch(`${API_BASE}/shops?${params}`);
   return response.json();
 }
@@ -35,80 +41,87 @@ export async function getShopMenu(shopId) {
 }
 
 // ============================================================================
-// SHOP OWNER ENDPOINTS
+// SHOP OWNER ENDPOINTS  (all require token)
 // ============================================================================
 
-export async function createShop(shopData) {
+export async function createShop(shopData, token) {
   const response = await fetch(`${API_BASE}/shops`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(shopData),
+    method:  'POST',
+    headers: authHeaders(token),
+    body:    JSON.stringify(shopData),
   });
   return response.json();
 }
 
-export async function updateShop(shopId, shopData) {
+export async function updateShop(shopId, shopData, token) {
   const response = await fetch(`${API_BASE}/shops/${shopId}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(shopData),
+    method:  'PUT',
+    headers: authHeaders(token),
+    body:    JSON.stringify(shopData),
   });
   return response.json();
 }
 
-export async function deleteShop(shopId) {
+export async function deleteShop(shopId, token) {
   const response = await fetch(`${API_BASE}/shops/${shopId}`, {
-    method: 'DELETE',
+    method:  'DELETE',
+    headers: authHeaders(token),
   });
   return response.json();
 }
 
-export async function uploadShopLogo(shopId, file) {
+export async function uploadShopLogo(shopId, file, token) {
   const formData = new FormData();
   formData.append('file', file);
-  
   const response = await fetch(`${API_BASE}/shops/${shopId}/logo`, {
-    method: 'POST',
-    body: formData,
+    method:  'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body:    formData,
   });
   return response.json();
 }
 
-export async function uploadShopBanner(shopId, file) {
+export async function uploadShopBanner(shopId, file, token) {
   const formData = new FormData();
   formData.append('file', file);
-  
   const response = await fetch(`${API_BASE}/shops/${shopId}/banner`, {
-    method: 'POST',
-    body: formData,
+    method:  'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body:    formData,
   });
   return response.json();
 }
 
-export async function getShopAnalytics(shopId) {
-  const response = await fetch(`${API_BASE}/shops/${shopId}/analytics`);
-  return response.json();
-}
-
-// ============================================================================
-// ADMIN ENDPOINTS
-// ============================================================================
-
-export async function listAllShops() {
-  const response = await fetch(`${API_BASE}/admin/shops`);
-  return response.json();
-}
-
-export async function approveShop(shopId) {
-  const response = await fetch(`${API_BASE}/admin/shops/${shopId}/approve`, {
-    method: 'PUT',
+export async function getShopAnalytics(shopId, token) {
+  const response = await fetch(`${API_BASE}/shops/${shopId}/analytics`, {
+    headers: authHeaders(token),
   });
   return response.json();
 }
 
-export async function featureShop(shopId) {
-  const response = await fetch(`${API_BASE}/admin/shops/${shopId}/feature`, {
-    method: 'PUT',
+// ============================================================================
+// ADMIN ENDPOINTS  (require token)
+// ============================================================================
+
+export async function listAllShops(token) {
+  const response = await fetch(`${API_BASE}/shops/admin/shops`, {
+    headers: authHeaders(token),
+  });
+  return response.json();
+}
+
+export async function approveShop(shopId, token) {
+  const response = await fetch(`${API_BASE}/shops/admin/shops/${shopId}/approve`, {
+    method:  'PUT',
+    headers: authHeaders(token),
+  });
+  return response.json();
+}
+
+export async function featureShop(shopId, token) {
+  const response = await fetch(`${API_BASE}/shops/admin/shops/${shopId}/feature`, {
+    method:  'PUT',
+    headers: authHeaders(token),
   });
   return response.json();
 }
