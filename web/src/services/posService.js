@@ -26,7 +26,8 @@ export async function getSquareConnectUrl() {
 }
 
 /**
- * Get POS connection status + live locations list for a shop.
+ * Get POS connection status for a shop.
+ * Returns: { status, connected, location_id, merchant_id, last_updated }
  */
 export async function getPosStatus(shopId, provider = "square") {
   const headers = await getAuthHeaders();
@@ -76,21 +77,24 @@ export async function setSquareLocation(shopId, locationId) {
 }
 
 /**
- * Check if a shop's Square integration is fully ready for payments.
- * Returns { ready: bool, connected: bool, hasLocation: bool }
+ * Full Square readiness check — used by the dashboard setup card.
+ * Calls /readiness which returns connected + hasLocation + locations list.
  */
 export async function getSquareReadiness(shopId) {
   try {
-    const status = await getPosStatus(shopId, "square");
-    const connected   = status.status === "connected";
-    const hasLocation = !!status.location_id;
+    const headers = await getAuthHeaders();
+    const res = await fetch(
+      `${API_BASE}/api/v1/pos/readiness?shop_id=${shopId}`,
+      { headers }
+    );
+    if (!res.ok) throw new Error("Readiness check failed");
+    const data = await res.json();
     return {
-      ready:       connected && hasLocation,
-      connected,
-      hasLocation,
-      locations:   status.locations || [],
-      merchantId:  status.merchant_id,
-      locationId:  status.location_id,
+      ready:      data.ready,
+      connected:  data.connected,
+      hasLocation: data.hasLocation,
+      locations:  data.locations || [],
+      merchantId: data.merchantId,
     };
   } catch {
     return { ready: false, connected: false, hasLocation: false, locations: [] };
