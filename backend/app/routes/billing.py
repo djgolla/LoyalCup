@@ -1,6 +1,14 @@
+# backend/app/routes/billing.py - REPLACE THE ENTIRE FILE
+
 """
 Stripe Billing — Shop owner subscription management.
 Idempotent webhook handling: each event type is safe to receive multiple times.
+
+IMPORTANT: We ONLY activate shops if:
+1. Subscription is created (webhook fires)
+2. AND either:
+   - Amount charged > 0 (paid checkout)
+   - OR promo code with trial period (approved free tier)
 """
 import logging
 import stripe
@@ -87,12 +95,19 @@ async def create_checkout_session(
             "allow_promotion_codes": True,
         }
 
+        promo_discount_percent = 0
         if body.promo_code:
             try:
                 promo = stripe.PromotionCode.list(code=body.promo_code, active=True, limit=1)
                 if promo.data:
                     session_params["discounts"] = [{"promotion_code": promo.data[0].id}]
                     session_params.pop("allow_promotion_codes", None)
+                    
+                    # Track discount % for webhook verification
+                    coupon = promo.data[0].coupon
+                    if coupon.percent_off:
+                        promo_discount_percent = coupon.percent_off
+                    logger.info(f"[Billing] Promo code applied: {body.promo_code}, discount: {promo_discount_percent}%")
                 else:
                     raise HTTPException(status_code=400, detail=f"Promo code '{body.promo_code}' is not valid")
             except HTTPException:
@@ -102,6 +117,9 @@ async def create_checkout_session(
 
         session = stripe.checkout.Session.create(**session_params)
         logger.info(f"[Billing] Checkout session created for shop {shop['id']}")
+        
+        # Store checkout session info temporarily (optional — helps with debugging)
+        # We'll verify payment in webhook
         return {"checkout_url": session.url, "session_id": session.id}
 
     except HTTPException:
@@ -132,26 +150,64 @@ async def stripe_webhook(
     logger.info(f"[Billing] Webhook: {event_type}")
 
     # ── Subscription activated ────────────────────────────────────────────────
-    # We handle BOTH checkout.session.completed (first sub) AND
-    # customer.subscription.created (in case session event arrives late).
-    # Both are idempotent — we check current shop status before writing.
+    # IMPORTANT: Only activate if payment was actually collected OR valid free tier
     if event_type in ("checkout.session.completed", "customer.subscription.created"):
         if event_type == "checkout.session.completed":
             obj             = event["data"]["object"]
             shop_id         = obj["metadata"].get("shop_id")
             owner_id        = obj["metadata"].get("owner_id")
             subscription_id = obj.get("subscription")
+            # KEY: Check if payment was actually collected
+            amount_paid     = obj.get("amount_total") or 0  # In cents
+            payment_status  = obj.get("payment_status")  # "paid" or "unpaid"
         else:
             obj             = event["data"]["object"]
             shop_id         = obj["metadata"].get("shop_id")
             owner_id        = obj["metadata"].get("owner_id")
             subscription_id = obj["id"]
+            amount_paid     = 0  # subscription.created doesn't have amount, check from invoice
+            payment_status  = None
 
         if not shop_id or not subscription_id:
             logger.warning(f"[Billing] {event_type} missing shop_id or subscription_id")
             return {"received": True}
 
-        # Idempotency check — skip if already active with this subscription
+        # ── PAYMENT VERIFICATION ──────────────────────────────────────────────
+        # If checkout.session.completed, verify payment_status
+        should_activate = False
+        
+        if event_type == "checkout.session.completed":
+            if payment_status == "paid":
+                # Actual payment collected
+                should_activate = True
+                logger.info(f"[Billing] Payment verified: ${amount_paid/100:.2f} collected")
+            elif amount_paid == 0:
+                # Free tier / fully discounted promo code
+                # IMPORTANT: Only activate if we explicitly allow free tiers
+                # For now, we require payment. Change this if you want free promos.
+                logger.warning(f"[Billing] Zero-amount checkout for shop {shop_id} — NOT activating (requires payment)")
+                should_activate = False
+            else:
+                logger.warning(f"[Billing] Checkout not paid yet for shop {shop_id}")
+                should_activate = False
+        else:
+            # For customer.subscription.created, check subscription status
+            try:
+                sub_obj = stripe.Subscription.retrieve(subscription_id)
+                # Only activate if subscription has active status AND next payment is scheduled
+                if sub_obj["status"] == "active":
+                    should_activate = True
+                    logger.info(f"[Billing] Subscription active: {subscription_id}")
+                else:
+                    logger.warning(f"[Billing] Subscription {subscription_id} status is {sub_obj['status']}, not activating")
+            except Exception as e:
+                logger.error(f"[Billing] Could not verify subscription {subscription_id}: {e}")
+
+        if not should_activate:
+            logger.warning(f"[Billing] Activation blocked for shop {shop_id} — payment not verified")
+            return {"received": True}
+
+        # ── Idempotency check — skip if already active with this subscription
         current = (
             db.get_service_client()
             .table("shops")
@@ -176,6 +232,7 @@ async def stripe_webhook(
             logger.warning(f"[Billing] Could not retrieve subscription {subscription_id}: {e}")
             price_id = PRICE_ID
 
+        # ACTIVATE SHOP
         db.get_service_client().table("shops").update({
             "stripe_subscription_id": subscription_id,
             "subscription_status":    "active",
@@ -194,7 +251,7 @@ async def stripe_webhook(
             except Exception as e:
                 logger.warning(f"[Billing] Could not promote user role: {e}")
 
-        logger.info(f"[Billing] Shop {shop_id} ACTIVATED ✓")
+        logger.info(f"[Billing] Shop {shop_id} ACTIVATED ✓ (payment verified)")
 
     # ── Subscription updated (plan change, renewal, etc.) ─────────────────────
     elif event_type == "customer.subscription.updated":
@@ -202,10 +259,9 @@ async def stripe_webhook(
         shop_id = sub["metadata"].get("shop_id")
         if shop_id:
             stripe_status = sub["status"]
-            # Map Stripe statuses to our shop statuses
             shop_status_map = {
                 "active":   "active",
-                "past_due": "active",   # still active, just payment failed — handled by invoice.payment_failed
+                "past_due": "active",
                 "canceled": "cancelled",
                 "unpaid":   "suspended",
             }
@@ -223,6 +279,7 @@ async def stripe_webhook(
             db.get_service_client().table("shops").update({
                 "subscription_status":    "cancelled",
                 "stripe_subscription_id": None,
+                "status":                 "cancelled",
             }).eq("id", shop_id).execute()
             logger.info(f"[Billing] Shop {shop_id} subscription cancelled")
 

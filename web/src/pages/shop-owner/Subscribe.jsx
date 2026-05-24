@@ -40,24 +40,38 @@ export default function Subscribe() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Handle Stripe redirect back
   useEffect(() => {
     const success   = searchParams.get('success');
     const cancelled = searchParams.get('cancelled');
 
     if (success === 'true') {
-      toast.success('🎉 Subscription activated! Welcome to LoyalCup!');
-      // Refresh JWT so new shop_owner role is active immediately
-      refreshSession?.().then(() => {
-        loadShop();
-        navigate('/shop-owner/dashboard', { replace: true });
-      });
+      setIsProcessing(true);
+      toast.success('🎉 Payment received! Setting up Square...');
+      
+      // Poll for shop status update (webhook takes a moment)
+      const pollInterval = setInterval(async () => {
+        await loadShop();
+      }, 1000);
+
+      // Give it 10 seconds max, then navigate to Square setup
+      const timeout = setTimeout(async () => {
+        clearInterval(pollInterval);
+        await refreshSession?.();
+        // GO TO SQUARE SETUP, NOT DASHBOARD
+        navigate('/shop-owner/connect-square', { replace: true });
+      }, 10000);
+
+      return () => {
+        clearInterval(pollInterval);
+        clearTimeout(timeout);
+      };
     }
+    
     if (cancelled === 'true') {
       toast.info('Checkout cancelled. You can subscribe anytime.');
       navigate('/shop-owner/subscribe', { replace: true });
     }
-  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchParams, navigate, refreshSession, loadShop]);
 
   useEffect(() => {
     if (shop?.subscription_status === 'active' || shop?.status === 'active') {
