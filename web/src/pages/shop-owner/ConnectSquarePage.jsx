@@ -1,3 +1,5 @@
+// web/src/pages/shop-owner/ConnectSquarePage.jsx - PASTE ENTIRE FILE
+
 import { useEffect, useState, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useShop } from "../../context/ShopContext";
@@ -8,26 +10,27 @@ import {
   setSquareLocation,
 } from "../../services/posService";
 import { toast } from "sonner";
+import PageLoader from "../../components/ui/PageLoader";
 
 export default function ConnectSquarePage() {
   const { shop, loading: shopLoading, loadShop } = useShop();
-  const [searchParams]     = useSearchParams();
-  const navigate           = useNavigate();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
 
-  const [posStatus,        setPosStatus]        = useState(null);
-  const [loadingStatus,    setLoadingStatus]    = useState(false);
-  const [connecting,       setConnecting]       = useState(false);
-  const [syncing,          setSyncing]          = useState(false);
-  const [syncResult,       setSyncResult]       = useState(null);
-  const [error,            setError]            = useState(null);
-  const [locations,        setLocations]        = useState(null);
-  const [settingLocation,  setSettingLocation]  = useState(false);
+  const [posStatus, setPosStatus] = useState(null);
+  const [loadingStatus, setLoadingStatus] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [locations, setLocations] = useState(null);
+  const [settingLocation, setSettingLocation] = useState(false);
 
-  const callbackStatus     = searchParams.get("status");
-  const callbackSynced     = searchParams.get("synced");
-  const callbackItems      = searchParams.get("items");
-  const callbackError      = searchParams.get("reason");
-  const needsLocation      = searchParams.get("needs_location") === "true";
+  const callbackStatus = searchParams.get("status");
+  const callbackSynced = searchParams.get("synced");
+  const callbackItems = searchParams.get("items");
+  const callbackError = searchParams.get("reason");
+  const needsLocation = searchParams.get("needs_location") === "true";
   const callbackLocationId = searchParams.get("location_id");
 
   const shopId = shop?.id;
@@ -38,7 +41,8 @@ export default function ConnectSquarePage() {
       setLoadingStatus(true);
       const data = await getPosStatus(shopId, "square");
       setPosStatus(data);
-    } catch {
+    } catch (err) {
+      console.error("[ConnectSquare] Error loading status:", err);
       setPosStatus(null);
     } finally {
       setLoadingStatus(false);
@@ -46,11 +50,16 @@ export default function ConnectSquarePage() {
   }, [shopId]);
 
   useEffect(() => {
-    if (!shopLoading && shopId) loadStatus();
+    if (!shopLoading && shopId) {
+      loadStatus();
+    }
   }, [shopId, shopLoading, loadStatus]);
 
+  // Handle OAuth callback
   useEffect(() => {
     if (!callbackStatus) return;
+
+    console.log("[ConnectSquare] Callback received:", { callbackStatus, callbackError });
 
     if (callbackStatus === "connected") {
       setSyncResult({ status: "connected", synced: callbackSynced, items: callbackItems });
@@ -65,16 +74,18 @@ export default function ConnectSquarePage() {
       setTimeout(loadStatus, 1500);
     } else if (callbackStatus === "error") {
       const messages = {
-        access_denied:         "Connection cancelled. You can connect Square anytime.",
+        access_denied: "Connection cancelled. You can connect Square anytime.",
         token_exchange_failed: "Square connection failed. Please try again.",
-        invalid_state:         "Session error. Please try connecting again.",
-        missing_params:        "Something went wrong with the Square redirect. Please try again.",
+        invalid_state: "Session error. Please try connecting again.",
+        missing_params: "Something went wrong with the Square redirect. Please try again.",
       };
       setError(messages[callbackError] || `Connection failed: ${callbackError}`);
+      toast.error(messages[callbackError] || "Connection failed");
     }
 
+    // Clear URL params
     window.history.replaceState({}, "", "/shop-owner/connect-square");
-  }, [callbackStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [callbackStatus, callbackError, callbackSynced, callbackItems, needsLocation, callbackLocationId]);
 
   const fetchLocations = async () => {
     try {
@@ -83,7 +94,7 @@ export default function ConnectSquarePage() {
         setLocations(data.locations);
       }
     } catch (e) {
-      console.warn("Could not fetch locations:", e);
+      console.warn("[ConnectSquare] Could not fetch locations:", e);
     }
   };
 
@@ -95,6 +106,7 @@ export default function ConnectSquarePage() {
       window.location.href = authorization_url;
     } catch (e) {
       setError(e.message || "Failed to start Square connection. Check your server config.");
+      toast.error("Failed to start Square connection");
       setConnecting(false);
     }
   };
@@ -136,6 +148,15 @@ export default function ConnectSquarePage() {
 
   const isConnected = posStatus?.status === "connected";
 
+  // Show loading state only on first load
+  if (shopLoading && !syncResult) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <PageLoader />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-2xl mx-auto py-10 px-4">
       {/* Header */}
@@ -161,7 +182,10 @@ export default function ConnectSquarePage() {
             {syncResult.synced === "true" && (
               <p className="text-green-700 dark:text-green-400 text-sm mt-0.5">
                 {syncResult.items || 0} menu items imported.{" "}
-                <button className="underline font-medium" onClick={() => navigate("/shop-owner/menu")}>
+                <button
+                  className="underline font-medium hover:no-underline"
+                  onClick={() => navigate("/shop-owner/menu")}
+                >
                   Review in Menu Builder →
                 </button>
               </p>
@@ -180,8 +204,7 @@ export default function ConnectSquarePage() {
         <div className="mb-6 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4">
           <p className="font-semibold text-blue-800 dark:text-blue-300">Sync Complete</p>
           <p className="text-blue-700 dark:text-blue-400 text-sm mt-1">
-            {syncResult.synced?.categories_synced || 0} categories,{" "}
-            {syncResult.synced?.items_synced || 0} items,{" "}
+            {syncResult.synced?.categories_synced || 0} categories, {syncResult.synced?.items_synced || 0} items,{" "}
             {syncResult.synced?.modifier_groups_synced || 0} modifier groups updated.
           </p>
         </div>
@@ -194,7 +217,12 @@ export default function ConnectSquarePage() {
             <p className="font-semibold text-red-800 dark:text-red-300">Something went wrong</p>
             <p className="text-red-700 dark:text-red-400 text-sm mt-1">{error}</p>
           </div>
-          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 text-lg leading-none mt-0.5">×</button>
+          <button
+            onClick={() => setError(null)}
+            className="text-red-400 hover:text-red-600 text-lg leading-none mt-0.5"
+          >
+            ×
+          </button>
         </div>
       )}
 
@@ -215,7 +243,7 @@ export default function ConnectSquarePage() {
                 key={loc.id}
                 onClick={() => handleSetLocation(loc.id)}
                 disabled={settingLocation}
-                className="w-full flex items-center justify-between text-left px-4 py-3 bg-white dark:bg-neutral-800 rounded-lg border border-amber-200 dark:border-amber-700 hover:border-amber-500 dark:hover:border-amber-500 transition disabled:opacity-50"
+                className="w-full flex items-center justify-between text-left px-4 py-3 bg-white dark:bg-neutral-800 rounded-lg border border-amber-200 dark:border-amber-700 hover:border-amber-400 transition disabled:opacity-50"
               >
                 <span className="font-medium text-gray-900 dark:text-white">{loc.name}</span>
                 <span className="text-xs text-gray-400 font-mono">{loc.id}</span>
@@ -228,27 +256,30 @@ export default function ConnectSquarePage() {
       {/* Square card */}
       <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-700 shadow-sm overflow-hidden">
         <div className="flex items-center gap-4 p-6 border-b border-gray-100 dark:border-neutral-700">
-          <div className="w-12 h-12 bg-black rounded-xl flex items-center justify-center text-white font-bold text-lg shrink-0">■</div>
+          <div className="w-12 h-12 bg-black rounded-xl flex items-center justify-center text-white font-bold text-lg shrink-0">
+            ■
+          </div>
           <div className="flex-1">
             <h2 className="font-semibold text-gray-900 dark:text-white">Square</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Required · Import menu · sync inventory · process payments</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Required · Import menu · sync inventory · process payments
+            </p>
           </div>
-          {shopLoading || loadingStatus ? (
+          {loadingStatus ? (
             <span className="text-xs text-gray-400">Loading...</span>
           ) : isConnected ? (
-            <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold px-3 py-1 rounded-full">Connected</span>
+            <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold px-3 py-1 rounded-full">
+              Connected
+            </span>
           ) : (
-            <span className="bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs font-semibold px-3 py-1 rounded-full">Required</span>
+            <span className="bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs font-semibold px-3 py-1 rounded-full">
+              Required
+            </span>
           )}
         </div>
 
         <div className="p-6">
-          {shopLoading ? (
-            <div className="flex items-center justify-center py-8 text-gray-400 text-sm gap-2">
-              <span className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-              Loading your shop...
-            </div>
-          ) : isConnected ? (
+          {isConnected ? (
             <div className="space-y-4">
               <div className="bg-gray-50 dark:bg-neutral-800 rounded-xl p-4 text-sm space-y-2">
                 <div className="flex justify-between">
@@ -260,7 +291,10 @@ export default function ConnectSquarePage() {
                   {posStatus?.location_id ? (
                     <span className="text-green-600 dark:text-green-400 font-medium text-xs">Set ✓</span>
                   ) : (
-                    <button onClick={fetchLocations} className="text-amber-600 hover:text-amber-700 text-xs font-semibold underline">
+                    <button
+                      onClick={fetchLocations}
+                      className="text-amber-600 hover:text-amber-700 text-xs font-semibold underline"
+                    >
                       Select location →
                     </button>
                   )}
@@ -273,7 +307,9 @@ export default function ConnectSquarePage() {
                 {posStatus?.last_updated && (
                   <div className="flex justify-between">
                     <span className="text-gray-500 dark:text-gray-400">Last synced</span>
-                    <span className="text-gray-700 dark:text-gray-300 text-xs">{new Date(posStatus.last_updated).toLocaleString()}</span>
+                    <span className="text-gray-700 dark:text-gray-300 text-xs">
+                      {new Date(posStatus.last_updated).toLocaleString()}
+                    </span>
                   </div>
                 )}
               </div>
@@ -289,7 +325,9 @@ export default function ConnectSquarePage() {
                       <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                       Syncing...
                     </span>
-                  ) : "↻ Sync Menu from Square"}
+                  ) : (
+                    "↻ Sync Menu from Square"
+                  )}
                 </button>
                 <button
                   onClick={() => navigate("/shop-owner/menu")}
@@ -300,21 +338,28 @@ export default function ConnectSquarePage() {
               </div>
 
               <div className="pt-2 border-t border-gray-100 dark:border-neutral-700 flex gap-4">
-                <button onClick={handleConnect} disabled={connecting} className="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 underline">
+                <button
+                  onClick={handleConnect}
+                  disabled={connecting}
+                  className="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 underline"
+                >
                   Reconnect Square account
                 </button>
-                <button onClick={fetchLocations} className="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 underline">
+                <button
+                  onClick={fetchLocations}
+                  className="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 underline"
+                >
                   Change location
                 </button>
               </div>
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Required warning */}
               <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl">
                 <span className="text-amber-500 text-lg shrink-0">⚠️</span>
                 <p className="text-sm text-amber-800 dark:text-amber-300 font-medium">
-                  Square is required to accept mobile orders. Without it, customers cannot checkout and orders will not reach you.
+                  Square is required to accept mobile orders. Without it, customers cannot checkout and orders will not reach
+                  you.
                 </p>
               </div>
 
@@ -335,24 +380,32 @@ export default function ConnectSquarePage() {
               <button
                 onClick={handleConnect}
                 disabled={connecting || !shopId}
-                className="w-full bg-black dark:bg-white text-white dark:text-black rounded-xl py-3 px-4 font-semibold text-sm hover:bg-gray-800 dark:hover:bg-gray-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-black dark:bg-white text-white dark:text-black rounded-xl py-3 px-4 font-semibold text-sm hover:bg-gray-800 dark:hover:bg-gray-100 transition disabled:opacity-50"
               >
                 {connecting ? (
                   <span className="flex items-center justify-center gap-2">
                     <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                     Redirecting to Square...
                   </span>
-                ) : !shopId ? "Complete shop setup first" : "Connect Square →"}
+                ) : !shopId ? (
+                  "Complete shop setup first"
+                ) : (
+                  "Connect Square →"
+                )}
               </button>
 
               {!shopId && !shopLoading && (
                 <p className="text-xs text-center text-gray-400">
                   You need to{" "}
-                  <button className="underline" onClick={() => navigate("/shop-owner/setup")}>set up your shop</button>{" "}
+                  <button
+                    className="underline hover:no-underline"
+                    onClick={() => navigate("/shop-owner/setup")}
+                  >
+                    set up your shop
+                  </button>{" "}
                   before connecting Square.
                 </p>
               )}
-              {/* REMOVED: "Skip for now" button — Square is required, not optional */}
             </div>
           )}
         </div>
@@ -361,7 +414,9 @@ export default function ConnectSquarePage() {
       {/* Coming soon */}
       <div className="mt-4 bg-gray-50 dark:bg-neutral-800 rounded-2xl border border-dashed border-gray-200 dark:border-neutral-700 p-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gray-200 dark:bg-neutral-700 rounded-xl flex items-center justify-center text-gray-500 text-lg">⌛</div>
+          <div className="w-10 h-10 bg-gray-200 dark:bg-neutral-700 rounded-xl flex items-center justify-center text-gray-500 text-lg">
+            ⌛
+          </div>
           <div>
             <p className="font-medium text-gray-700 dark:text-gray-300">Toast & Clover — Coming Soon</p>
             <p className="text-sm text-gray-400 mt-0.5">More integrations are on the roadmap.</p>
