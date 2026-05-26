@@ -12,7 +12,6 @@ from app.routes import (
     loyalty,
     admin,
     payments,
-    pos,
     pos_connect,
     pos_status,
     pos_sync,
@@ -25,7 +24,7 @@ from app.routes import (
 
 __all__ = [
     "auth", "users", "shops", "menu", "menu_sync", "orders", "loyalty",
-    "admin", "payments", "pos", "pos_connect", "pos_status", "pos_sync",
+    "admin", "payments", "pos_connect", "pos_status", "pos_sync",
     "pos_square_callback", "pos_square_set_location", "pos_square_webhook",
     "billing", "reviews",
 ]
