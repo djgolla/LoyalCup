@@ -23,14 +23,14 @@ export default function ConnectSquarePage() {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
   const [error, setError] = useState(null);
-  const [locations, setLocations] = useState(null);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [settingLocation, setSettingLocation] = useState(false);
 
-  const callbackStatus = searchParams.get("status");
-  const callbackSynced = searchParams.get("synced");
-  const callbackItems = searchParams.get("items");
-  const callbackError = searchParams.get("reason");
-  const needsLocation = searchParams.get("needs_location") === "true";
+  const callbackStatus     = searchParams.get("status");
+  const callbackSynced     = searchParams.get("synced");
+  const callbackItems      = searchParams.get("items");
+  const callbackError      = searchParams.get("reason");
+  const needsLocationParam = searchParams.get("needs_location") === "true";
   const callbackLocationId = searchParams.get("location_id");
 
   const shopId = shop?.id;
@@ -41,9 +41,15 @@ export default function ConnectSquarePage() {
       setLoadingStatus(true);
       const data = await getPosStatus(shopId, "square");
       setPosStatus(data);
+      if (data?.error) {
+        setError(data.error);
+      }
     } catch (err) {
       console.error("[ConnectSquare] Error loading status:", err);
       setPosStatus(null);
+      if (err.needsReauth) {
+        setError("Square connection expired. Please reconnect.");
+      }
     } finally {
       setLoadingStatus(false);
     }
@@ -55,7 +61,7 @@ export default function ConnectSquarePage() {
     }
   }, [shopId, shopLoading, loadStatus]);
 
-  // Handle OAuth callback
+  // Handle OAuth callback redirect
   useEffect(() => {
     if (!callbackStatus) return;
 
@@ -63,8 +69,8 @@ export default function ConnectSquarePage() {
 
     if (callbackStatus === "connected") {
       setSyncResult({ status: "connected", synced: callbackSynced, items: callbackItems });
-      if (needsLocation) {
-        fetchLocations();
+      if (needsLocationParam) {
+        setShowLocationPicker(true);
       } else if (callbackLocationId) {
         toast.success("Square connected and location set!");
       } else {
@@ -74,10 +80,10 @@ export default function ConnectSquarePage() {
       setTimeout(loadStatus, 1500);
     } else if (callbackStatus === "error") {
       const messages = {
-        access_denied: "Connection cancelled. You can connect Square anytime.",
+        access_denied:         "Connection cancelled. You can connect Square anytime.",
         token_exchange_failed: "Square connection failed. Please try again.",
-        invalid_state: "Session error. Please try connecting again.",
-        missing_params: "Something went wrong with the Square redirect. Please try again.",
+        invalid_state:         "Session error. Please try connecting again.",
+        missing_params:        "Something went wrong with the Square redirect. Please try again.",
       };
       setError(messages[callbackError] || `Connection failed: ${callbackError}`);
       toast.error(messages[callbackError] || "Connection failed");
@@ -85,17 +91,19 @@ export default function ConnectSquarePage() {
 
     // Clear URL params
     window.history.replaceState({}, "", "/shop-owner/connect-square");
-  }, [callbackStatus, callbackError, callbackSynced, callbackItems, needsLocation, callbackLocationId]);
+  }, [callbackStatus, callbackError, callbackSynced, callbackItems, needsLocationParam, callbackLocationId]);
 
-  const fetchLocations = async () => {
-    try {
-      const data = await getPosStatus(shopId, "square");
-      if (data?.locations && data.locations.length > 0) {
-        setLocations(data.locations);
-      }
-    } catch (e) {
-      console.warn("[ConnectSquare] Could not fetch locations:", e);
+  // Open the location picker using the locations the backend already returned.
+  const openLocationPicker = () => {
+    if (posStatus?.needs_reauth || posStatus?.status === "reauth_required") {
+      toast.error("Reconnect Square first, then pick a location.");
+      return;
     }
+    if (!posStatus?.locations || posStatus.locations.length === 0) {
+      toast.error("No Square locations found. Try reconnecting your account.");
+      return;
+    }
+    setShowLocationPicker(true);
   };
 
   const handleConnect = async () => {
@@ -122,8 +130,14 @@ export default function ConnectSquarePage() {
       toast.success(`Sync complete! ${result.items_synced || 0} items updated.`);
       await loadStatus();
     } catch (e) {
-      setError(e.message || "Sync failed. Please try again.");
-      toast.error("Sync failed");
+      const msg = e.message || "Sync failed. Please try again.";
+      setError(msg);
+      if (e.needsReauth) {
+        toast.error("Square connection expired — reconnect required.");
+        await loadStatus();
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setSyncing(false);
     }
@@ -134,7 +148,7 @@ export default function ConnectSquarePage() {
     setSettingLocation(true);
     try {
       await setSquareLocation(shopId, locationId);
-      setLocations(null);
+      setShowLocationPicker(false);
       await loadStatus();
       await loadShop();
       toast.success("Square location set! You're ready to accept orders.");
@@ -146,9 +160,11 @@ export default function ConnectSquarePage() {
     }
   };
 
-  const isConnected = posStatus?.status === "connected";
+  const isConnected   = posStatus?.status === "connected";
+  const needsReauth   = posStatus?.needs_reauth || posStatus?.status === "reauth_required";
+  const locations     = posStatus?.locations || [];
 
-  // Show loading state only on first load
+  // First-load skeleton
   if (shopLoading && !syncResult) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -172,6 +188,30 @@ export default function ConnectSquarePage() {
           Square is <strong>required</strong> to accept mobile orders. Orders go directly to your Square terminal.
         </p>
       </div>
+
+      {/* REAUTH REQUIRED BANNER */}
+      {needsReauth && (
+        <div className="mb-6 rounded-xl bg-orange-50 dark:bg-orange-900/20 border-2 border-orange-300 dark:border-orange-700 p-5">
+          <div className="flex items-start gap-3">
+            <span className="text-orange-500 text-2xl shrink-0">⚠️</span>
+            <div className="flex-1">
+              <h3 className="font-bold text-orange-800 dark:text-orange-300 mb-1">
+                Square connection expired
+              </h3>
+              <p className="text-sm text-orange-700 dark:text-orange-400 mb-4">
+                Your Square access token is no longer valid. Reconnect your Square account to keep accepting orders.
+              </p>
+              <button
+                onClick={handleConnect}
+                disabled={connecting}
+                className="bg-orange-600 hover:bg-orange-700 disabled:opacity-60 text-white font-semibold px-5 py-2.5 rounded-xl text-sm transition"
+              >
+                {connecting ? "Redirecting…" : "Reconnect Square →"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Success banner */}
       {syncResult?.status === "connected" && (
@@ -211,7 +251,7 @@ export default function ConnectSquarePage() {
       )}
 
       {/* Error banner */}
-      {error && (
+      {error && !needsReauth && (
         <div className="mb-6 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 flex items-start justify-between gap-3">
           <div>
             <p className="font-semibold text-red-800 dark:text-red-300">Something went wrong</p>
@@ -227,7 +267,7 @@ export default function ConnectSquarePage() {
       )}
 
       {/* Location picker */}
-      {locations && locations.length > 0 && (
+      {showLocationPicker && locations.length > 0 && (
         <div className="mb-6 rounded-xl bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700 p-5">
           <h3 className="font-bold text-amber-800 dark:text-amber-300 mb-1">
             {locations.length === 1 ? "Confirm Your Square Location" : "Select Your Square Location"}
@@ -243,13 +283,19 @@ export default function ConnectSquarePage() {
                 key={loc.id}
                 onClick={() => handleSetLocation(loc.id)}
                 disabled={settingLocation}
-                className="w-full flex items-center justify-between text-left px-4 py-3 bg-white dark:bg-neutral-800 rounded-lg border border-amber-200 dark:border-amber-700 hover:border-amber-400 transition disabled:opacity-50"
+                className="w-full flex items-center justify-between text-left px-4 py-3 bg-white dark:bg-neutral-800 rounded-lg border border-amber-200 dark:border-amber-700 hover:border-amber-400 transition disabled:opacity-60"
               >
                 <span className="font-medium text-gray-900 dark:text-white">{loc.name}</span>
                 <span className="text-xs text-gray-400 font-mono">{loc.id}</span>
               </button>
             ))}
           </div>
+          <button
+            onClick={() => setShowLocationPicker(false)}
+            className="mt-3 text-xs text-amber-600 hover:text-amber-700 underline"
+          >
+            Cancel
+          </button>
         </div>
       )}
 
@@ -267,6 +313,10 @@ export default function ConnectSquarePage() {
           </div>
           {loadingStatus ? (
             <span className="text-xs text-gray-400">Loading...</span>
+          ) : needsReauth ? (
+            <span className="bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 text-xs font-semibold px-3 py-1 rounded-full">
+              Reconnect Required
+            </span>
           ) : isConnected ? (
             <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold px-3 py-1 rounded-full">
               Connected
@@ -279,12 +329,14 @@ export default function ConnectSquarePage() {
         </div>
 
         <div className="p-6">
-          {isConnected ? (
+          {isConnected && !needsReauth ? (
             <div className="space-y-4">
               <div className="bg-gray-50 dark:bg-neutral-800 rounded-xl p-4 text-sm space-y-2">
                 <div className="flex justify-between">
                   <span className="text-gray-500 dark:text-gray-400">Merchant ID</span>
-                  <span className="font-mono text-gray-700 dark:text-gray-300 text-xs">{posStatus?.merchant_id || "—"}</span>
+                  <span className="font-mono text-gray-700 dark:text-gray-300 text-xs">
+                    {posStatus?.merchant_id || "—"}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-500 dark:text-gray-400">Location</span>
@@ -292,7 +344,7 @@ export default function ConnectSquarePage() {
                     <span className="text-green-600 dark:text-green-400 font-medium text-xs">Set ✓</span>
                   ) : (
                     <button
-                      onClick={fetchLocations}
+                      onClick={openLocationPicker}
                       className="text-amber-600 hover:text-amber-700 text-xs font-semibold underline"
                     >
                       Select location →
@@ -318,7 +370,7 @@ export default function ConnectSquarePage() {
                 <button
                   onClick={handleSync}
                   disabled={syncing}
-                  className="flex-1 bg-black dark:bg-white text-white dark:text-black rounded-xl py-2.5 px-4 font-medium text-sm hover:bg-gray-800 dark:hover:bg-gray-100 transition disabled:opacity-50"
+                  className="flex-1 bg-black dark:bg-white text-white dark:text-black rounded-xl py-2.5 px-4 font-medium text-sm hover:bg-gray-800 dark:hover:bg-gray-100 transition disabled:opacity-60"
                 >
                   {syncing ? (
                     <span className="flex items-center justify-center gap-2">
@@ -346,7 +398,7 @@ export default function ConnectSquarePage() {
                   Reconnect Square account
                 </button>
                 <button
-                  onClick={fetchLocations}
+                  onClick={openLocationPicker}
                   className="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 underline"
                 >
                   Change location
@@ -355,13 +407,14 @@ export default function ConnectSquarePage() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl">
-                <span className="text-amber-500 text-lg shrink-0">⚠️</span>
-                <p className="text-sm text-amber-800 dark:text-amber-300 font-medium">
-                  Square is required to accept mobile orders. Without it, customers cannot checkout and orders will not reach
-                  you.
-                </p>
-              </div>
+              {!needsReauth && (
+                <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl">
+                  <span className="text-amber-500 text-lg shrink-0">⚠️</span>
+                  <p className="text-sm text-amber-800 dark:text-amber-300 font-medium">
+                    Square is required to accept mobile orders. Without it, customers cannot checkout and orders will not reach you.
+                  </p>
+                </div>
+              )}
 
               <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-300">
                 {[
@@ -380,7 +433,7 @@ export default function ConnectSquarePage() {
               <button
                 onClick={handleConnect}
                 disabled={connecting || !shopId}
-                className="w-full bg-black dark:bg-white text-white dark:text-black rounded-xl py-3 px-4 font-semibold text-sm hover:bg-gray-800 dark:hover:bg-gray-100 transition disabled:opacity-50"
+                className="w-full bg-black dark:bg-white text-white dark:text-black rounded-xl py-3 px-4 font-semibold text-sm hover:bg-gray-800 dark:hover:bg-gray-100 transition disabled:opacity-60"
               >
                 {connecting ? (
                   <span className="flex items-center justify-center gap-2">
@@ -389,6 +442,8 @@ export default function ConnectSquarePage() {
                   </span>
                 ) : !shopId ? (
                   "Complete shop setup first"
+                ) : needsReauth ? (
+                  "Reconnect Square →"
                 ) : (
                   "Connect Square →"
                 )}
