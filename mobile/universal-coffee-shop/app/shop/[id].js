@@ -6,23 +6,58 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import WebView from 'react-native-webview';
 import { useCart } from '../../context/CartContext';
 import { supabase } from '../../lib/supabase';
 
 const { width } = Dimensions.get('window');
 
+// Full day names — matches web shop-settings page.
+const DAYS_FULL  = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+const DAYS_SHORT = ['sun','mon','tue','wed','thu','fri','sat'];
+
 const isOpenNow = (hours) => {
   if (!hours) return null;
   try {
-    const now  = new Date();
-    const day  = ['sun','mon','tue','wed','thu','fri','sat'][now.getDay()];
-    const h    = hours[day];
+    const now = new Date();
+    const idx = now.getDay();
+    const h   = hours[DAYS_FULL[idx]] || hours[DAYS_SHORT[idx]];
     if (!h || h.closed) return false;
     const [oH, oM] = (h.open  || '00:00').split(':').map(Number);
     const [cH, cM] = (h.close || '23:59').split(':').map(Number);
     const cur = now.getHours() * 60 + now.getMinutes();
     return cur >= oH * 60 + oM && cur <= cH * 60 + cM;
   } catch { return null; }
+};
+
+// SVG-safe image (RN <Image> can't render SVG; route through a tiny WebView)
+const isSvgUrl = (url) => typeof url === 'string' && url.split('?')[0].toLowerCase().endsWith('.svg');
+
+const SvgImage = ({ uri, style, resizeMode = 'cover' }) => {
+  const objectFit = resizeMode === 'contain' ? 'contain' : 'cover';
+  const html = `<!DOCTYPE html><html><head>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <style>
+      html,body{margin:0;padding:0;background:transparent;height:100%;width:100%;overflow:hidden}
+      img{width:100%;height:100%;object-fit:${objectFit};display:block}
+    </style></head>
+    <body><img src="${uri}" /></body></html>`;
+  return (
+    <WebView
+      style={[style, { backgroundColor: 'transparent' }]}
+      originWhitelist={['*']}
+      source={{ html, baseUrl: 'https://loyalcupapp.com' }}
+      scrollEnabled={false}
+      androidLayerType="software"
+      pointerEvents="none"
+    />
+  );
+};
+
+const ShopImage = ({ uri, style, resizeMode }) => {
+  if (!uri) return null;
+  if (isSvgUrl(uri)) return <SvgImage uri={uri} style={style} resizeMode={resizeMode} />;
+  return <Image source={{ uri }} style={style} resizeMode={resizeMode} />;
 };
 
 export default function ShopDetailScreen() {
@@ -48,7 +83,6 @@ export default function ShopDetailScreen() {
 
   const loadShopData = async () => {
     try {
-      // FIXED: load modifier_options separately — avoids FK join issues
       const [shopResp, catResp, itemResp, modGroupResp, modOptResp, offersResp] = await Promise.all([
         supabase.from('shops').select('*').eq('id', id).single(),
         supabase.from('categories').select('*').eq('shop_id', id).order('display_order', { ascending: true }),
@@ -60,7 +94,6 @@ export default function ShopDetailScreen() {
 
       if (shopResp.error) throw shopResp.error;
 
-      // Manually attach options to their groups
       const options = modOptResp.data || [];
       const groups  = (modGroupResp.data || []).map(g => ({
         ...g,
@@ -105,7 +138,6 @@ export default function ShopDetailScreen() {
   const handleAddToCart = () => {
     if (!selectedItem) return;
     const customizations = Object.values(selectedMods).flat();
-    // FIXED: column is price_adjustment not price_delta
     const extraPrice     = customizations.reduce((s, c) => s + (parseFloat(c.price_adjustment) || 0), 0);
     const unitPrice      = parseFloat(selectedItem.base_price) + extraPrice;
 
@@ -135,14 +167,13 @@ export default function ShopDetailScreen() {
   }, {});
 
   const modItemGroups  = selectedItem ? getItemModGroups(selectedItem) : [];
-  // FIXED: use price_adjustment not price_delta
   const modsExtraPrice = Object.values(selectedMods).flat().reduce((s, c) => s + (parseFloat(c.price_adjustment) || 0), 0);
   const cartCount      = getItemCount();
   const openStatus     = isOpenNow(shop?.hours);
 
   const renderMenuItem = (item) => (
     <TouchableOpacity key={item.id} style={styles.menuItem} onPress={() => openModifierModal(item)} activeOpacity={0.85}>
-      {item.image_url && <Image source={{ uri: item.image_url }} style={styles.menuItemImage} />}
+      {item.image_url && <ShopImage uri={item.image_url} style={styles.menuItemImage} />}
       <View style={styles.menuItemContent}>
         <Text style={styles.menuItemName} numberOfLines={2}>{item.name}</Text>
         {item.description && <Text style={styles.menuItemDesc} numberOfLines={2}>{item.description}</Text>}
@@ -185,18 +216,23 @@ export default function ShopDetailScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}>
 
-        <View style={styles.shopInfo}>
+        {/* Hero band: green wash + big logo on a white ring */}
+        <View style={styles.heroBand}>
           <View style={styles.shopLogoWrap}>
             {shop.logo_url
-              ? <Image source={{ uri: shop.logo_url }} style={styles.shopLogo} />
-              : <View style={[styles.shopLogo, styles.shopLogoPlaceholder]}><Feather name="coffee" size={36} color="#00704A" /></View>}
+              ? <ShopImage uri={shop.logo_url} style={styles.shopLogo} resizeMode="contain" />
+              : <View style={[styles.shopLogo, styles.shopLogoPlaceholder]}><Feather name="coffee" size={56} color="#00704A" /></View>}
           </View>
+        </View>
+
+        <View style={styles.shopInfo}>
           {openStatus !== null && (
             <View style={[styles.openChip, { backgroundColor: openStatus ? '#dcfce7' : '#f3f4f6' }]}>
               <View style={[styles.openDot, { backgroundColor: openStatus ? '#16a34a' : '#9ca3af' }]} />
               <Text style={[styles.openChipText, { color: openStatus ? '#16a34a' : '#6b7280' }]}>{openStatus ? 'Open now' : 'Closed'}</Text>
             </View>
           )}
+          <Text style={styles.shopHeadline}>{shop.name}</Text>
           {shop.description && <Text style={styles.shopDesc}>{shop.description}</Text>}
           <View style={styles.shopActions}>
             {shop.phone   && <TouchableOpacity style={styles.actionBtn} onPress={handleCall}><Feather name="phone" size={16} color="#00704A" /><Text style={styles.actionBtnText}>Call</Text></TouchableOpacity>}
@@ -242,27 +278,31 @@ export default function ShopDetailScreen() {
 
         <View style={styles.menuContainer}>
           {selectedCategory === 'all'
-            ? categories.map(cat => {
-                const items = itemsByCategory[cat.id] || [];
-                if (!items.length) return null;
-                return (
-                  <View key={cat.id} style={styles.catSection}>
-                    <Text style={styles.catSectionTitle}>{cat.name}</Text>
-                    {cat.description && <Text style={styles.catSectionDesc}>{cat.description}</Text>}
-                    <View style={styles.menuGrid}>{items.map(renderMenuItem)}</View>
+            ? (
+              <>
+                {categories.map(cat => {
+                  const items = itemsByCategory[cat.id] || [];
+                  if (!items.length) return null;
+                  return (
+                    <View key={cat.id} style={styles.catSection}>
+                      <Text style={styles.catSectionTitle}>{cat.name}</Text>
+                      {cat.description && <Text style={styles.catSectionDesc}>{cat.description}</Text>}
+                      <View style={styles.menuGrid}>{items.map(renderMenuItem)}</View>
+                    </View>
+                  );
+                })}
+                {itemsByCategory.uncategorized?.length > 0 && (
+                  <View style={styles.catSection}>
+                    <Text style={styles.catSectionTitle}>{categories.length ? 'Other items' : 'Menu'}</Text>
+                    <View style={styles.menuGrid}>{itemsByCategory.uncategorized.map(renderMenuItem)}</View>
                   </View>
-                );
-              })
+                )}
+              </>
+            )
             : filteredItems.length === 0
-            ? <View style={styles.emptyMenu}><Feather name="coffee" size={48} color="#DDD" /><Text style={styles.emptyMenuText}>No items here</Text></View>
-            : <View style={styles.menuGrid}>{filteredItems.map(renderMenuItem)}</View>
+              ? <View style={styles.emptyMenu}><Feather name="coffee" size={48} color="#DDD" /><Text style={styles.emptyMenuText}>No items here</Text></View>
+              : <View style={styles.menuGrid}>{filteredItems.map(renderMenuItem)}</View>
           }
-          {itemsByCategory.uncategorized?.length > 0 && selectedCategory === 'all' && (
-            <View style={styles.catSection}>
-              <Text style={styles.catSectionTitle}>Menu Items</Text>
-              <View style={styles.menuGrid}>{itemsByCategory.uncategorized.map(renderMenuItem)}</View>
-            </View>
-          )}
         </View>
 
         <View style={{ height: 120 }} />
@@ -296,7 +336,6 @@ export default function ShopDetailScreen() {
               {modItemGroups.length === 0
                 ? <Text style={styles.noModsText}>No customizations available.</Text>
                 : modItemGroups.map(group => {
-                    // FIXED: no selection_type column — use max_selections only
                     const isRadio  = group.max_selections === 1;
                     const selected = selectedMods[group.id] || [];
                     return (
@@ -315,7 +354,6 @@ export default function ShopDetailScreen() {
                             <TouchableOpacity key={opt.id} style={[styles.modOption, sel && styles.modOptionSel]} onPress={() => toggleMod(group.id, opt, isRadio)}>
                               <Text style={[styles.modOptName, sel && styles.modOptNameSel]}>{opt.name}</Text>
                               <View style={styles.modOptRight}>
-                                {/* FIXED: price_adjustment not price_delta */}
                                 {(opt.price_adjustment || 0) > 0 && (
                                   <Text style={[styles.modOptPrice, sel && styles.modOptPriceSel]}>
                                     +${parseFloat(opt.price_adjustment).toFixed(2)}
@@ -370,18 +408,30 @@ const styles = StyleSheet.create({
   header:               { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
   headerBtn:            { padding: 8, position: 'relative' },
   headerTitle:          { fontSize: 18, fontWeight: '700', color: '#000', flex: 1, textAlign: 'center', paddingHorizontal: 12 },
-  cartBadge:            { position: 'absolute', top: 3, right: 3, backgroundColor: '#FF3B30', borderRadius: 9, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 },
+  cartBadge:            { position: 'absolute', top: 3, right: 3, backgroundColor: '#FF3B30', borderRadius: 9, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5 },
   cartBadgeText:        { color: '#FFF', fontSize: 11, fontWeight: '800' },
-  shopInfo:             { backgroundColor: '#FFF', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 20, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  shopLogoWrap:         { width: 90, height: 90, borderRadius: 45, overflow: 'hidden', marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
+
+  // Hero band: a calm tinted backdrop behind a much larger logo
+  heroBand:             { backgroundColor: '#E8F5E9', paddingTop: 28, paddingBottom: 26, alignItems: 'center' },
+  shopLogoWrap:         {
+    width: 140, height: 140, borderRadius: 70,
+    backgroundColor: '#FFF',
+    overflow: 'hidden',
+    borderWidth: 4, borderColor: '#FFFFFF',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.18, shadowRadius: 12, elevation: 6,
+    alignItems: 'center', justifyContent: 'center',
+  },
   shopLogo:             { width: '100%', height: '100%' },
   shopLogoPlaceholder:  { backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
+
+  shopInfo:             { backgroundColor: '#FFF', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  shopHeadline:         { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 6, textAlign: 'center' },
   openChip:             { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, marginBottom: 10 },
   openDot:              { width: 7, height: 7, borderRadius: 4 },
   openChipText:         { fontSize: 12, fontWeight: '700' },
   shopDesc:             { fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 20, marginBottom: 14, paddingHorizontal: 8 },
   shopActions:          { flexDirection: 'row', gap: 10 },
-  actionBtn:            { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10, backgroundColor: '#E8F5E9', borderRadius: 20, borderWidth: 1, borderColor: '#00704A' },
+  actionBtn:            { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10, backgroundColor: '#E8F5E9', borderRadius: 20, borderWidth: 1, borderColor: '#C8E6C9' },
   actionBtnText:        { fontSize: 14, fontWeight: '600', color: '#00704A' },
   offersSection:        { paddingTop: 16, paddingBottom: 4 },
   offersSectionLabel:   { fontSize: 11, fontWeight: '700', color: '#f59e0b', letterSpacing: 1.2, paddingHorizontal: 16, marginBottom: 10 },
@@ -401,7 +451,7 @@ const styles = StyleSheet.create({
   catSectionTitle:      { fontSize: 20, fontWeight: '800', color: '#000', paddingHorizontal: 16, marginBottom: 4 },
   catSectionDesc:       { fontSize: 13, color: '#999', paddingHorizontal: 16, marginBottom: 12 },
   menuGrid:             { paddingHorizontal: 10, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  menuItem:             { width: (width - 28) / 2, backgroundColor: '#FFF', borderRadius: 14, marginBottom: 12, marginHorizontal: 3, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 },
+  menuItem:             { width: (width - 28) / 2, backgroundColor: '#FFF', borderRadius: 14, marginBottom: 12, marginHorizontal: 3, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1 },
   menuItemImage:        { width: '100%', height: 120, backgroundColor: '#F5F5F5' },
   menuItemContent:      { padding: 10 },
   menuItemName:         { fontSize: 14, fontWeight: '700', color: '#000', marginBottom: 3 },
@@ -411,7 +461,7 @@ const styles = StyleSheet.create({
   addButton:            { width: 32, height: 32, borderRadius: 16, backgroundColor: '#00704A', justifyContent: 'center', alignItems: 'center' },
   emptyMenu:            { alignItems: 'center', paddingVertical: 48 },
   emptyMenuText:        { fontSize: 15, color: '#CCC', marginTop: 12 },
-  floatingCart:         { position: 'absolute', bottom: 20, left: 16, right: 16, backgroundColor: '#00704A', borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 8 },
+  floatingCart:         { position: 'absolute', bottom: 20, left: 16, right: 16, backgroundColor: '#00704A', borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 5 },
   floatingCartInner:    { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, gap: 10 },
   floatingCartBadge:    { backgroundColor: '#FFF', borderRadius: 11, minWidth: 22, height: 22, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6 },
   floatingCartBadgeText:{ color: '#00704A', fontSize: 13, fontWeight: '800' },
@@ -430,7 +480,7 @@ const styles = StyleSheet.create({
   modGroupName:         { fontSize: 15, fontWeight: '700', color: '#000' },
   modGroupTag:          { backgroundColor: '#F5F5F5', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
   modGroupTagText:      { fontSize: 11, color: '#999', fontWeight: '600' },
-  modOption:            { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1.5, borderColor: '#E5E5E5', marginBottom: 8 },
+  modOption:            { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1.5, borderColor: '#F0F0F0', marginBottom: 8 },
   modOptionSel:         { borderColor: '#00704A', backgroundColor: '#F0FAF5' },
   modOptName:           { fontSize: 14, color: '#000', flex: 1 },
   modOptNameSel:        { color: '#00704A', fontWeight: '600' },

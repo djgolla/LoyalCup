@@ -2,6 +2,11 @@
  * Home screen — shop discovery
  * Filters: All · Nearby (device GPS) · Open Now (hours JSON) · Popular (review_count)
  * Shows active shop offers inline on cards
+ *
+ * FIXES:
+ *  - Hours day keys now match what the web shop-settings page writes
+ *    (full names: monday, tuesday, ...) — previously short keys missed every day → always "Closed"
+ *  - SVG logos render via a tiny WebView since RN <Image> can't render SVG
  */
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -12,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
+import WebView from 'react-native-webview';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { supabase } from '../lib/supabase';
@@ -27,13 +33,18 @@ const haversineKm = (lat1, lon1, lat2, lon2) => {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
+// Full day names — matches what the web shop-settings page saves into shops.hours.
+const DAYS_FULL = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+// Short fallback for any legacy rows still using abbreviations.
+const DAYS_SHORT = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
 const isOpenNow = (shop) => {
-  const hours = shop.hours;
+  const hours = shop?.hours;
   if (!hours) return null;
   try {
     const now    = new Date();
-    const day    = ['sun','mon','tue','wed','thu','fri','sat'][now.getDay()];
-    const todayH = hours[day];
+    const idx    = now.getDay();
+    const todayH = hours[DAYS_FULL[idx]] || hours[DAYS_SHORT[idx]];
     if (!todayH || todayH.closed) return false;
     const [oH, oM] = (todayH.open  || '00:00').split(':').map(Number);
     const [cH, cM] = (todayH.close || '23:59').split(':').map(Number);
@@ -46,6 +57,37 @@ const getGreeting = (name) => {
   const h    = new Date().getHours();
   const time = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   return name ? `${time}, ${name.split(' ')[0]}! ☕` : `${time}! ☕`;
+};
+
+// ── SVG-safe image. RN <Image> cannot render SVG.
+// For svg URLs we use a tiny WebView fallback; for everything else we use Image.
+const isSvgUrl = (url) => typeof url === 'string' && url.split('?')[0].toLowerCase().endsWith('.svg');
+
+const SvgImage = ({ uri, style, resizeMode = 'cover' }) => {
+  const objectFit = resizeMode === 'contain' ? 'contain' : 'cover';
+  const html = `<!DOCTYPE html><html><head>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <style>
+      html,body{margin:0;padding:0;background:transparent;height:100%;width:100%;overflow:hidden}
+      img{width:100%;height:100%;object-fit:${objectFit};display:block}
+    </style></head>
+    <body><img src="${uri}" /></body></html>`;
+  return (
+    <WebView
+      style={[style, { backgroundColor: 'transparent' }]}
+      originWhitelist={['*']}
+      source={{ html, baseUrl: 'https://loyalcupapp.com' }}
+      scrollEnabled={false}
+      androidLayerType="software"
+      pointerEvents="none"
+    />
+  );
+};
+
+const ShopImage = ({ uri, style, resizeMode }) => {
+  if (!uri) return null;
+  if (isSvgUrl(uri)) return <SvgImage uri={uri} style={style} resizeMode={resizeMode} />;
+  return <Image source={{ uri }} style={style} resizeMode={resizeMode} />;
 };
 
 const ShopCard = ({ item, onPress, distanceKm }) => {
@@ -64,7 +106,7 @@ const ShopCard = ({ item, onPress, distanceKm }) => {
 
       <View style={styles.shopImageContainer}>
         {item.logo_url
-          ? <Image source={{ uri: item.logo_url }} style={styles.shopImage} />
+          ? <ShopImage uri={item.logo_url} style={styles.shopImage} />
           : <View style={styles.shopImagePlaceholder}><Feather name="coffee" size={36} color="#00704A" /></View>
         }
         {open !== null && (
@@ -377,7 +419,7 @@ const styles = StyleSheet.create({
   subGreeting:          { fontSize: 13, color: '#999', marginTop: 2 },
   headerButtons:        { flexDirection: 'row', gap: 10 },
   headerButton:         { width: 42, height: 42, borderRadius: 21, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center', position: 'relative' },
-  headerBadge:          { position: 'absolute', top: -3, right: -3, backgroundColor: '#FF3B30', borderRadius: 9, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 },
+  headerBadge:          { position: 'absolute', top: -3, right: -3, backgroundColor: '#FF3B30', borderRadius: 9, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5 },
   headerBadgeText:      { color: '#FFF', fontSize: 11, fontWeight: '800' },
   searchContainer:      { marginBottom: 12 },
   searchBar:            { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, gap: 10 },
@@ -389,10 +431,10 @@ const styles = StyleSheet.create({
   filterChipTextActive: { color: '#FFF' },
   resultsCount:         { paddingTop: 4, paddingBottom: 8, fontSize: 12, fontWeight: '600', color: '#999' },
   shopsList:            { paddingHorizontal: 16, paddingBottom: 24 },
-  shopCard:             { backgroundColor: '#FFF', borderRadius: 16, marginBottom: 14, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 2 },
+  shopCard:             { backgroundColor: '#FFF', borderRadius: 16, marginBottom: 14, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 6, elevation: 2 },
   offerRibbon:          { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#f59e0b', paddingHorizontal: 12, paddingVertical: 5 },
   offerRibbonText:      { color: '#fff', fontSize: 11, fontWeight: '700' },
-  shopImageContainer:   { width: '100%', height: 130, position: 'relative' },
+  shopImageContainer:   { width: '100%', height: 130, position: 'relative', backgroundColor: '#E8F5E9' },
   shopImage:            { width: '100%', height: '100%' },
   shopImagePlaceholder: { width: '100%', height: '100%', backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
   openBadge:            { position: 'absolute', top: 10, right: 10, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },

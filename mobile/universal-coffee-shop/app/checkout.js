@@ -3,6 +3,11 @@
  * - Square Web Payments SDK via WebView (per-shop location, not global)
  * - Loyalty points redemption handled atomically by backend
  * - POST /api/v1/payments/create → Square creates order + charges card + awards points
+ *
+ * IMPORTANT: WebView must be loaded with baseUrl='https://...' so that
+ * window.isSecureContext === true. Square Web SDK refuses to attach to
+ * insecure contexts (about:blank has no origin). This is the fix for the
+ * "Web Payments SDK can only be embedded on sites that use https" error.
  */
 import React, { useState, useEffect } from 'react';
 import {
@@ -139,8 +144,6 @@ export default function CheckoutScreen() {
     })();
   }, []);
 
-  // FIX Bug 3: watch the actual shopId, not just cart.length,
-  // so locationId refreshes if user switches shops
   const activeShopId = cart.length > 0 ? Object.keys(itemsByShop)[0] : null;
 
   useEffect(() => {
@@ -163,7 +166,7 @@ export default function CheckoutScreen() {
         setLocationLoading(false);
       }
     })();
-  }, [activeShopId]); // ← fixed: watch activeShopId, not cart.length
+  }, [activeShopId]);
 
   const getPointsChips = () => {
     if (maxRedeemable <= 0) return [];
@@ -213,8 +216,6 @@ export default function CheckoutScreen() {
         customizations: item.customizations || [],
       }));
 
-      // FIX Bug 1: POST to /api/v1/payments/create (not /api/v1/orders)
-      // /api/v1/orders is cash/manual only — card payments go through payments/create
       const result = await apiClient.post('/api/v1/payments/create', {
         shop_id:                  shopId,
         items:                    orderItems,
@@ -227,7 +228,6 @@ export default function CheckoutScreen() {
       setPointsToRedeem(0);
 
       const orderId   = result.order_id;
-      // FIX Bug 2: payments/create returns "charged", not "total_charged"
       const charged   = result.charged ?? estimatedTotal;
       const pointsMsg = pointsToRedeem > 0
         ? `\n💰 Saved $${pointsDiscount.toFixed(2)} with points`
@@ -439,10 +439,19 @@ export default function CheckoutScreen() {
             <WebView
               style={styles.webView}
               originWhitelist={['*']}
-              source={{ html: getSquareHTML(SQUARE_APP_ID, shopLocationId || '') }}
+              // ─── FIX: provide an https baseUrl so window.isSecureContext === true ───
+              // Square's Web Payments SDK refuses to load on insecure origins.
+              // Without baseUrl the page lives at about:blank → no origin → SDK errors.
+              // The URL is not actually fetched; it only sets the document origin.
+              source={{
+                html:    getSquareHTML(SQUARE_APP_ID, shopLocationId || ''),
+                baseUrl: 'https://loyalcupapp.com',
+              }}
               onMessage={handleWebViewMessage}
               javaScriptEnabled
               domStorageEnabled
+              mixedContentMode="never"
+              setSupportMultipleWindows={false}
               keyboardDisplayRequiresUserAction={false}
               scrollEnabled={false}
             />
@@ -504,7 +513,7 @@ const styles = StyleSheet.create({
   totalValue:          { fontSize: 17, fontWeight: '700', color: '#000' },
   taxNote:             { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingBottom: 14 },
   taxNoteText:         { fontSize: 12, color: '#999', flex: 1 },
-  infoBox:             { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginHorizontal: 16, marginTop: 12, backgroundColor: '#FFF', borderRadius: 12, borderWidth: 1, borderColor: '#F0F0F0', padding: 14 },
+  infoBox:             { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginHorizontal: 16, marginTop: 12, backgroundColor: '#FFF', borderRadius: 12, borderWidth: 1, borderColor: '#F0F0F0', padding: 12 },
   infoText:            { flex: 1, fontSize: 13, color: '#00704A', lineHeight: 18 },
   footer:              { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFF', padding: 20, paddingBottom: 30, borderTopWidth: 1, borderTopColor: '#F0F0F0' },
   payButton:           { backgroundColor: '#000', padding: 18, borderRadius: 14 },
@@ -514,7 +523,7 @@ const styles = StyleSheet.create({
   poweredBy:           { textAlign: 'center', fontSize: 12, color: '#999', marginTop: 10 },
   modalContainer:      { flex: 1, backgroundColor: '#FFF' },
   modalHeader:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  modalAmount:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  modalAmount:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F0F0F0', backgroundColor: '#FAFAFA' },
   modalAmountLabel:    { fontSize: 15, color: '#666' },
   modalAmountValue:    { fontSize: 24, fontWeight: '700', color: '#000' },
   webView:             { flex: 1, backgroundColor: '#FFF' },
