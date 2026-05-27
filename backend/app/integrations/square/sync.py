@@ -2,14 +2,13 @@
 Square catalog sync: maps Square's raw catalog objects into LoyalCup's live DB:
   categories, menu_items, modifier_groups, modifier_options.
 
-Schema notes (live Supabase, NOT the older repo migrations):
-  - categories(id, shop_id, name, display_order, description, pos_id, pos_source)
-    * pos_id / pos_source added by the migration; used for idempotent re-sync.
-    * NO is_active column. NO sort_order column (it's display_order).
-  - menu_items.category_id REFERENCES categories(id)  ← FK lives on this table
-  - menu_items(.., pos_id, pos_source, modifier_group_ids, is_active, is_available, is_out_of_stock)
-  - modifier_groups(.., min_selections, max_selections, pos_id, pos_source, is_active)
-  - modifier_options(.., modifier_group_id, shop_id, name, price_adjustment, pos_id, pos_source, is_active)
+IMPORTANT FIX (2026-05-27):
+  menu_items.pos_id now stores the Square ITEM_VARIATION id, NOT the ITEM id.
+  Reason: Square's CreateOrder API requires variation ids in line_items[].catalog_object_id.
+  Storing the parent ITEM id caused "item variation with catalog object id X not found"
+  at checkout time.
+
+  modifier_options.pos_id continues to store the modifier id (Square accepts those directly).
 
 Idempotent: every entity is matched on (shop_id, pos_id) and upserted.
 """
@@ -33,10 +32,7 @@ async def sync_square_catalog(
     source: str = "square",
     images_by_id: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
-    """
-    Takes raw Square catalog objects and upserts them into LoyalCup's DB.
-    Returns a summary of what was synced.
-    """
+    """Takes raw Square catalog objects and upserts them into LoyalCup's DB."""
     client = db.service_client
 
     raw_categories:     List[Dict] = []
@@ -58,7 +54,7 @@ async def sync_square_catalog(
             if url:
                 raw_images[obj["id"]] = url
 
-    # ── SYNC CATEGORIES ──────────────────────────────────────────────────────
+    # ── CATEGORIES ───────────────────────────────────────────────────────────
     category_pos_id_to_lc_id: Dict[str, str] = {}
     categories_synced = 0
 
@@ -97,7 +93,7 @@ async def sync_square_catalog(
         categories_synced += 1
         logger.info(f"[sync] category: {name} (pos_id={pos_id})")
 
-    # ── SYNC MODIFIER GROUPS ─────────────────────────────────────────────────
+    # ── MODIFIER GROUPS + OPTIONS ────────────────────────────────────────────
     modifier_list_pos_id_to_lc_id: Dict[str, str] = {}
     modifier_groups_synced = 0
     modifier_options_synced = 0
@@ -142,11 +138,9 @@ async def sync_square_catalog(
         modifier_list_pos_id_to_lc_id[pos_id] = lc_id
         modifier_groups_synced += 1
 
-        # ── modifier options ──
         for mod in ml_data.get("modifiers") or []:
             mod_pos_id = mod.get("id")
             if not mod_pos_id:
-                logger.warning(f"[sync] modifier in list {pos_id} has no id, skipping")
                 continue
 
             mod_data    = mod.get("modifier_data") or {}
@@ -172,28 +166,28 @@ async def sync_square_catalog(
                 }).eq("id", existing_mod.data[0]["id"]).execute()
             else:
                 client.table("modifier_options").insert({
-                    "id":               str(uuid.uuid4()),
+                    "id":                str(uuid.uuid4()),
                     "modifier_group_id": lc_id,
-                    "shop_id":          shop_id,
-                    "name":             mod_name,
-                    "price_adjustment": price,
-                    "pos_id":           mod_pos_id,
-                    "pos_source":       source,
-                    "is_active":        True,
+                    "shop_id":           shop_id,
+                    "name":              mod_name,
+                    "price_adjustment":  price,
+                    "pos_id":            mod_pos_id,
+                    "pos_source":        source,
+                    "is_active":         True,
                 }).execute()
 
             modifier_options_synced += 1
 
-    # ── SYNC ITEMS ───────────────────────────────────────────────────────────
+    # ── ITEMS ────────────────────────────────────────────────────────────────
     items_synced = 0
 
     for item in raw_items:
-        pos_id      = item["id"]
+        item_pos_id = item["id"]   # parent ITEM id — kept only as fallback for legacy lookups
         item_data   = item.get("item_data", {})
         name        = item_data.get("name") or "Item"
         description = item_data.get("description")
 
-        # Resolve category — try reporting_category first, then category, then categories[]
+        # Resolve category — try reporting_category, then category, then categories[]
         category_lc_id = None
         for cat_ref in [
             item_data.get("reporting_category"),
@@ -207,14 +201,23 @@ async def sync_square_catalog(
                 category_lc_id = found
                 break
 
-        # Price: first variation — default 0.0 (DB constraint disallows NULL)
-        price: float = 0.0
+        # ── First variation drives price + the pos_id we store ──
+        # Square requires the ITEM_VARIATION id (not the parent ITEM id) when
+        # building order line items, so we persist the variation id as pos_id.
         variations = item_data.get("variations") or []
-        if variations:
-            var_data    = variations[0].get("item_variation_data", {})
-            price_money = var_data.get("price_money")
-            if price_money:
-                price = _cents_to_dollars(price_money.get("amount"))
+        if not variations:
+            logger.warning(f"[sync] item {name} ({item_pos_id}) has no variations — skipping")
+            continue
+
+        first_var      = variations[0]
+        variation_id   = first_var.get("id")
+        var_data       = first_var.get("item_variation_data", {}) or {}
+        price_money    = var_data.get("price_money")
+        price: float   = _cents_to_dollars(price_money.get("amount")) if price_money else 0.0
+
+        if not variation_id:
+            logger.warning(f"[sync] item {name} has variation with no id — skipping")
+            continue
 
         # Image — try image_ids list, then direct image_id
         image_url = None
@@ -234,47 +237,40 @@ async def sync_square_catalog(
                 if ml_ref.get("enabled") is not False:
                     lc_modifier_group_ids.append(modifier_list_pos_id_to_lc_id[mid])
 
+        # Match on either the new variation id OR the legacy item id so re-sync
+        # after this bugfix migrates existing rows in place (no orphans).
         existing = (
             client.table("menu_items")
-            .select("id")
+            .select("id, pos_id")
             .eq("shop_id", shop_id)
-            .eq("pos_id", pos_id)
+            .in_("pos_id", [variation_id, item_pos_id])
             .limit(1)
             .execute()
         )
 
+        common_payload = {
+            "name":               name,
+            "description":        description,
+            "base_price":         price,
+            "image_url":          image_url,
+            "category_id":        category_lc_id,
+            "pos_id":             variation_id,   # ← THE FIX
+            "pos_source":         source,
+            "modifier_group_ids": lc_modifier_group_ids,
+            "is_active":          True,
+            "is_available":       True,
+        }
+
         if existing.data:
             lc_id = existing.data[0]["id"]
-            client.table("menu_items").update({
-                "name":               name,
-                "description":        description,
-                "base_price":         price,
-                "image_url":          image_url,
-                "category_id":        category_lc_id,
-                "pos_source":         source,
-                "modifier_group_ids": lc_modifier_group_ids,
-                "is_active":          True,
-                "is_available":       True,
-            }).eq("id", lc_id).execute()
+            client.table("menu_items").update(common_payload).eq("id", lc_id).execute()
         else:
-            lc_id = str(uuid.uuid4())
-            client.table("menu_items").insert({
-                "id":                 lc_id,
-                "shop_id":            shop_id,
-                "name":               name,
-                "description":        description,
-                "base_price":         price,
-                "image_url":          image_url,
-                "category_id":        category_lc_id,
-                "pos_id":             pos_id,
-                "pos_source":         source,
-                "modifier_group_ids": lc_modifier_group_ids,
-                "is_available":       True,
-                "is_active":          True,
-            }).execute()
+            common_payload["id"]      = str(uuid.uuid4())
+            common_payload["shop_id"] = shop_id
+            client.table("menu_items").insert(common_payload).execute()
 
         items_synced += 1
-        logger.info(f"[sync] item: {name} @ ${price} (pos_id={pos_id}, cat={category_lc_id})")
+        logger.info(f"[sync] item: {name} @ ${price} (variation_id={variation_id}, cat={category_lc_id})")
 
     summary = {
         "categories_synced":       categories_synced,

@@ -1,19 +1,11 @@
 /**
- * Checkout screen
- * - Square Web Payments SDK via WebView (per-shop location, not global)
- * - Loyalty points redemption handled atomically by backend
- * - POST /api/v1/payments/create → Square creates order + charges card + awards points
- *
- * IMPORTANT: WebView must be loaded with baseUrl='https://...' so that
- * window.isSecureContext === true. Square Web SDK refuses to attach to
- * insecure contexts (about:blank has no origin). This is the fix for the
- * "Web Payments SDK can only be embedded on sites that use https" error.
+ * Checkout — pulls dynamic redemption config + smart chips + custom stepper
+ * from /api/v1/loyalty/balance/:shopId. No more hardcoded 100pts=$1.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
-  StyleSheet, Text, View, TouchableOpacity,
-  ScrollView, Alert, ActivityIndicator, Modal,
-  Platform, KeyboardAvoidingView,
+  StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert,
+  ActivityIndicator, Modal, Platform, KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -21,8 +13,8 @@ import { useRouter } from 'expo-router';
 import WebView from 'react-native-webview';
 import { useCart } from '../context/CartContext';
 import { supabase } from '../lib/supabase';
-import { getGlobalPoints } from '../services/loyaltyService';
 import { apiClient } from '../services/apiClient';
+import { getBalanceForShop, previewRedeem } from '../services/loyaltyService';
 
 const SQUARE_APP_ID = process.env.EXPO_PUBLIC_SQUARE_APP_ID || '';
 
@@ -33,25 +25,19 @@ const getSquareHTML = (appId, locationId) => {
     : 'https://sandbox.web.squarecdn.com/v1/square.js';
 
   return `<!DOCTYPE html>
-<html>
-<head>
+<html><head>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <script src="${sdkUrl}"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, sans-serif; background: #fff; padding: 20px; }
-    #card-container { margin-bottom: 8px; min-height: 90px; }
-    #pay-button {
-      width: 100%; padding: 16px; background: #000; color: #fff;
-      border: none; border-radius: 12px; font-size: 16px; font-weight: 700;
-      cursor: pointer; margin-top: 12px;
-    }
-    #pay-button:disabled { opacity: 0.5; cursor: not-allowed; }
-    #status { margin-top: 10px; font-size: 13px; color: #666; text-align: center; min-height: 18px; }
-    .error { color: #e53e3e !important; }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,sans-serif;background:#fff;padding:20px}
+    #card-container{margin-bottom:8px;min-height:90px}
+    #pay-button{width:100%;padding:16px;background:#000;color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;margin-top:12px}
+    #pay-button:disabled{opacity:.5;cursor:not-allowed}
+    #status{margin-top:10px;font-size:13px;color:#666;text-align:center;min-height:18px}
+    .error{color:#e53e3e!important}
   </style>
-</head>
-<body>
+</head><body>
   <div id="card-container"></div>
   <button id="pay-button" disabled>Loading...</button>
   <div id="status"></div>
@@ -59,50 +45,35 @@ const getSquareHTML = (appId, locationId) => {
     let card;
     async function init() {
       if (!window.Square) {
-        document.getElementById('status').textContent = 'Square failed to load. Check your connection.';
-        document.getElementById('status').className = 'error';
+        document.getElementById('status').textContent='Square failed to load.';
+        document.getElementById('status').className='error';
         return;
       }
       try {
         const payments = window.Square.payments('${appId}', '${locationId}');
         card = await payments.card();
         await card.attach('#card-container');
-        document.getElementById('pay-button').textContent = 'Confirm Payment';
-        document.getElementById('pay-button').disabled = false;
+        document.getElementById('pay-button').textContent='Confirm Payment';
+        document.getElementById('pay-button').disabled=false;
       } catch(e) {
-        document.getElementById('status').textContent = 'Card form error: ' + e.message;
-        document.getElementById('status').className = 'error';
-        document.getElementById('pay-button').textContent = 'Confirm Payment';
-        document.getElementById('pay-button').disabled = false;
+        document.getElementById('status').textContent='Card form error: '+e.message;
+        document.getElementById('status').className='error';
       }
     }
     document.getElementById('pay-button').addEventListener('click', async () => {
-      const btn    = document.getElementById('pay-button');
-      const status = document.getElementById('status');
-      if (!card) { status.textContent = 'Card form not ready.'; return; }
-      btn.disabled = true;
-      status.textContent = 'Processing...';
-      status.className = '';
-      try {
-        const result = await card.tokenize();
-        if (result.status === 'OK') {
-          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'nonce', nonce: result.token }));
-        } else {
-          const errs = result.errors?.map(e => e.message).join(', ') || 'Tokenization failed';
-          status.textContent = errs;
-          status.className = 'error';
-          btn.disabled = false;
-        }
-      } catch(e) {
-        status.textContent = e.message || 'Error tokenizing card';
-        status.className = 'error';
-        btn.disabled = false;
-      }
+      const btn=document.getElementById('pay-button');
+      const status=document.getElementById('status');
+      if(!card){status.textContent='Card form not ready.';return;}
+      btn.disabled=true;status.textContent='Processing...';status.className='';
+      try{
+        const r=await card.tokenize();
+        if(r.status==='OK'){window.ReactNativeWebView.postMessage(JSON.stringify({type:'nonce',nonce:r.token}));}
+        else{status.textContent=(r.errors||[]).map(e=>e.message).join(', ')||'Tokenization failed';status.className='error';btn.disabled=false;}
+      }catch(e){status.textContent=e.message||'Error tokenizing card';status.className='error';btn.disabled=false;}
     });
     init();
   </script>
-</body>
-</html>`;
+</body></html>`;
 };
 
 export default function CheckoutScreen() {
@@ -111,11 +82,14 @@ export default function CheckoutScreen() {
 
   const [loading,          setLoading]          = useState(false);
   const [showPaymentSheet, setShowPaymentSheet] = useState(false);
-  const [globalPoints,     setGlobalPoints]     = useState(null);
-  const [pointsToRedeem,   setPointsToRedeem]   = useState(0);
-  const [showPointsPanel,  setShowPointsPanel]  = useState(false);
   const [shopLocationId,   setShopLocationId]   = useState(null);
   const [locationLoading,  setLocationLoading]  = useState(false);
+
+  // Loyalty state — driven entirely by backend
+  const [loyaltyBalance, setLoyaltyBalance] = useState(null);   // { current_balance, config, points_type }
+  const [pointsToRedeem, setPointsToRedeem] = useState(0);
+  const [preview,        setPreview]        = useState(null);   // last server-validated dry-run
+  const [showPointsPanel, setShowPointsPanel] = useState(false);
 
   const itemsByShop = cart.reduce((acc, item) => {
     const sid = item.shopId;
@@ -124,33 +98,17 @@ export default function CheckoutScreen() {
     return acc;
   }, {});
 
-  const subtotal        = cart.reduce((sum, item) => sum + (parseFloat(item.price) || 0) * (item.quantity || 1), 0);
-  const estimatedTax    = subtotal * 0.0875;
-  const availablePoints = globalPoints?.current_balance || 0;
-  const maxRedeemable   = Math.min(availablePoints, Math.floor(subtotal * 100));
-  const pointsDiscount  = pointsToRedeem * 0.01;
-  const estimatedTotal  = Math.max(0, subtotal + estimatedTax - pointsDiscount);
-
-  // Load user's loyalty points balance
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const pts = await getGlobalPoints(user.id);
-          setGlobalPoints(pts);
-        }
-      } catch (e) { console.error('loadUser:', e); }
-    })();
-  }, []);
+  const subtotal       = cart.reduce((s, i) => s + (parseFloat(i.price) || 0) * (i.quantity || 1), 0);
+  const subtotalCents  = Math.round(subtotal * 100);
+  const estimatedTax   = subtotal * 0.0875;
+  const pointsDiscount = (preview?.applied_points && preview?.valid) ? (preview.discount_cents / 100) : 0;
+  const estimatedTotal = Math.max(0, subtotal + estimatedTax - pointsDiscount);
 
   const activeShopId = cart.length > 0 ? Object.keys(itemsByShop)[0] : null;
 
+  // ── Load shop's Square location
   useEffect(() => {
-    if (!activeShopId) {
-      setShopLocationId(null);
-      return;
-    }
+    if (!activeShopId) { setShopLocationId(null); return; }
     setLocationLoading(true);
     (async () => {
       try {
@@ -159,32 +117,61 @@ export default function CheckoutScreen() {
         if (!token) return;
         const res = await apiClient.get(`/api/v1/pos/status?provider=square&shop_id=${activeShopId}`, token);
         if (res?.location_id) setShopLocationId(res.location_id);
-        else console.warn('[Checkout] Shop has no Square location set');
       } catch (e) {
-        console.warn('[Checkout] Could not load shop location:', e.message);
+        console.warn('[Checkout] location load:', e.message);
       } finally {
         setLocationLoading(false);
       }
     })();
   }, [activeShopId]);
 
-  const getPointsChips = () => {
-    if (maxRedeemable <= 0) return [];
-    const seen  = new Set();
-    const chips = [];
-    for (const ratio of [0.25, 0.5, 0.75]) {
-      const v = Math.floor(maxRedeemable * ratio);
-      if (v > 0 && !seen.has(v) && v < maxRedeemable) { seen.add(v); chips.push(v); }
-    }
-    chips.push(maxRedeemable);
-    return chips;
-  };
+  // ── Load loyalty balance + config for the shop
+  useEffect(() => {
+    if (!activeShopId) { setLoyaltyBalance(null); return; }
+    (async () => {
+      try {
+        const b = await getBalanceForShop(activeShopId);
+        setLoyaltyBalance(b);
+      } catch (e) {
+        console.warn('[Checkout] loyalty balance:', e.message);
+        setLoyaltyBalance(null);
+      }
+    })();
+  }, [activeShopId]);
+
+  // ── Ask backend to validate + price the redemption every time it changes
+  useEffect(() => {
+    if (!activeShopId || subtotalCents <= 0) { setPreview(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const p = await previewRedeem({
+          shopId:          activeShopId,
+          subtotalCents,
+          requestedPoints: pointsToRedeem,
+        });
+        if (!cancelled) setPreview(p);
+      } catch (e) {
+        if (!cancelled) setPreview(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeShopId, subtotalCents, pointsToRedeem]);
+
+  const cfg            = loyaltyBalance?.config;
+  const balance        = loyaltyBalance?.current_balance || 0;
+  const step           = preview?.step_points || cfg?.min_redemption_points || 0;
+  const maxRedeemable  = preview?.max_redeemable_points || 0;
+  const chips          = preview?.suggested_chips_points || [];
+  const pointValueCents = preview?.point_value_cents || (cfg ? cfg.points_to_dollar_value * 100 : 1);
+  const canRedeem      = balance >= (cfg?.min_redemption_points || 0) && maxRedeemable >= step;
 
   const handlePay = () => {
     if (cart.length === 0) { Alert.alert('Empty Cart', 'Nothing to order!'); return; }
     if (!SQUARE_APP_ID)    { Alert.alert('Setup Required', 'Square App ID not configured.'); return; }
-    if (!shopLocationId) {
-      Alert.alert('Shop Not Ready', "This shop hasn't finished setting up payments. Please try again shortly.", [{ text: 'OK' }]);
+    if (!shopLocationId)   { Alert.alert('Shop Not Ready', "This shop hasn't finished setting up payments."); return; }
+    if (pointsToRedeem > 0 && preview && !preview.valid) {
+      Alert.alert('Redemption invalid', preview.reason || 'Please adjust your points.');
       return;
     }
     setShowPaymentSheet(true);
@@ -207,7 +194,6 @@ export default function CheckoutScreen() {
       if (!token) throw new Error('Session expired — please log in again');
 
       const { shopId, items } = Object.values(itemsByShop)[0];
-
       const orderItems = items.map(item => ({
         menu_item_id:   item.id?.includes(':') ? item.id.split(':')[1] : item.id,
         quantity:       Math.max(1, item.quantity || 1),
@@ -231,7 +217,7 @@ export default function CheckoutScreen() {
       const charged   = result.charged ?? estimatedTotal;
       const pointsMsg = pointsToRedeem > 0
         ? `\n💰 Saved $${pointsDiscount.toFixed(2)} with points`
-        : '\n⭐ Loyalty points are on their way!';
+        : `\n⭐ Earned ${result.points_earned || 0} loyalty pts`;
 
       Alert.alert(
         'Order Placed! 🎉',
@@ -242,8 +228,7 @@ export default function CheckoutScreen() {
         ]
       );
     } catch (e) {
-      const msg = e.message || 'Your card was not charged. Please try again.';
-      Alert.alert('Payment Failed', msg, [{ text: 'OK' }]);
+      Alert.alert('Payment Failed', e.message || 'Your card was not charged. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -251,7 +236,7 @@ export default function CheckoutScreen() {
 
   if (cart.length === 0) {
     return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <SafeAreaView style={styles.container} edges={['top','bottom']}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
             <Feather name="arrow-left" size={24} color="#000" />
@@ -262,7 +247,6 @@ export default function CheckoutScreen() {
         <View style={styles.emptyContainer}>
           <Feather name="shopping-bag" size={72} color="#CCC" />
           <Text style={styles.emptyTitle}>Your cart is empty</Text>
-          <Text style={styles.emptySubtitle}>Add items to get started</Text>
           <TouchableOpacity style={styles.browseButton} onPress={() => router.push('/home')}>
             <Text style={styles.browseButtonText}>Browse Shops</Text>
           </TouchableOpacity>
@@ -271,10 +255,11 @@ export default function CheckoutScreen() {
     );
   }
 
-  const pointsChips = getPointsChips();
+  const dec = () => setPointsToRedeem(p => Math.max(0, p - step));
+  const inc = () => setPointsToRedeem(p => Math.min(maxRedeemable, p + step));
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['top','bottom']}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
           <Feather name="arrow-left" size={24} color="#000" />
@@ -293,9 +278,7 @@ export default function CheckoutScreen() {
                 <View key={item.cartKey || `${item.id}-${idx}`}
                   style={[styles.orderItem, idx < items.length - 1 && styles.orderItemBorder]}>
                   <View style={styles.itemLeft}>
-                    <View style={styles.qtyBadge}>
-                      <Text style={styles.qtyBadgeText}>{item.quantity || 1}</Text>
-                    </View>
+                    <View style={styles.qtyBadge}><Text style={styles.qtyBadgeText}>{item.quantity || 1}</Text></View>
                     <View style={styles.itemInfo}>
                       <Text style={styles.itemName}>{item.name}</Text>
                       {item.customizations?.length > 0 && (
@@ -310,43 +293,75 @@ export default function CheckoutScreen() {
           </View>
         ))}
 
-        {availablePoints > 0 && (
+        {/* ── Loyalty panel ─────────────────────────────────────────── */}
+        {loyaltyBalance && balance > 0 && (
           <>
             <Text style={styles.sectionLabel}>LOYALTY POINTS</Text>
             <View style={styles.card}>
-              <TouchableOpacity style={styles.pointsToggle} onPress={() => setShowPointsPanel(!showPointsPanel)} activeOpacity={0.7}>
+              <TouchableOpacity style={styles.pointsToggle} onPress={() => setShowPointsPanel(s => !s)} activeOpacity={0.7}>
                 <View style={styles.pointsToggleLeft}>
                   <View style={styles.pointsIcon}><Feather name="award" size={18} color="#fff" /></View>
                   <View>
                     <Text style={styles.pointsToggleTitle}>
-                      {pointsToRedeem > 0 ? `${pointsToRedeem} pts → -$${pointsDiscount.toFixed(2)}` : 'Redeem Points'}
+                      {pointsToRedeem > 0 ? `${pointsToRedeem} pts → −$${pointsDiscount.toFixed(2)}` : 'Redeem Points'}
                     </Text>
-                    <Text style={styles.pointsToggleSub}>{availablePoints.toLocaleString()} pts available</Text>
+                    <Text style={styles.pointsToggleSub}>
+                      {balance.toLocaleString()} pts available · {loyaltyBalance.points_type === 'global' ? 'Global rewards' : `${(itemsByShop[activeShopId]?.shopName) || 'Shop'} rewards`}
+                    </Text>
                   </View>
                 </View>
                 <Feather name={showPointsPanel ? 'chevron-up' : 'chevron-down'} size={20} color="#666" />
               </TouchableOpacity>
+
               {showPointsPanel && (
                 <View style={styles.pointsPanel}>
-                  <View style={styles.pointsChips}>
-                    {pointsChips.map((n, i) => {
-                      const isMax  = n === maxRedeemable;
-                      const active = pointsToRedeem === n;
-                      return (
-                        <TouchableOpacity key={i} style={[styles.chip, active && styles.chipActive]}
-                          onPress={() => setPointsToRedeem(prev => prev === n ? 0 : n)}>
-                          <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                            {isMax && pointsChips.length > 1 ? `Max (${n})` : `${n} pts`}
-                          </Text>
-                          <Text style={[styles.chipSub, active && styles.chipSubActive]}>-${(n * 0.01).toFixed(2)}</Text>
+                  {!canRedeem ? (
+                    <Text style={styles.lockedText}>
+                      You need {cfg?.min_redemption_points || 0} pts to redeem. Keep ordering to unlock!
+                    </Text>
+                  ) : (
+                    <>
+                      <View style={styles.pointsChips}>
+                        {chips.map((n, i) => {
+                          const active = pointsToRedeem === n;
+                          const isMax  = n === maxRedeemable;
+                          return (
+                            <TouchableOpacity key={i} style={[styles.chip, active && styles.chipActive]}
+                              onPress={() => setPointsToRedeem(prev => prev === n ? 0 : n)}>
+                              <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                                {isMax && chips.length > 1 ? `Max (${n})` : `${n} pts`}
+                              </Text>
+                              <Text style={[styles.chipSub, active && styles.chipSubActive]}>
+                                −${(n * pointValueCents / 100).toFixed(2)}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+
+                      <Text style={styles.stepperLabel}>Custom · steps of {step} pts</Text>
+                      <View style={styles.stepperRow}>
+                        <TouchableOpacity style={[styles.stepperBtn, pointsToRedeem <= 0 && styles.stepperBtnDis]} onPress={dec} disabled={pointsToRedeem <= 0}>
+                          <Feather name="minus" size={18} color="#000" />
                         </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                  {pointsToRedeem > 0 && (
-                    <TouchableOpacity onPress={() => setPointsToRedeem(0)}>
-                      <Text style={styles.clearPoints}>Clear redemption</Text>
-                    </TouchableOpacity>
+                        <View style={styles.stepperValue}>
+                          <Text style={styles.stepperPts}>{pointsToRedeem} pts</Text>
+                          <Text style={styles.stepperUsd}>−${(pointsToRedeem * pointValueCents / 100).toFixed(2)}</Text>
+                        </View>
+                        <TouchableOpacity style={[styles.stepperBtn, pointsToRedeem >= maxRedeemable && styles.stepperBtnDis]} onPress={inc} disabled={pointsToRedeem >= maxRedeemable}>
+                          <Feather name="plus" size={18} color="#000" />
+                        </TouchableOpacity>
+                      </View>
+
+                      {pointsToRedeem > 0 && (
+                        <TouchableOpacity onPress={() => setPointsToRedeem(0)}>
+                          <Text style={styles.clearPoints}>Clear redemption</Text>
+                        </TouchableOpacity>
+                      )}
+                      {preview && !preview.valid && pointsToRedeem > 0 && (
+                        <Text style={styles.invalidText}>{preview.reason}</Text>
+                      )}
+                    </>
                   )}
                 </View>
               )}
@@ -356,21 +371,15 @@ export default function CheckoutScreen() {
 
         <Text style={styles.sectionLabel}>SUMMARY</Text>
         <View style={styles.card}>
+          <View style={styles.priceRow}><Text style={styles.priceLabel}>Subtotal</Text><Text style={styles.priceValue}>${subtotal.toFixed(2)}</Text></View>
           <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Subtotal</Text>
-            <Text style={styles.priceValue}>${subtotal.toFixed(2)}</Text>
-          </View>
-          <View style={styles.priceRow}>
-            <View style={styles.taxLabelRow}>
-              <Text style={styles.priceLabel}>Tax</Text>
-              <View style={styles.estBadge}><Text style={styles.estBadgeText}>est.</Text></View>
-            </View>
+            <View style={styles.taxLabelRow}><Text style={styles.priceLabel}>Tax</Text><View style={styles.estBadge}><Text style={styles.estBadgeText}>est.</Text></View></View>
             <Text style={styles.priceValue}>${estimatedTax.toFixed(2)}</Text>
           </View>
-          {pointsToRedeem > 0 && (
+          {pointsDiscount > 0 && (
             <View style={styles.priceRow}>
-              <Text style={[styles.priceLabel, { color: '#00704A' }]}>Points ({pointsToRedeem} pts)</Text>
-              <Text style={[styles.priceValue, { color: '#00704A' }]}>-${pointsDiscount.toFixed(2)}</Text>
+              <Text style={[styles.priceLabel, { color: '#00704A' }]}>Points ({pointsToRedeem})</Text>
+              <Text style={[styles.priceValue, { color: '#00704A' }]}>−${pointsDiscount.toFixed(2)}</Text>
             </View>
           )}
           <View style={[styles.priceRow, styles.totalRow]}>
@@ -379,52 +388,43 @@ export default function CheckoutScreen() {
           </View>
           <View style={styles.taxNote}>
             <Feather name="info" size={12} color="#999" />
-            <Text style={styles.taxNoteText}>Final total calculated live by Square at payment time</Text>
+            <Text style={styles.taxNoteText}>Final total calculated by Square at payment time</Text>
           </View>
         </View>
 
         <View style={styles.infoBox}>
           <Feather name="star" size={14} color="#00704A" />
-          <Text style={styles.infoText}>Loyalty points are earned automatically after your order completes.</Text>
-        </View>
-        <View style={[styles.infoBox, { marginTop: 8 }]}>
-          <Feather name="lock" size={14} color="#999" />
-          <Text style={[styles.infoText, { color: '#999' }]}>Payment secured by Square. We never store your card number.</Text>
+          <Text style={styles.infoText}>
+            {cfg ? `Earn ${cfg.points_per_dollar} pts per $1${cfg.bonus_active ? ` (${cfg.bonus_multiplier}× bonus active!)` : ''}` : 'Earn loyalty points on this order.'}
+          </Text>
         </View>
       </ScrollView>
 
       <View style={styles.footer}>
         <TouchableOpacity
           style={[styles.payButton, (loading || locationLoading) && styles.payButtonDisabled]}
-          onPress={handlePay}
-          disabled={loading || locationLoading}
-          activeOpacity={0.85}
+          onPress={handlePay} disabled={loading || locationLoading} activeOpacity={0.85}
         >
-          {loading ? (
-            <ActivityIndicator color="#FFF" />
-          ) : locationLoading ? (
-            <View style={styles.payButtonInner}>
-              <ActivityIndicator color="#FFF" size="small" />
-              <Text style={styles.payButtonText}>Loading...</Text>
-            </View>
-          ) : (
-            <View style={styles.payButtonInner}>
-              <Feather name="lock" size={18} color="#FFF" />
-              <Text style={styles.payButtonText}>Pay ~${estimatedTotal.toFixed(2)}</Text>
-            </View>
-          )}
+          {loading ? <ActivityIndicator color="#FFF" /> :
+            locationLoading ? (
+              <View style={styles.payButtonInner}>
+                <ActivityIndicator color="#FFF" size="small" />
+                <Text style={styles.payButtonText}>Loading...</Text>
+              </View>
+            ) : (
+              <View style={styles.payButtonInner}>
+                <Feather name="lock" size={18} color="#FFF" />
+                <Text style={styles.payButtonText}>Pay ~${estimatedTotal.toFixed(2)}</Text>
+              </View>
+            )
+          }
         </TouchableOpacity>
         <Text style={styles.poweredBy}>Secured by Square · Powered by LoyalCup</Text>
       </View>
 
-      <Modal
-        visible={showPaymentSheet}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowPaymentSheet(false)}
-      >
+      <Modal visible={showPaymentSheet} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowPaymentSheet(false)}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <SafeAreaView style={styles.modalContainer} edges={['top', 'bottom']}>
+          <SafeAreaView style={styles.modalContainer} edges={['top','bottom']}>
             <View style={styles.modalHeader}>
               <TouchableOpacity style={styles.headerButton} onPress={() => setShowPaymentSheet(false)}>
                 <Feather name="x" size={24} color="#000" />
@@ -439,17 +439,9 @@ export default function CheckoutScreen() {
             <WebView
               style={styles.webView}
               originWhitelist={['*']}
-              // ─── FIX: provide an https baseUrl so window.isSecureContext === true ───
-              // Square's Web Payments SDK refuses to load on insecure origins.
-              // Without baseUrl the page lives at about:blank → no origin → SDK errors.
-              // The URL is not actually fetched; it only sets the document origin.
-              source={{
-                html:    getSquareHTML(SQUARE_APP_ID, shopLocationId || ''),
-                baseUrl: 'https://loyalcupapp.com',
-              }}
+              source={{ html: getSquareHTML(SQUARE_APP_ID, shopLocationId || ''), baseUrl: 'https://loyalcupapp.com' }}
               onMessage={handleWebViewMessage}
-              javaScriptEnabled
-              domStorageEnabled
+              javaScriptEnabled domStorageEnabled
               mixedContentMode="never"
               setSupportMultipleWindows={false}
               keyboardDisplayRequiresUserAction={false}
@@ -457,7 +449,7 @@ export default function CheckoutScreen() {
             />
             <View style={styles.modalFooter}>
               <Feather name="lock" size={13} color="#999" />
-              <Text style={styles.modalFooterText}>Card details are tokenized by Square. We never see or store your card number.</Text>
+              <Text style={styles.modalFooterText}>Tokenized by Square. We never see or store your card number.</Text>
             </View>
           </SafeAreaView>
         </KeyboardAvoidingView>
@@ -473,12 +465,11 @@ const styles = StyleSheet.create({
   headerTitle:         { fontSize: 20, fontWeight: '700', color: '#000' },
   emptyContainer:      { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   emptyTitle:          { fontSize: 22, fontWeight: '700', color: '#000', marginTop: 16, marginBottom: 6 },
-  emptySubtitle:       { fontSize: 15, color: '#666', marginBottom: 28 },
   browseButton:        { backgroundColor: '#000', paddingHorizontal: 32, paddingVertical: 16, borderRadius: 14 },
   browseButtonText:    { color: '#FFF', fontWeight: '700', fontSize: 15 },
   scrollView:          { flex: 1 },
   sectionLabel:        { fontSize: 11, fontWeight: '700', color: '#999', letterSpacing: 1.5, marginTop: 20, marginBottom: 8, marginHorizontal: 16 },
-  card:                { backgroundColor: '#FFF', marginHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: '#F0F0F0', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
+  card:                { backgroundColor: '#FFF', marginHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: '#F0F0F0', overflow: 'hidden' },
   orderItem:           { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
   orderItemBorder:     { borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
   itemLeft:            { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 12 },
@@ -489,19 +480,28 @@ const styles = StyleSheet.create({
   itemCustom:          { fontSize: 12, color: '#00704A' },
   itemPrice:           { fontSize: 15, fontWeight: '600', color: '#000' },
   pointsToggle:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
-  pointsToggleLeft:    { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  pointsToggleLeft:    { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   pointsIcon:          { width: 36, height: 36, borderRadius: 18, backgroundColor: '#00704A', justifyContent: 'center', alignItems: 'center' },
   pointsToggleTitle:   { fontSize: 15, fontWeight: '600', color: '#000' },
   pointsToggleSub:     { fontSize: 12, color: '#666', marginTop: 2 },
   pointsPanel:         { paddingHorizontal: 16, paddingBottom: 16, borderTopWidth: 1, borderTopColor: '#F5F5F5' },
+  lockedText:          { fontSize: 13, color: '#999', textAlign: 'center', paddingVertical: 16 },
   pointsChips:         { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 14, marginBottom: 12 },
-  chip:                { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: '#E5E5E5', backgroundColor: '#FAFAFA', alignItems: 'center' },
+  chip:                { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: '#E5E5E5', backgroundColor: '#FAFAFA', alignItems: 'center', minWidth: 78 },
   chipActive:          { backgroundColor: '#000', borderColor: '#000' },
   chipText:            { fontSize: 13, fontWeight: '600', color: '#000' },
   chipTextActive:      { color: '#FFF' },
   chipSub:             { fontSize: 11, color: '#999', marginTop: 2 },
   chipSubActive:       { color: '#AAA' },
-  clearPoints:         { fontSize: 13, fontWeight: '600', color: '#FF3B30' },
+  stepperLabel:        { fontSize: 11, fontWeight: '700', color: '#999', letterSpacing: 1, marginTop: 4, marginBottom: 8 },
+  stepperRow:          { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
+  stepperBtn:          { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center' },
+  stepperBtnDis:       { opacity: 0.4 },
+  stepperValue:        { flex: 1, alignItems: 'center' },
+  stepperPts:          { fontSize: 18, fontWeight: '800', color: '#000' },
+  stepperUsd:          { fontSize: 13, color: '#00704A', fontWeight: '600', marginTop: 2 },
+  invalidText:         { fontSize: 12, color: '#FF3B30', textAlign: 'center', marginTop: 4 },
+  clearPoints:         { fontSize: 13, fontWeight: '600', color: '#FF3B30', textAlign: 'center', marginTop: 6 },
   priceRow:            { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
   taxLabelRow:         { flexDirection: 'row', alignItems: 'center', gap: 6 },
   estBadge:            { backgroundColor: '#F0F0F0', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },

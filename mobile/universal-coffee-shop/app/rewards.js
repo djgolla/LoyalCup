@@ -1,457 +1,179 @@
-// Rewards/Loyalty screen
-// universal-coffee-shop/app/rewards.js
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, SafeAreaView, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import {
+  StyleSheet, Text, View, ScrollView, TouchableOpacity,
+  ActivityIndicator, RefreshControl, Image,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { supabase } from '../lib/supabase';
-import { getGlobalPoints, getAllShopPoints, getPointsHistory } from '../services/loyaltyService';
+import { getMyLoyalty } from '../services/loyaltyService';
 
 export default function RewardsScreen() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [globalPoints, setGlobalPoints] = useState(null);
-  const [shopPoints, setShopPoints] = useState([]);
-  const [transactions, setTransactions] = useState([]);
-  const [activeTab, setActiveTab] = useState('overview'); // overview | history
+  const [data, setData]             = useState(null);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const load = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const [global, shops, history] = await Promise.all([
-        getGlobalPoints(user.id),
-        getAllShopPoints(user.id),
-        getPointsHistory(user.id, 20)
-      ]);
-
-      setGlobalPoints(global);
-      setShopPoints(shops);
-      setTransactions(history);
-    } catch (error) {
-      console.error('Failed to load rewards data:', error);
+      const d = await getMyLoyalty();
+      setData(d);
+    } catch (e) {
+      console.error('rewards load:', e.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
-  };
-
-  const formatDate = (dateStr) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
-  const getTotalPoints = () => {
-    const global = globalPoints?.current_balance || 0;
-    const shopTotal = shopPoints.reduce((sum, sp) => sum + (sp.current_balance || 0), 0);
-    return global + shopTotal;
-  };
+  useEffect(() => { load(); }, []);
+  const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#00704A" />
-          <Text style={styles.loadingText}>Loading rewards...</Text>
-        </View>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.center}><ActivityIndicator size="large" color="#00704A" /></View>
       </SafeAreaView>
     );
   }
 
+  const g       = data?.global || { current_balance: 0, total_earned: 0, total_spent: 0, config: {} };
+  const cfg     = g.config || {};
+  const step    = cfg.min_redemption_points || 200;
+  const ptVal   = cfg.points_to_dollar_value || 0.005;
+  const bal     = g.current_balance || 0;
+  const toNext  = bal >= step ? 0 : (step - bal);
+  const progPct = Math.min(100, Math.round((bal / step) * 100));
+  const usdNow  = (bal * ptVal).toFixed(2);
+
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Feather name="arrow-left" size={24} color="#000" />
-        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()}><Feather name="arrow-left" size={24} color="#000" /></TouchableOpacity>
         <Text style={styles.headerTitle}>Rewards</Text>
-        <View style={{ width: 24 }} />
+        <TouchableOpacity onPress={onRefresh}><Feather name="refresh-cw" size={20} color="#000" /></TouchableOpacity>
       </View>
 
-      <ScrollView
-        style={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-        }
-      >
-        {/* Points Card */}
-        <View style={styles.pointsCard}>
-          <View style={styles.pointsHeader}>
-            <Feather name="award" size={24} color="#FFF" />
-            <Text style={styles.pointsLabel}>LOYALTY POINTS</Text>
+      <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />} contentContainerStyle={{ paddingBottom: 32 }}>
+
+        {/* Global card */}
+        <View style={styles.globalCard}>
+          <View style={styles.globalTop}>
+            <View style={styles.iconWrap}><Feather name="award" size={22} color="#fff" /></View>
+            <Text style={styles.globalLabel}>GLOBAL REWARDS</Text>
           </View>
-          <Text style={styles.pointsValue}>{getTotalPoints()}</Text>
-          <Text style={styles.pointsSubtext}>Keep earning to unlock more rewards!</Text>
+          <Text style={styles.balanceBig}>{bal.toLocaleString()}</Text>
+          <Text style={styles.balanceSub}>≈ ${usdNow} value · {cfg.points_per_dollar || 10} pts per $1 spent</Text>
+
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${progPct}%` }]} />
+          </View>
+          <Text style={styles.progressLabel}>
+            {toNext > 0
+              ? `${toNext} pts to your next $${(step * ptVal).toFixed(2)} reward`
+              : `🎉 You can redeem $${(Math.floor(bal / step) * step * ptVal).toFixed(2)} at checkout!`}
+          </Text>
+
+          <View style={styles.statRow}>
+            <View style={styles.stat}><Text style={styles.statN}>{(g.total_earned || 0).toLocaleString()}</Text><Text style={styles.statL}>Earned</Text></View>
+            <View style={styles.statDivide} />
+            <View style={styles.stat}><Text style={styles.statN}>{(g.total_spent || 0).toLocaleString()}</Text><Text style={styles.statL}>Spent</Text></View>
+          </View>
         </View>
 
-        {/* Global Points */}
-        {globalPoints && globalPoints.current_balance > 0 && (
+        {/* Per-shop */}
+        {(data?.shops?.length || 0) > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Global Points</Text>
-            <View style={styles.balanceCard}>
-              <View>
-                <Text style={styles.balanceName}>Universal Points</Text>
-                <Text style={styles.balanceSubtext}>Use at any shop</Text>
-              </View>
-              <Text style={styles.balancePoints}>{globalPoints.current_balance} pts</Text>
-            </View>
-          </View>
-        )}
-
-        {/* Shop Balances */}
-        {shopPoints.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Shop Points</Text>
-            {shopPoints.map((balance) => (
-              <View key={balance.id} style={styles.balanceCard}>
-                <View>
-                  <Text style={styles.balanceName}>
-                    {balance.shop?.name || 'Unknown Shop'}
-                  </Text>
-                  <Text style={styles.balanceSubtext}>Shop-specific rewards</Text>
+            <Text style={styles.sectionTitle}>Shop Rewards</Text>
+            {data.shops.map(sp => (
+              <TouchableOpacity key={sp.shop_id || sp.id} style={styles.shopRow}
+                onPress={() => sp.shop_id && router.push(`/shop/${sp.shop_id}`)}>
+                {sp.shops?.logo_url
+                  ? <Image source={{ uri: sp.shops.logo_url }} style={styles.shopLogo} />
+                  : <View style={[styles.shopLogo, styles.shopLogoPh]}><Feather name="coffee" size={20} color="#00704A" /></View>}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.shopName}>{sp.shops?.name || 'Shop'}</Text>
+                  <Text style={styles.shopSub}>{sp.current_balance} pts</Text>
                 </View>
-                <Text style={styles.balancePoints}>{balance.current_balance} pts</Text>
-              </View>
+                <Feather name="chevron-right" size={20} color="#CCC" />
+              </TouchableOpacity>
             ))}
           </View>
         )}
 
-        {/* Tabs */}
-        <View style={styles.tabs}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'overview' && styles.tabActive]}
-            onPress={() => setActiveTab('overview')}
-          >
-            <Text style={[styles.tabText, activeTab === 'overview' && styles.tabTextActive]}>
-              Overview
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'history' && styles.tabActive]}
-            onPress={() => setActiveTab('history')}
-          >
-            <Text style={[styles.tabText, activeTab === 'history' && styles.tabTextActive]}>
-              History
-            </Text>
-          </TouchableOpacity>
+        {/* Recent activity */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Recent Activity</Text>
+          {(data?.transactions?.length || 0) === 0 ? (
+            <View style={styles.emptyTxn}>
+              <Feather name="clock" size={32} color="#DDD" />
+              <Text style={styles.emptyTxnText}>No transactions yet. Place an order to start earning!</Text>
+            </View>
+          ) : data.transactions.map(t => {
+            const earned = t.type === 'earned';
+            return (
+              <View key={t.id} style={styles.txnRow}>
+                <View style={[styles.txnIcon, { backgroundColor: earned ? '#dcfce7' : '#fee2e2' }]}>
+                  <Feather name={earned ? 'plus' : 'minus'} size={14} color={earned ? '#16a34a' : '#dc2626'} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.txnTitle}>
+                    {t.shops?.name || (t.points_type === 'global' ? 'Global rewards' : 'Shop rewards')}
+                  </Text>
+                  <Text style={styles.txnSub}>{t.description || (earned ? 'Earned' : 'Redeemed')}</Text>
+                </View>
+                <Text style={[styles.txnAmount, { color: earned ? '#16a34a' : '#dc2626' }]}>
+                  {earned ? '+' : ''}{t.amount} pts
+                </Text>
+              </View>
+            );
+          })}
         </View>
 
-        {/* Overview Tab */}
-        {activeTab === 'overview' && (
-          <View style={styles.section}>
-            <View style={styles.statsGrid}>
-              <View style={styles.statCard}>
-                <Text style={styles.statValue}>{globalPoints?.total_earned || 0}</Text>
-                <Text style={styles.statLabel}>Total Earned</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statValue}>{globalPoints?.total_spent || 0}</Text>
-                <Text style={styles.statLabel}>Total Spent</Text>
-              </View>
-            </View>
-
-            <View style={styles.infoCard}>
-              <Feather name="info" size={20} color="#00704A" />
-              <Text style={styles.infoText}>
-                Earn 10 points per $1 spent at any shop. Redeem 100 points for $1 off!
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* Transaction History */}
-        {activeTab === 'history' && (
-          <View style={styles.section}>
-            {transactions.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Feather name="clock" size={48} color="#CCC" />
-                <Text style={styles.emptyText}>No transaction history yet</Text>
-                <Text style={styles.emptySubtext}>Start earning points by placing orders!</Text>
-              </View>
-            ) : (
-              transactions.map((transaction) => (
-                <View key={transaction.id} style={styles.transactionCard}>
-                  <View style={styles.transactionIcon}>
-                    <Feather 
-                      name={transaction.type === 'earned' ? 'arrow-down-right' : 'arrow-up-right'} 
-                      size={20} 
-                      color={transaction.type === 'earned' ? '#00704A' : '#EF4444'} 
-                    />
-                  </View>
-                  <View style={styles.transactionInfo}>
-                    <Text style={styles.transactionDescription}>
-                      {transaction.description || transaction.type}
-                    </Text>
-                    <Text style={styles.transactionShop}>
-                      {transaction.shop?.name || 'LoyalCup'}
-                    </Text>
-                    <Text style={styles.transactionDate}>
-                      {formatDate(transaction.created_at)}
-                    </Text>
-                  </View>
-                  <Text
-                    style={[
-                      styles.transactionPoints,
-                      transaction.amount > 0 ? styles.pointsEarned : styles.pointsSpent
-                    ]}
-                  >
-                    {transaction.amount > 0 ? '+' : ''}{transaction.amount}
-                  </Text>
-                </View>
-              ))
-            )}
-          </View>
-        )}
+        <View style={styles.howCard}>
+          <Text style={styles.howTitle}>How it works</Text>
+          <Text style={styles.howLine}>· Earn {cfg.points_per_dollar || 10} pts per $1 spent</Text>
+          <Text style={styles.howLine}>· Redeem in {step}-pt steps at checkout</Text>
+          <Text style={styles.howLine}>· {step} pts = ${(step * ptVal).toFixed(2)} off your order</Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FAFAFA',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#666',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#000',
-  },
-  content: {
-    flex: 1,
-  },
-  pointsCard: {
-    backgroundColor: '#00704A',
-    margin: 16,
-    padding: 24,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  pointsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    gap: 8,
-  },
-  pointsLabel: {
-    color: '#FFF',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 2,
-  },
-  pointsValue: {
-    color: '#FFF',
-    fontSize: 56,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  pointsSubtext: {
-    color: '#E0E0E0',
-    fontSize: 14,
-  },
-  section: {
-    paddingHorizontal: 16,
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#000',
-    marginBottom: 12,
-  },
-  balanceCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  balanceName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-  },
-  balanceSubtext: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 2,
-  },
-  balancePoints: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#00704A',
-  },
-  tabs: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    marginBottom: 16,
-    gap: 8,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 20,
-    alignItems: 'center',
-  },
-  tabActive: {
-    backgroundColor: '#00704A',
-  },
-  tabText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#666',
-  },
-  tabTextActive: {
-    color: '#FFF',
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
-  },
-  statCard: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  statValue: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#00704A',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '600',
-  },
-  infoCard: {
-    flexDirection: 'row',
-    padding: 16,
-    backgroundColor: '#E8F5E9',
-    borderRadius: 12,
-    gap: 12,
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#00704A',
-    lineHeight: 20,
-  },
-  transactionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    marginBottom: 8,
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  transactionIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F5F5F5',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  transactionInfo: {
-    flex: 1,
-  },
-  transactionDescription: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#000',
-    marginBottom: 2,
-  },
-  transactionShop: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 2,
-  },
-  transactionDate: {
-    fontSize: 12,
-    color: '#999',
-  },
-  transactionPoints: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  pointsEarned: {
-    color: '#00704A',
-  },
-  pointsSpent: {
-    color: '#EF4444',
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    marginTop: 16,
-    marginBottom: 4,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#666',
-  },
+  container:      { flex: 1, backgroundColor: '#FAFAFA' },
+  center:         { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  header:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  headerTitle:    { fontSize: 20, fontWeight: '800', color: '#000' },
+  globalCard:     { backgroundColor: '#00704A', margin: 16, borderRadius: 20, padding: 22 },
+  globalTop:      { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
+  iconWrap:       { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+  globalLabel:    { color: 'rgba(255,255,255,0.8)', fontSize: 11, fontWeight: '800', letterSpacing: 1.6 },
+  balanceBig:     { color: '#FFF', fontSize: 52, fontWeight: '900', letterSpacing: -1 },
+  balanceSub:     { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '600', marginBottom: 16 },
+  progressTrack:  { height: 8, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 4, overflow: 'hidden', marginBottom: 8 },
+  progressFill:   { height: '100%', backgroundColor: '#FFF', borderRadius: 4 },
+  progressLabel:  { color: 'rgba(255,255,255,0.95)', fontSize: 13, fontWeight: '600', marginBottom: 16 },
+  statRow:        { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 12 },
+  stat:           { flex: 1, alignItems: 'center' },
+  statN:          { color: '#FFF', fontSize: 20, fontWeight: '800' },
+  statL:          { color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: '600', marginTop: 2 },
+  statDivide:     { width: 1, height: 24, backgroundColor: 'rgba(255,255,255,0.2)' },
+  section:        { marginHorizontal: 16, marginTop: 20 },
+  sectionTitle:   { fontSize: 16, fontWeight: '800', color: '#000', marginBottom: 10 },
+  shopRow:        { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFF', borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#F0F0F0' },
+  shopLogo:       { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F5F5F5' },
+  shopLogoPh:     { justifyContent: 'center', alignItems: 'center', backgroundColor: '#E8F5E9' },
+  shopName:      { fontSize: 14, fontWeight: '700', color: '#000' },
+  shopSub:        { fontSize: 12, color: '#666', marginTop: 2 },
+  txnRow:         { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFF', borderRadius: 12, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: '#F0F0F0' },
+  txnIcon:        { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
+  txnTitle:       { fontSize: 14, fontWeight: '700', color: '#000' },
+  txnSub:         { fontSize: 12, color: '#888', marginTop: 2 },
+  txnAmount:      { fontSize: 14, fontWeight: '800' },
+  emptyTxn:       { alignItems: 'center', paddingVertical: 24 },
+  emptyTxnText:   { color: '#999', marginTop: 8, fontSize: 13, textAlign: 'center', paddingHorizontal: 32 },
+  howCard:        { margin: 16, marginTop: 24, backgroundColor: '#FFF', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#F0F0F0' },
+  howTitle:       { fontSize: 14, fontWeight: '800', color: '#000', marginBottom: 8 },
+  howLine:        { fontSize: 13, color: '#666', lineHeight: 22 },
 });

@@ -1,407 +1,378 @@
-// LoyaltySettings.jsx
-// Shop owner loyalty configuration - NEW SYSTEM
+// web/src/pages/shop-owner/LoyaltySettings.jsx
+// Shop owner loyalty page — driven by /api/v1/loyalty/* (single source of truth)
 
 import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
 import { toast } from "sonner";
+import {
+  Award, TrendingUp, Users, DollarSign, Sparkles, Globe, Check,
+  Info, RefreshCw, Calculator,
+} from "lucide-react";
 import { useShop } from "../../context/ShopContext";
-import { supabase } from "../../lib/supabase";
-import { Info, TrendingUp, Users, Award, DollarSign } from "lucide-react";
+import supabase from "../../lib/supabase";
 import Loading from "../../components/Loading";
 
+const API_BASE = import.meta.env.VITE_API_URL || "";
+
+// ── authed fetch helper ─────────────────────────────────────────────────────
+async function authedFetch(path, opts = {}) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...opts,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(opts.headers || {}),
+    },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.detail || data?.message || `Request failed (${res.status})`);
+  return data;
+}
+
 export default function LoyaltySettings() {
-  const { shopId, shop, loading: shopLoading } = useShop();
-  const [loading, setLoading] = useState(true);
-  const [settings, setSettings] = useState(null);
-  const [stats, setStats] = useState({
-    totalPointsGiven: 0,
-    totalCustomers: 0,
-    avgPointsPerCustomer: 0,
+  const { shopId, loading: shopLoading } = useShop();
+
+  const [loading, setLoading]   = useState(true);
+  const [saving,  setSaving]    = useState(false);
+  const [globalCfg, setGlobalCfg] = useState(null);
+  const [stats, setStats] = useState({ active_members: 0, total_issued: 0, total_redeemed: 0 });
+
+  const [form, setForm] = useState({
+    use_global_system:      true,
+    points_per_dollar:      10,
+    min_redemption_points:  200,
+    points_to_dollar_value: 0.005,
+    bonus_active:           false,
+    bonus_multiplier:       1.0,
+    bonus_description:      "",
   });
 
-  useEffect(() => {
-    if (shopId) {
-      loadLoyaltyData();
-    }
-  }, [shopId]);
-
-  const loadLoyaltyData = async () => {
+  const load = async () => {
     if (!shopId) return;
-    
     setLoading(true);
     try {
-      // Load shop loyalty settings
-      const { data: settingsData, error: settingsError } = await supabase
-        .from('shop_loyalty_settings')
-        .select('*')
-        .eq('shop_id', shopId)
-        .single();
-
-      if (settingsError && settingsError.code !== 'PGRST116') {
-        throw settingsError;
-      }
-
-      // If no settings exist, create default
-      if (!settingsData) {
-        const { data: newSettings, error: createError } = await supabase
-          .from('shop_loyalty_settings')
-          .insert({
-            shop_id: shopId,
-            use_global_system: true,
-            points_per_dollar: 5,
-            min_redemption_points: 50,
-            points_to_dollar_value: 0.01,
-            bonus_multiplier: 1.0,
-            bonus_active: false,
-            is_active: true,
-          })
-          .select()
-          .single();
-
-        if (createError) throw createError;
-        setSettings(newSettings);
-      } else {
-        setSettings(settingsData);
-      }
-
-      // Load stats
-      await loadStats();
-    } catch (error) {
-      console.error("Failed to load loyalty data:", error);
-      toast.error("Failed to load loyalty settings");
+      const [cfg, glob, st] = await Promise.all([
+        authedFetch(`/api/v1/loyalty/shop-settings/${shopId}`),
+        authedFetch(`/api/v1/loyalty/global-config`),
+        authedFetch(`/api/v1/loyalty/shop-stats/${shopId}`),
+      ]);
+      setGlobalCfg(glob);
+      setForm({
+        use_global_system:      cfg.use_global_system,
+        points_per_dollar:      cfg.points_per_dollar,
+        min_redemption_points:  cfg.min_redemption_points,
+        points_to_dollar_value: cfg.points_to_dollar_value,
+        bonus_active:           !!cfg.bonus_active,
+        bonus_multiplier:       cfg.bonus_multiplier || 1.0,
+        bonus_description:      cfg.bonus_description || "",
+      });
+      setStats({
+        active_members: st.active_members || 0,
+        total_issued:   st.total_issued   || 0,
+        total_redeemed: st.total_redeemed || 0,
+      });
+    } catch (e) {
+      console.error("Loyalty load failed:", e);
+      toast.error(e.message || "Failed to load loyalty settings");
     } finally {
       setLoading(false);
     }
   };
 
-  const loadStats = async () => {
+  useEffect(() => { if (shopId) load(); /* eslint-disable-line */ }, [shopId]);
+
+  const handleSave = async (e) => {
+    e?.preventDefault?.();
+    if (!shopId) return;
     try {
-      // Get total points given out by this shop
-      const { data: transactions } = await supabase
-        .from('points_transactions')
-        .select('amount')
-        .eq('shop_id', shopId)
-        .eq('type', 'earned');
-
-      const totalPoints = transactions?.reduce((sum, t) => sum + t.amount, 0) || 0;
-
-      // Get unique customers who earned points
-      const { data: customers } = await supabase
-        .from('points_transactions')
-        .select('customer_id')
-        .eq('shop_id', shopId)
-        .eq('type', 'earned');
-
-      const uniqueCustomers = new Set(customers?.map(c => c.customer_id) || []).size;
-
-      setStats({
-        totalPointsGiven: totalPoints,
-        totalCustomers: uniqueCustomers,
-        avgPointsPerCustomer: uniqueCustomers > 0 ? Math.floor(totalPoints / uniqueCustomers) : 0,
+      setSaving(true);
+      const body = {
+        use_global_system: form.use_global_system,
+        bonus_active:      !!form.bonus_active,
+        bonus_multiplier:  Number(form.bonus_multiplier) || 1.0,
+        bonus_description: form.bonus_description || null,
+      };
+      if (!form.use_global_system) {
+        body.points_per_dollar      = Number(form.points_per_dollar);
+        body.min_redemption_points  = Number(form.min_redemption_points);
+        body.points_to_dollar_value = Number(form.points_to_dollar_value);
+        if (!body.points_per_dollar || !body.min_redemption_points || !body.points_to_dollar_value) {
+          toast.error("Fill in all custom values before saving.");
+          setSaving(false);
+          return;
+        }
+      }
+      const updated = await authedFetch(`/api/v1/loyalty/shop-settings/${shopId}`, {
+        method: "PUT",
+        body:   JSON.stringify(body),
       });
-    } catch (error) {
-      console.error('Failed to load stats:', error);
+      setForm({
+        use_global_system:      updated.use_global_system,
+        points_per_dollar:      updated.points_per_dollar,
+        min_redemption_points:  updated.min_redemption_points,
+        points_to_dollar_value: updated.points_to_dollar_value,
+        bonus_active:           !!updated.bonus_active,
+        bonus_multiplier:       updated.bonus_multiplier || 1.0,
+        bonus_description:      updated.bonus_description || "",
+      });
+      toast.success("Loyalty program saved!");
+    } catch (e) {
+      toast.error(e.message || "Failed to save");
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleSaveSettings = async (e) => {
-    e.preventDefault();
-    if (!shopId || !settings) return;
+  // ── effective values used in preview (when on global, show global's numbers)
+  const eff = form.use_global_system && globalCfg ? globalCfg : form;
+  const effPpd  = Number(eff.points_per_dollar)      || 0;
+  const effStep = Number(eff.min_redemption_points)  || 0;
+  const effPV   = Number(eff.points_to_dollar_value) || 0;
+  const bonusM  = form.bonus_active ? (Number(form.bonus_multiplier) || 1) : 1;
+  const pctBack = (effPpd && effPV) ? (effPpd * effPV * 100).toFixed(1) : "—";
+  const dollarsPerStep = (effStep * effPV).toFixed(2);
 
-    try {
-      const { error } = await supabase
-        .from('shop_loyalty_settings')
-        .update({
-          use_global_system: settings.use_global_system,
-          points_per_dollar: settings.points_per_dollar,
-          min_redemption_points: settings.min_redemption_points,
-          points_to_dollar_value: settings.points_to_dollar_value,
-          bonus_multiplier: settings.bonus_multiplier,
-          bonus_active: settings.bonus_active,
-          is_active: settings.is_active,
-          bonus_description: settings.bonus_description || null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('shop_id', shopId);
+  // example earn/redeem sentence
+  const sampleSpend  = 20;
+  const earnedAt$20  = Math.floor(sampleSpend * effPpd * bonusM);
 
-      if (error) throw error;
-
-      toast.success("Loyalty settings saved successfully!");
-      loadLoyaltyData();
-    } catch (error) {
-      console.error("Failed to save settings:", error);
-      toast.error("Failed to save settings");
-    }
-  };
-
-  if (shopLoading || loading) {
-    return <Loading />;
-  }
-
-  if (!settings) {
-    return (
-      <div className="text-center py-12">
-        <Award className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-        <h3 className="text-xl font-semibold mb-2">No Loyalty Settings Found</h3>
-        <p className="text-gray-600 dark:text-gray-400">
-          Failed to load loyalty settings. Please try again.
-        </p>
-      </div>
-    );
-  }
+  if (shopLoading || loading) return <Loading />;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-8">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Loyalty Program</h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-1">
-          Configure how customers earn and redeem points at your shop
-        </p>
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-4xl font-black text-gray-900 dark:text-white mb-1">Loyalty Program</h1>
+          <p className="text-gray-600 dark:text-gray-400">Configure how customers earn and redeem points at your shop.</p>
+        </div>
+        <button onClick={load} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-neutral-800 transition" title="Refresh">
+          <RefreshCw className="w-5 h-5 text-gray-500" />
+        </button>
+      </motion.div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatCard color="from-amber-500 to-orange-500" icon={TrendingUp} label="Points Issued" value={stats.total_issued.toLocaleString()} />
+        <StatCard color="from-green-500 to-emerald-600" icon={Users}      label="Active Members" value={stats.active_members.toLocaleString()} subtitle="Earned points here" />
+        <StatCard color="from-purple-500 to-fuchsia-600" icon={Award}     label="Points Redeemed" value={stats.total_redeemed.toLocaleString()} />
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-br from-amber-500 to-amber-600 p-6 rounded-xl text-white shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-amber-100 text-sm font-medium">Total Points Given</p>
-              <p className="text-3xl font-bold mt-1">{stats.totalPointsGiven.toLocaleString()}</p>
-            </div>
-            <TrendingUp className="w-12 h-12 text-amber-200" />
-          </div>
-        </div>
+      <form onSubmit={handleSave} className="space-y-6">
 
-        <div className="bg-gradient-to-br from-green-500 to-green-600 p-6 rounded-xl text-white shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-green-100 text-sm font-medium">Loyalty Customers</p>
-              <p className="text-3xl font-bold mt-1">{stats.totalCustomers.toLocaleString()}</p>
-            </div>
-            <Users className="w-12 h-12 text-green-200" />
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 p-6 rounded-xl text-white shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-purple-100 text-sm font-medium">Avg Points/Customer</p>
-              <p className="text-3xl font-bold mt-1">{stats.avgPointsPerCustomer.toLocaleString()}</p>
-            </div>
-            <Award className="w-12 h-12 text-purple-200" />
-          </div>
-        </div>
-      </div>
-
-      <form onSubmit={handleSaveSettings} className="space-y-6">
-        
-        {/* System Selection */}
-        <div className="bg-white dark:bg-neutral-900 p-6 rounded-xl border border-gray-200 dark:border-neutral-800 shadow-md">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-amber-600" />
-            Loyalty System Type
+        {/* Program mode */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+          className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border-2 border-gray-200 dark:border-neutral-800 shadow-lg">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
+            <DollarSign className="w-5 h-5 text-amber-600" /> Program Type
           </h2>
-          
-          <div className="space-y-4">
-            <label className="flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-800 transition"
-              style={{ borderColor: settings.use_global_system ? '#d97706' : '#e5e7eb' }}>
-              <input
-                type="radio"
-                checked={settings.use_global_system}
-                onChange={() => setSettings({ ...settings, use_global_system: true })}
-                className="mt-1"
-              />
-              <div className="flex-1">
-                <p className="font-semibold text-gray-900 dark:text-white">Global System (Recommended)</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  Customers earn 10 points per $1 spent. Points can be used at any participating shop on LoyalCup.
-                </p>
-                <div className="flex items-center gap-2 mt-2 text-sm text-amber-600 dark:text-amber-500">
-                  <Info className="w-4 h-4" />
-                  <span>Standard rate - no configuration needed</span>
-                </div>
-              </div>
-            </label>
+          <p className="text-sm text-gray-500 mb-5">Choose how points work at your shop.</p>
 
-            <label className="flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-800 transition"
-              style={{ borderColor: !settings.use_global_system ? '#d97706' : '#e5e7eb' }}>
-              <input
-                type="radio"
-                checked={!settings.use_global_system}
-                onChange={() => setSettings({ ...settings, use_global_system: false })}
-                className="mt-1"
-              />
-              <div className="flex-1">
-                <p className="font-semibold text-gray-900 dark:text-white">Custom Shop System</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  Set your own points rate. Points can only be used at your shop.
-                </p>
-                <div className="flex items-center gap-2 mt-2 text-sm text-purple-600 dark:text-purple-500">
-                  <Info className="w-4 h-4" />
-                  <span>Full control over your loyalty program</span>
-                </div>
-              </div>
-            </label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <ModeCard
+              active={form.use_global_system}
+              onClick={() => setForm(f => ({ ...f, use_global_system: true }))}
+              icon={Globe}
+              title="LoyalCup Global Program"
+              desc={globalCfg
+                ? `${globalCfg.points_per_dollar} pts per $1 · ${globalCfg.min_redemption_points} pts = $${(globalCfg.min_redemption_points * globalCfg.points_to_dollar_value).toFixed(2)} off · ${(globalCfg.points_per_dollar * globalCfg.points_to_dollar_value * 100).toFixed(1)}% cashback`
+                : "Customers earn cross-shop points usable anywhere on LoyalCup."}
+              footer="Recommended — drives more repeat traffic across the network."
+              tone="emerald"
+            />
+            <ModeCard
+              active={!form.use_global_system}
+              onClick={() => setForm(f => ({ ...f, use_global_system: false }))}
+              icon={Sparkles}
+              title="Custom Shop Program"
+              desc="Set your own earning rate, redemption step, and point value. Points are usable only at your shop."
+              footer="Full control. Points are scoped to your shop only."
+              tone="purple"
+            />
           </div>
-        </div>
+        </motion.div>
 
-        {/* Custom Settings (only show if custom system) */}
-        {!settings.use_global_system && (
-          <div className="bg-white dark:bg-neutral-900 p-6 rounded-xl border border-gray-200 dark:border-neutral-800 shadow-md">
-            <h2 className="text-lg font-semibold mb-4">Custom Points Configuration</h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Points per Dollar Spent
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={settings.points_per_dollar}
-                  onChange={(e) => setSettings({ ...settings, points_per_dollar: parseInt(e.target.value) })}
-                  className="w-full px-4 py-2 bg-gray-100 dark:bg-neutral-800 rounded-lg outline-none focus:ring-2 focus:ring-amber-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Example: 5 points = $0.50 earned per $10 purchase
-                </p>
-              </div>
+        {/* Custom values */}
+        {!form.use_global_system && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border-2 border-gray-200 dark:border-neutral-800 shadow-lg">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
+              <Calculator className="w-5 h-5 text-amber-600" /> Custom Configuration
+            </h2>
+            <p className="text-sm text-gray-500 mb-5">Three numbers control everything.</p>
 
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Minimum Points to Redeem
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={settings.min_redemption_points}
-                  onChange={(e) => setSettings({ ...settings, min_redemption_points: parseInt(e.target.value) })}
-                  className="w-full px-4 py-2 bg-gray-100 dark:bg-neutral-800 rounded-lg outline-none focus:ring-2 focus:ring-amber-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Customers must have this many points to redeem
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Points to Dollar Value
-                </label>
-                <input
-                  type="number"
-                  step="0.001"
-                  min="0.001"
-                  max="1"
-                  value={settings.points_to_dollar_value}
-                  onChange={(e) => setSettings({ ...settings, points_to_dollar_value: parseFloat(e.target.value) })}
-                  className="w-full px-4 py-2 bg-gray-100 dark:bg-neutral-800 rounded-lg outline-none focus:ring-2 focus:ring-amber-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Example: 0.01 = 100 points = $1 off
-                </p>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Field
+                label="Points per $1 spent"
+                hint="Higher = customers earn faster."
+                type="number" min="0" step="1"
+                value={form.points_per_dollar}
+                onChange={v => setForm(f => ({ ...f, points_per_dollar: v }))}
+              />
+              <Field
+                label="Redemption step (pts)"
+                hint="Customers redeem in multiples of this. e.g. 200 → chips are 200 / 400 / 600..."
+                type="number" min="1" step="1"
+                value={form.min_redemption_points}
+                onChange={v => setForm(f => ({ ...f, min_redemption_points: v }))}
+              />
+              <Field
+                label="$ value per point"
+                hint="e.g. 0.005 → 200 pts = $1 off."
+                type="number" min="0.0001" step="0.0001"
+                value={form.points_to_dollar_value}
+                onChange={v => setForm(f => ({ ...f, points_to_dollar_value: v }))}
+              />
             </div>
-          </div>
+          </motion.div>
         )}
 
-        {/* Bonus Campaigns */}
-        <div className="bg-white dark:bg-neutral-900 p-6 rounded-xl border border-gray-200 dark:border-neutral-800 shadow-md">
-          <h2 className="text-lg font-semibold mb-4">Bonus Campaigns</h2>
-          
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Enable Bonus Multiplier</p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Temporarily increase points earned (e.g., 2x points weekends)
-                </p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.bonus_active}
-                  onChange={(e) => setSettings({ ...settings, bonus_active: e.target.checked })}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-amber-300 dark:peer-focus:ring-amber-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-amber-600"></div>
-              </label>
-            </div>
-
-            {settings.bonus_active && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-amber-50 dark:bg-amber-900/10 rounded-lg border border-amber-200 dark:border-amber-800">
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Bonus Multiplier
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="1.1"
-                    max="10"
-                    value={settings.bonus_multiplier}
-                    onChange={(e) => setSettings({ ...settings, bonus_multiplier: parseFloat(e.target.value) })}
-                    className="w-full px-4 py-2 bg-white dark:bg-neutral-800 rounded-lg outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                    2.0 = double points, 1.5 = 50% more points
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Campaign Description
-                  </label>
-                  <input
-                    type="text"
-                    value={settings.bonus_description || ''}
-                    onChange={(e) => setSettings({ ...settings, bonus_description: e.target.value })}
-                    placeholder="e.g., Weekend 2x Points!"
-                    className="w-full px-4 py-2 bg-white dark:bg-neutral-800 rounded-lg outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
-              </div>
-            )}
+        {/* Live preview */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border-2 border-emerald-200 dark:border-emerald-800 rounded-2xl p-6">
+          <div className="flex items-center gap-2 mb-3">
+            <Info className="w-5 h-5 text-emerald-600" />
+            <h3 className="font-bold text-emerald-900 dark:text-emerald-200">Live Preview</h3>
           </div>
-        </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <PreviewStat
+              label="Earn rate"
+              value={`${effPpd} pts / $1`}
+              sub={form.bonus_active && bonusM !== 1 ? `${bonusM}× bonus active` : null}
+            />
+            <PreviewStat
+              label="Redemption step"
+              value={`${effStep} pts`}
+              sub={`= $${dollarsPerStep} off`}
+            />
+            <PreviewStat
+              label="Effective cashback"
+              value={`${pctBack}%`}
+              sub={`$20 spent → ${earnedAt$20} pts`}
+            />
+          </div>
+          <div className="mt-4 text-sm text-emerald-900 dark:text-emerald-200 bg-white/60 dark:bg-black/20 rounded-xl p-3">
+            <b>Example:</b> A customer spends <b>$20</b> → earns <b>{earnedAt$20} pts</b>.
+            Once they hit <b>{effStep} pts</b>, they can redeem <b>${dollarsPerStep}</b> off any order at your shop
+            {form.use_global_system ? " (or any LoyalCup shop on the global program)" : ""}.
+          </div>
+        </motion.div>
 
-        {/* Program Status */}
-        <div className="bg-white dark:bg-neutral-900 p-6 rounded-xl border border-gray-200 dark:border-neutral-800 shadow-md">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">Loyalty Program Status</h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                {settings.is_active ? 'Customers can currently earn and redeem points' : 'Loyalty program is paused'}
-              </p>
+        {/* Bonus campaign */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+          className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border-2 border-gray-200 dark:border-neutral-800 shadow-lg">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-amber-500" />
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Bonus Promotion</h2>
+              {form.bonus_active && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">LIVE</span>
+              )}
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={settings.is_active}
-                onChange={(e) => setSettings({ ...settings, is_active: e.target.checked })}
-                className="sr-only peer"
+            <button type="button" onClick={() => setForm(f => ({ ...f, bonus_active: !f.bonus_active }))}
+              className={`relative w-14 h-7 rounded-full transition-colors ${form.bonus_active ? "bg-amber-500" : "bg-gray-300 dark:bg-neutral-700"}`}>
+              <div className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform ${form.bonus_active ? "translate-x-7" : "translate-x-0"}`} />
+            </button>
+          </div>
+
+          <p className="text-sm text-gray-500 mb-4">
+            Temporarily multiply earning rate (e.g. 2× points weekend). Stacks on top of {form.use_global_system ? "the global rate" : "your custom rate"}.
+          </p>
+
+          {form.bonus_active && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field
+                label="Multiplier"
+                hint="2.0 = double points · 1.5 = +50% points"
+                type="number" min="1" max="10" step="0.5"
+                value={form.bonus_multiplier}
+                onChange={v => setForm(f => ({ ...f, bonus_multiplier: v }))}
               />
-              <div className="w-14 h-7 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 dark:peer-focus:ring-green-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all dark:border-gray-600 peer-checked:bg-green-600"></div>
-            </label>
-          </div>
-        </div>
+              <Field
+                label="Campaign description (optional)"
+                hint="Shown to customers at checkout."
+                type="text"
+                placeholder="Double points weekend!"
+                value={form.bonus_description}
+                onChange={v => setForm(f => ({ ...f, bonus_description: v }))}
+              />
+            </div>
+          )}
+        </motion.div>
 
-        {/* Save Button */}
-        <div className="flex justify-end gap-4">
-          <button
-            type="button"
-            onClick={loadLoyaltyData}
-            className="px-6 py-2 border-2 border-gray-300 dark:border-neutral-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-neutral-800 transition"
-          >
+        {/* Save bar */}
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+          <button type="button" onClick={load}
+            className="px-6 py-3 border-2 border-gray-300 dark:border-neutral-700 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-neutral-800 transition font-semibold">
             Reset
           </button>
-          <button
-            type="submit"
-            className="px-6 py-3 bg-amber-700 text-white rounded-lg hover:bg-amber-800 transition font-semibold"
-          >
-            Save Loyalty Settings
-          </button>
+          <motion.button type="submit" disabled={saving}
+            whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+            className="flex items-center justify-center gap-2 px-8 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl font-bold shadow-lg hover:shadow-xl transition disabled:opacity-50">
+            {saving ? "Saving..." : <><Check className="w-5 h-5" /> Save Loyalty Settings</>}
+          </motion.button>
         </div>
       </form>
+    </div>
+  );
+}
+
+// ── Subcomponents ───────────────────────────────────────────────────────────
+function StatCard({ icon: Icon, label, value, subtitle, color }) {
+  return (
+    <motion.div whileHover={{ y: -3 }}
+      className={`bg-gradient-to-br ${color} p-5 rounded-2xl text-white shadow-lg`}>
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-white/80 text-xs font-semibold uppercase tracking-wide">{label}</p>
+          <p className="text-3xl font-black mt-1">{value}</p>
+          {subtitle && <p className="text-white/70 text-xs mt-1">{subtitle}</p>}
+        </div>
+        <Icon className="w-10 h-10 text-white/40" />
+      </div>
+    </motion.div>
+  );
+}
+
+function ModeCard({ active, onClick, icon: Icon, title, desc, footer, tone }) {
+  const ring = active
+    ? (tone === "purple" ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20" : "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20")
+    : "border-gray-200 dark:border-neutral-700 bg-gray-50 dark:bg-neutral-800/50 hover:border-gray-300";
+  return (
+    <button type="button" onClick={onClick}
+      className={`text-left p-4 rounded-xl border-2 transition ${ring}`}>
+      <div className="flex items-center gap-2 mb-1">
+        <Icon className="w-4 h-4 text-current opacity-70" />
+        <span className="font-bold text-gray-900 dark:text-white">{title}</span>
+        {active && <Check className="w-4 h-4 text-current ml-auto" />}
+      </div>
+      <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{desc}</p>
+      {footer && <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2 italic">{footer}</p>}
+    </button>
+  );
+}
+
+function Field({ label, hint, value, onChange, ...rest }) {
+  return (
+    <div>
+      <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">{label}</label>
+      <input {...rest}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="w-full px-3 py-2 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-lg focus:outline-none focus:border-amber-500 transition" />
+      {hint && <p className="text-[11px] text-gray-400 mt-1">{hint}</p>}
+    </div>
+  );
+}
+
+function PreviewStat({ label, value, sub }) {
+  return (
+    <div className="bg-white/70 dark:bg-black/20 rounded-xl p-3">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">{label}</p>
+      <p className="text-2xl font-black text-emerald-900 dark:text-emerald-100 mt-0.5">{value}</p>
+      {sub && <p className="text-xs text-emerald-700/80 dark:text-emerald-300/80 mt-0.5">{sub}</p>}
     </div>
   );
 }
