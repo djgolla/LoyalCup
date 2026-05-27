@@ -4,6 +4,11 @@ GET /api/v1/pos/status  — current POS connection state for a shop
 Uses the token manager to auto-refresh expired Square tokens,
 and surfaces a `needs_reauth` flag so the frontend can prompt
 the shop owner to reconnect if refresh also fails.
+
+Self-healing: if the DB row is marked `reauth_required` but the
+stored tokens are actually still valid (e.g. row got stuck after a
+transient Square 401), we try Square once. If Square accepts the
+token, we flip the row back to `connected` automatically.
 """
 import logging
 from fastapi import APIRouter, Request, HTTPException, Depends
@@ -43,6 +48,7 @@ async def pos_status(
 
     svc = db.get_service_client()
 
+    # Authorization: admin can read any shop; otherwise must own this shop.
     if user_role != "admin":
         shop_check = (
             svc.table("shops")
@@ -57,7 +63,11 @@ async def pos_status(
 
     result = (
         svc.table("pos_connections")
-        .select("id, status, merchant_id, location_id, token_expires_at, updated_at")
+        .select(
+            "id, status, merchant_id, location_id, "
+            "token_expires_at, updated_at, "
+            "access_token, refresh_token"
+        )
         .eq("shop_id", shop_id)
         .eq("provider", provider)
         .limit(1)
@@ -85,21 +95,65 @@ async def pos_status(
     needs_reauth = db_status == "reauth_required"
     error_msg    = None
 
-    # Only attempt to hit Square if we think we're connected.
-    if provider == "square" and db_status == "connected":
+    # ------------------------------------------------------------------
+    # Decide whether to actually hit Square to (a) load locations and
+    # (b) self-heal a stale `reauth_required` flag.
+    #
+    # We hit Square if:
+    #   - provider is square, AND
+    #   - status is `connected`, OR
+    #   - status is `reauth_required` BUT we still have tokens that
+    #     might be valid (i.e. we have access_token or refresh_token).
+    #     This is the self-healing path.
+    # ------------------------------------------------------------------
+    should_try_square = provider == "square" and (
+        db_status == "connected"
+        or (
+            db_status == "reauth_required"
+            and (conn.get("access_token") or conn.get("refresh_token"))
+        )
+    )
+
+    if should_try_square:
         try:
             loc_objects = await with_square_retry(
                 db, shop_id,
                 lambda token: _square.list_locations(token),
             )
             locations = [{"id": l.id, "name": l.name} for l in loc_objects]
+
+            # Self-heal: if Square just accepted our token but the row
+            # was stuck on `reauth_required`, flip it back to connected.
+            if db_status != "connected":
+                try:
+                    svc.table("pos_connections").update({
+                        "status": "connected",
+                    }).eq("id", conn["id"]).execute()
+                    logger.info(
+                        f"[POS Status] Self-healed shop {shop_id}: "
+                        f"{db_status} -> connected"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"[POS Status] Could not self-heal status for "
+                        f"shop {shop_id}: {e}"
+                    )
+                db_status    = "connected"
+                needs_reauth = False
+                error_msg    = None
+
         except SquareReauthRequired as e:
-            logger.warning(f"[POS Status] Square reauth required for shop {shop_id}: {e}")
+            logger.warning(
+                f"[POS Status] Square reauth required for shop {shop_id}: {e}"
+            )
             needs_reauth = True
             db_status    = "reauth_required"
             error_msg    = "Square connection expired. Please reconnect Square."
         except Exception as e:
-            logger.warning(f"[POS Status] Could not fetch Square locations for shop {shop_id}: {e}")
+            logger.warning(
+                f"[POS Status] Could not fetch Square locations for "
+                f"shop {shop_id}: {e}"
+            )
             error_msg = "Could not load Square locations. Try again or reconnect."
 
     return {
@@ -115,3 +169,7 @@ async def pos_status(
         "locations":        locations,
         "error":            error_msg,
     }
+
+
+def register(app):
+    app.include_router(router)
