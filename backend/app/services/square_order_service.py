@@ -151,6 +151,7 @@ async def _build_square_line_items(
         pos_id     = menu_row.get("pos_id")
         pos_source = (menu_row.get("pos_source") or "").lower()
 
+        # --- PATCH: Custom item support for non-Square menu items
         if pos_id and pos_source == "square":
             line_item["catalog_object_id"] = pos_id
         else:
