@@ -4,48 +4,25 @@ Allows a shop owner to pull the latest menu from Square into LoyalCup
 without going through the full OAuth flow again.
 
 Uses the Square token manager to auto-refresh expired tokens.
+
+IMPORTANT: All env / API base resolution goes through the SquareAdapter
+so we can NEVER have an OAuth-vs-sync env mismatch (which would 401 and
+falsely flip the connection to reauth_required).
 """
-import os
-import httpx
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Request, HTTPException, Depends
 from app.database import get_supabase
+from app.integrations.square.adapter import SquareAdapter
 from app.integrations.square.sync import sync_square_catalog
 from app.integrations.square.token_manager import (
     with_square_retry,
     SquareReauthRequired,
 )
 
-router = APIRouter()
-logger = logging.getLogger(__name__)
-
-SQUARE_ENV = os.getenv("SQUARE_ENV", "sandbox")
-SQUARE_API_BASE = (
-    "https://connect.squareupsandbox.com/v2"
-    if SQUARE_ENV == "sandbox"
-    else "https://connect.squareup.com/v2"
-)
-
-
-async def _fetch_catalog(access_token: str) -> list:
-    """Pull the full Square catalog. Raises RuntimeError on 401 so the
-    token manager can refresh and retry."""
-    headers = {
-        "Authorization":  f"Bearer {access_token}",
-        "Square-Version": "2024-03-21",
-    }
-    types = "CATEGORY,ITEM,ITEM_VARIATION,MODIFIER_LIST,IMAGE"
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.get(
-            f"{SQUARE_API_BASE}/catalog/list?types={types}",
-            headers=headers,
-        )
-        if resp.status_code == 401:
-            raise RuntimeError(f"Square API 401: {resp.text}")
-        if resp.status_code != 200:
-            raise RuntimeError(f"Square catalog fetch failed {resp.status_code}: {resp.text}")
-        return resp.json().get("objects", []) or []
+router  = APIRouter()
+logger  = logging.getLogger(__name__)
+_square = SquareAdapter()
 
 
 @router.post("/api/v1/pos/sync")
@@ -64,7 +41,7 @@ async def pos_sync(request: Request, db=Depends(get_supabase)):
     if provider != "square":
         raise HTTPException(status_code=400, detail="Only 'square' provider is currently supported")
 
-    # Verify the requesting user owns this shop
+    # ── Auth ─────────────────────────────────────────────────────────────
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing Authorization header")
@@ -78,8 +55,8 @@ async def pos_sync(request: Request, db=Depends(get_supabase)):
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Auth failed: {str(e)}")
 
-    # Verify ownership
-    shop = (
+    # ── Ownership ────────────────────────────────────────────────────────
+    shop_row = (
         db.service_client.table("shops")
         .select("id, owner_id")
         .eq("id", shop_id)
@@ -87,46 +64,89 @@ async def pos_sync(request: Request, db=Depends(get_supabase)):
         .limit(1)
         .execute()
     )
-    if not shop.data:
+    if not shop_row.data:
         raise HTTPException(status_code=403, detail="You do not own this shop.")
 
-    # Fetch fresh catalog from Square with auto-refresh on 401
+    logger.info(f"[POS Sync] Starting sync for shop {shop_id} (user {user.id})")
+
+    # ── Fetch catalog via the SAME adapter the OAuth callback uses ──────
+    #
+    # This guarantees we hit the same Square env (sandbox vs prod) the
+    # token was issued for. Mismatched envs cause silent 401s which the
+    # token manager then misinterprets as "refresh failed" and flips the
+    # row to reauth_required — that was the loop you were seeing.
     try:
-        catalog_objects = await with_square_retry(
+        snapshot = await with_square_retry(
             db, shop_id,
-            _fetch_catalog,
+            lambda access_token: _square.fetch_catalog(access_token),
         )
-    except SquareReauthRequired:
+    except SquareReauthRequired as e:
+        logger.warning(f"[POS Sync] Reauth required for shop {shop_id}: {e}")
         raise HTTPException(
             status_code=401,
             detail="Square connection expired. Please reconnect Square to continue.",
         )
     except Exception as e:
-        logger.error(f"[POS Sync] Catalog fetch failed for {shop_id}: {e}")
+        logger.error(f"[POS Sync] Catalog fetch failed for {shop_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=502,
             detail=f"Square API error: {str(e)}",
         )
 
-    # Run the sync
+    # Flatten snapshot back into raw catalog objects for the syncer.
+    catalog_objects = []
+    for cat in snapshot.categories:
+        catalog_objects.append(cat.raw)
+    for item in snapshot.items:
+        catalog_objects.append(item.raw)
+    for ms in snapshot.modifier_sets:
+        catalog_objects.append(ms.raw)
+
+    logger.info(
+        f"[POS Sync] Square returned for shop {shop_id}: "
+        f"{len(snapshot.categories)} categories, "
+        f"{len(snapshot.items)} items, "
+        f"{len(snapshot.modifier_sets)} modifier sets, "
+        f"{len(snapshot.images_by_id or {})} images"
+    )
+
+    # ── Sync into LoyalCup tables ───────────────────────────────────────
     try:
         summary = await sync_square_catalog(
             shop_id=shop_id,
             catalog_objects=catalog_objects,
             db=db,
             source="square",
+            images_by_id=snapshot.images_by_id if hasattr(snapshot, "images_by_id") else None,
         )
     except Exception as e:
-        logger.error(f"[POS Sync] Sync failed for {shop_id}: {e}")
+        logger.error(f"[POS Sync] DB upsert failed for {shop_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
 
-    # Bump last_synced_at
+    logger.info(f"[POS Sync] Done for shop {shop_id}: {summary}")
+
+    # ── Bump last_synced_at + clear any stale reauth flag ───────────────
     try:
         db.service_client.table("pos_connections").update({
-            "last_synced_at": datetime.utcnow().isoformat()
+            "last_synced_at": datetime.now(timezone.utc).isoformat(),
+            "status":         "connected",
         }).eq("shop_id", shop_id).eq("provider", provider).execute()
     except Exception as e:
         logger.warning(f"[POS Sync] Failed to update last_synced_at: {e}")
+
+    # If Square gave us nothing, surface that loud and clear so the UI
+    # can show a real message instead of "Sync complete · 0 items".
+    if (
+        summary.get("items_synced", 0) == 0
+        and summary.get("categories_synced", 0) == 0
+    ):
+        return {
+            "success":      False,
+            "warning":      "Square returned no menu items for this account. "
+                            "Add items in Square Dashboard, or confirm you OAuth'd "
+                            "into the correct Square account / environment.",
+            **summary,
+        }
 
     return {
         "success":               True,
@@ -135,3 +155,7 @@ async def pos_sync(request: Request, db=Depends(get_supabase)):
         "modifier_groups_synced": summary.get("modifier_groups_synced", 0),
         **summary,
     }
+
+
+def register(app):
+    app.include_router(router)
