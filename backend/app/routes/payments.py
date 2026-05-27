@@ -87,6 +87,12 @@ async def create_payment(
 
     db = get_supabase()
 
+    # --- PATCH: Enforce payment_nonce is present and non-empty ---
+    if not request.payment_nonce or not request.payment_nonce.strip():
+        logger.warning("[Payment] Payment request missing or blank payment_nonce")
+        raise HTTPException(status_code=400, detail="Payment nonce required")
+    # ------------------------------------------------------------
+
     # ── Validate shop ────────────────────────────────────────────────────────
     shop_resp = (
         db.get_service_client().table("shops")
