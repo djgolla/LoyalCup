@@ -182,6 +182,14 @@ export default function CheckoutScreen() {
       const msg = JSON.parse(event.nativeEvent.data);
       if (msg.type !== 'nonce') return;
       setShowPaymentSheet(false);
+      // PATCH: Only call processPayment if nonce is present & non-blank
+      if (!msg.nonce || !msg.nonce.trim()) {
+        Alert.alert(
+          "Payment Error",
+          "Card was not entered or tokenization failed. Please try again."
+        );
+        return;
+      }
       await processPayment(msg.nonce);
     } catch (e) { console.error('WebView message error:', e); }
   };
@@ -189,6 +197,16 @@ export default function CheckoutScreen() {
   const processPayment = async (nonce) => {
     setLoading(true);
     try {
+      // PATCH: Nonce check, alert user if missing/blank
+      if (!nonce || !nonce.trim()) {
+        setLoading(false);
+        Alert.alert(
+          "Card Not Processed",
+          "Something went wrong, please enter your card details."
+        );
+        return;
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
       if (!token) throw new Error('Session expired — please log in again');
@@ -269,7 +287,6 @@ export default function CheckoutScreen() {
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={{ paddingBottom: 200 }} showsVerticalScrollIndicator={false}>
-
         {Object.values(itemsByShop).map(({ shopId, shopName, items }) => (
           <View key={shopId}>
             <Text style={styles.sectionLabel}>ORDER FROM {shopName.toUpperCase()}</Text>
