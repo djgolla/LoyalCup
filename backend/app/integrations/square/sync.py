@@ -1,7 +1,17 @@
 """
-Square catalog sync: maps Square's raw catalog objects into LoyalCup's
-menu_categories, menu_items, modifier_groups, and modifier_options tables.
-Supports upsert so re-syncing is always safe.
+Square catalog sync: maps Square's raw catalog objects into LoyalCup's live DB:
+  categories, menu_items, modifier_groups, modifier_options.
+
+Schema notes (live Supabase, NOT the older repo migrations):
+  - categories(id, shop_id, name, display_order, description, pos_id, pos_source)
+    * pos_id / pos_source added by the migration; used for idempotent re-sync.
+    * NO is_active column. NO sort_order column (it's display_order).
+  - menu_items.category_id REFERENCES categories(id)  ← FK lives on this table
+  - menu_items(.., pos_id, pos_source, modifier_group_ids, is_active, is_available, is_out_of_stock)
+  - modifier_groups(.., min_selections, max_selections, pos_id, pos_source, is_active)
+  - modifier_options(.., modifier_group_id, shop_id, name, price_adjustment, pos_id, pos_source, is_active)
+
+Idempotent: every entity is matched on (shop_id, pos_id) and upserted.
 """
 import uuid
 import logging
@@ -26,9 +36,6 @@ async def sync_square_catalog(
     """
     Takes raw Square catalog objects and upserts them into LoyalCup's DB.
     Returns a summary of what was synced.
-
-    images_by_id: optional pre-built {square_image_id: url} map (from adapter).
-    If not provided, it's built from any IMAGE objects in catalog_objects.
     """
     client = db.service_client
 
@@ -61,7 +68,7 @@ async def sync_square_catalog(
         name     = cat_data.get("name") or "Uncategorized"
 
         existing = (
-            client.table("menu_categories")
+            client.table("categories")
             .select("id")
             .eq("shop_id", shop_id)
             .eq("pos_id", pos_id)
@@ -71,21 +78,19 @@ async def sync_square_catalog(
 
         if existing.data:
             lc_id = existing.data[0]["id"]
-            client.table("menu_categories").update({
+            client.table("categories").update({
                 "name":       name,
                 "pos_source": source,
-                "is_active":  True,
             }).eq("id", lc_id).execute()
         else:
             lc_id = str(uuid.uuid4())
-            client.table("menu_categories").insert({
-                "id":         lc_id,
-                "shop_id":    shop_id,
-                "name":       name,
-                "pos_id":     pos_id,
-                "pos_source": source,
-                "sort_order": categories_synced,
-                "is_active":  True,
+            client.table("categories").insert({
+                "id":            lc_id,
+                "shop_id":       shop_id,
+                "name":          name,
+                "pos_id":        pos_id,
+                "pos_source":    source,
+                "display_order": categories_synced,
             }).execute()
 
         category_pos_id_to_lc_id[pos_id] = lc_id
@@ -137,11 +142,9 @@ async def sync_square_catalog(
         modifier_list_pos_id_to_lc_id[pos_id] = lc_id
         modifier_groups_synced += 1
 
-        # ── sync individual modifier options ──
-        # Square inline modifiers: each has their own "id" (catalog object id)
-        # and a "modifier_data" sub-object. Do NOT use "uid" — that's a different field.
+        # ── modifier options ──
         for mod in ml_data.get("modifiers") or []:
-            mod_pos_id = mod.get("id")           # ← correct field, not "uid"
+            mod_pos_id = mod.get("id")
             if not mod_pos_id:
                 logger.warning(f"[sync] modifier in list {pos_id} has no id, skipping")
                 continue
@@ -181,16 +184,16 @@ async def sync_square_catalog(
 
             modifier_options_synced += 1
 
-    # ── SYNC ITEMS ────────────────────────────────────────────────────────────
+    # ── SYNC ITEMS ───────────────────────────────────────────────────────────
     items_synced = 0
 
     for item in raw_items:
-        pos_id    = item["id"]
-        item_data = item.get("item_data", {})
-        name      = item_data.get("name") or "Item"
+        pos_id      = item["id"]
+        item_data   = item.get("item_data", {})
+        name        = item_data.get("name") or "Item"
         description = item_data.get("description")
 
-        # Resolve category — try reporting_category first, then categories array
+        # Resolve category — try reporting_category first, then category, then categories[]
         category_lc_id = None
         for cat_ref in [
             item_data.get("reporting_category"),
@@ -204,7 +207,7 @@ async def sync_square_catalog(
                 category_lc_id = found
                 break
 
-        # Price: first variation — default 0.0 (never None, DB constraint)
+        # Price: first variation — default 0.0 (DB constraint disallows NULL)
         price: float = 0.0
         variations = item_data.get("variations") or []
         if variations:
@@ -220,13 +223,14 @@ async def sync_square_catalog(
             if url:
                 image_url = url
                 break
+        if not image_url and item_data.get("image_id"):
+            image_url = raw_images.get(item_data.get("image_id"))
 
-        # Linked modifier groups
+        # Linked modifier groups (enabled only)
         lc_modifier_group_ids = []
         for ml_ref in (item_data.get("modifier_list_info") or []):
             mid = ml_ref.get("modifier_list_id")
             if mid and mid in modifier_list_pos_id_to_lc_id:
-                # Only include enabled modifier lists
                 if ml_ref.get("enabled") is not False:
                     lc_modifier_group_ids.append(modifier_list_pos_id_to_lc_id[mid])
 
@@ -250,6 +254,7 @@ async def sync_square_catalog(
                 "pos_source":         source,
                 "modifier_group_ids": lc_modifier_group_ids,
                 "is_active":          True,
+                "is_available":       True,
             }).eq("id", lc_id).execute()
         else:
             lc_id = str(uuid.uuid4())
@@ -269,13 +274,13 @@ async def sync_square_catalog(
             }).execute()
 
         items_synced += 1
-        logger.info(f"[sync] item: {name} @ ${price} (pos_id={pos_id})")
+        logger.info(f"[sync] item: {name} @ ${price} (pos_id={pos_id}, cat={category_lc_id})")
 
     summary = {
-        "categories_synced":    categories_synced,
-        "modifier_groups_synced": modifier_groups_synced,
+        "categories_synced":       categories_synced,
+        "modifier_groups_synced":  modifier_groups_synced,
         "modifier_options_synced": modifier_options_synced,
-        "items_synced":         items_synced,
+        "items_synced":            items_synced,
     }
     logger.info(f"[sync] Square catalog sync complete for shop {shop_id}: {summary}")
     return summary
