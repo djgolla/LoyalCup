@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Protocol
 
 @dataclass
@@ -45,6 +45,9 @@ class POSCatalogSnapshot:
     categories: List[POSCatalogCategory]
     items: List[POSCatalogItem]
     modifier_sets: List[POSCatalogModifierSet]
+    # Map of {square_image_id: image_url} pulled from CATALOG IMAGE objects.
+    # Optional — defaults to empty so older code paths that don't pass it still work.
+    images_by_id: Dict[str, str] = field(default_factory=dict)
 
 class POSAdapter(Protocol):
     provider: str

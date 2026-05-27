@@ -1,18 +1,18 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useShop } from "../../context/ShopContext";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  Package, DollarSign, TrendingUp, Coffee, Users,
-  Clock, CheckCircle, XCircle, Zap, ArrowUpRight,
-  ShoppingBag, Star, Terminal, MapPin, AlertTriangle,
+  Package, DollarSign, TrendingUp, Coffee,
+  Clock, XCircle, ArrowUpRight,
+  ShoppingBag, Terminal, AlertTriangle,
   RefreshCw,
 } from "lucide-react";
 import supabase from "../../lib/supabase";
-import { getSquareReadiness, setSquareLocation } from "../../services/posService";
+import { getPosStatus } from "../../services/posService";
 import { toast } from "sonner";
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Sub-components ─────────────────────────────────────────────────────────
 
 const StatCard = ({ icon: Icon, title, value, subtitle, color, delay }) => (
   <motion.div
@@ -57,207 +57,81 @@ const QuickAction = ({ icon: Icon, title, description, color, onClick, delay, ba
   </motion.button>
 );
 
-// ── Square setup card — shown when Square not fully configured ────────────────
-
-function SquareSetupCard({ shop, shopId, onComplete }) {
-  const navigate = useNavigate();
-  const [readiness,    setReadiness]    = useState(null);
-  const [loading,      setLoading]      = useState(true);
-  const [settingLoc,   setSettingLoc]   = useState(false);
-
-  const checkReadiness = useCallback(async () => {
-    if (!shopId) return;
-    setLoading(true);
-    try {
-      const r = await getSquareReadiness(shopId);
-      setReadiness(r);
-      if (r.ready) onComplete?.();
-    } catch { /* silent */ }
-    finally { setLoading(false); }
-  }, [shopId, onComplete]);
-
-  useEffect(() => { checkReadiness(); }, [checkReadiness]);
-
-  const handleSetLocation = async (locationId) => {
-    setSettingLoc(true);
-    try {
-      await setSquareLocation(shopId, locationId);
-      toast.success("Square location set! Your shop is now live.");
-      await checkReadiness();
-    } catch (e) {
-      toast.error(e.message || "Failed to set location");
-    } finally {
-      setSettingLoc(false);
-    }
+// ── Slim "needs attention" banner — only shown when something is actually broken
+function SquareIssueBanner({ kind, onClick }) {
+  const map = {
+    reauth: {
+      title: "Square connection expired",
+      body:  "Reconnect Square to keep accepting mobile orders.",
+      cta:   "Reconnect Square",
+      tone:  "from-orange-500 to-red-500",
+    },
+    no_location: {
+      title: "Pick a Square location",
+      body:  "Choose which Square terminal receives mobile orders so checkout can go live.",
+      cta:   "Pick location",
+      tone:  "from-amber-500 to-orange-500",
+    },
   };
-
-  const step1Done = !!shop.address && !!shop.phone;
-  const step2Done = readiness?.connected;
-  const step3Done = readiness?.hasLocation;
-
+  const m = map[kind];
+  if (!m) return null;
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-      className="bg-white dark:bg-neutral-900 rounded-2xl border-2 border-amber-200 dark:border-amber-800 shadow-xl overflow-hidden"
+      initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+      className="bg-white dark:bg-neutral-900 rounded-2xl border border-orange-200 dark:border-orange-800 shadow-sm overflow-hidden"
     >
-      {/* Header */}
-      <div className="bg-gradient-to-r from-amber-500 to-orange-500 p-6 text-white">
-        <div className="flex items-center gap-3 mb-2">
-          <Terminal className="w-6 h-6" />
-          <h2 className="text-xl font-bold">Complete Your Square Setup</h2>
-        </div>
-        <p className="text-amber-100 text-sm">
-          Square POS is required to accept mobile orders. Orders from customers print directly on your terminal.
-        </p>
+      <div className={`bg-gradient-to-r ${m.tone} px-5 py-3 text-white flex items-center gap-2`}>
+        <AlertTriangle className="w-5 h-5 shrink-0" />
+        <span className="font-bold">{m.title}</span>
       </div>
-
-      <div className="p-6 space-y-4">
-        {/* Step 1 */}
-        <div className={`flex items-start gap-4 p-4 rounded-xl ${step1Done ? 'bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800' : 'bg-gray-50 dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700'}`}>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${step1Done ? 'bg-green-500' : 'bg-gray-300 dark:bg-neutral-600'}`}>
-            {step1Done ? <CheckCircle className="w-5 h-5 text-white" /> : <span className="text-white text-sm font-bold">1</span>}
-          </div>
-          <div className="flex-1">
-            <p className={`font-semibold ${step1Done ? 'text-green-800 dark:text-green-300' : 'text-gray-800 dark:text-gray-200'}`}>
-              Shop Settings
-            </p>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              {step1Done ? 'Address and phone number saved ✓' : 'Add your address and phone number'}
-            </p>
-          </div>
-          {!step1Done && (
-            <button
-              onClick={() => navigate('/shop-owner/settings')}
-              className="shrink-0 text-sm font-semibold text-amber-600 hover:text-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-1.5 rounded-lg transition"
-            >
-              Set Up →
-            </button>
-          )}
-        </div>
-
-        {/* Step 2 */}
-        <div className={`flex items-start gap-4 p-4 rounded-xl ${step2Done ? 'bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800' : 'bg-gray-50 dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700'}`}>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${step2Done ? 'bg-green-500' : 'bg-gray-300 dark:bg-neutral-600'}`}>
-            {step2Done ? <CheckCircle className="w-5 h-5 text-white" /> : <span className="text-white text-sm font-bold">2</span>}
-          </div>
-          <div className="flex-1">
-            <p className={`font-semibold ${step2Done ? 'text-green-800 dark:text-green-300' : 'text-gray-800 dark:text-gray-200'}`}>
-              Connect Square
-            </p>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              {loading ? 'Checking...' : step2Done
-                ? `Connected (Merchant: ${readiness?.merchantId?.slice(0, 12) || '—'})`
-                : 'Link your Square account so orders appear on your terminal'
-              }
-            </p>
-          </div>
-          {!step2Done && !loading && (
-            <button
-              onClick={() => navigate('/shop-owner/connect-square')}
-              className="shrink-0 text-sm font-semibold text-white bg-black dark:bg-white dark:text-black px-3 py-1.5 rounded-lg transition hover:bg-gray-800 dark:hover:bg-gray-100"
-            >
-              Connect →
-            </button>
-          )}
-        </div>
-
-        {/* Step 3 — location picker */}
-        <div className={`flex items-start gap-4 p-4 rounded-xl ${step3Done ? 'bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800' : step2Done ? 'bg-amber-50 dark:bg-amber-900/10 border-2 border-amber-300 dark:border-amber-700' : 'bg-gray-50 dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 opacity-50'}`}>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${step3Done ? 'bg-green-500' : step2Done ? 'bg-amber-500' : 'bg-gray-300 dark:bg-neutral-600'}`}>
-            {step3Done ? <CheckCircle className="w-5 h-5 text-white" /> : <span className="text-white text-sm font-bold">3</span>}
-          </div>
-          <div className="flex-1">
-            <p className={`font-semibold ${step3Done ? 'text-green-800 dark:text-green-300' : step2Done ? 'text-amber-800 dark:text-amber-300' : 'text-gray-800 dark:text-gray-200'}`}>
-              Select Square Location
-            </p>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              {step3Done
-                ? `Location set ✓ — orders will print here`
-                : step2Done
-                ? 'Choose which Square terminal receives orders'
-                : 'Connect Square first'
-              }
-            </p>
-
-            {/* Location picker — only shown when connected but no location set */}
-            {step2Done && !step3Done && !loading && readiness?.locations?.length > 0 && (
-              <div className="mt-3 space-y-2">
-                {readiness.locations.map(loc => (
-                  <button
-                    key={loc.id}
-                    onClick={() => handleSetLocation(loc.id)}
-                    disabled={settingLoc}
-                    className="w-full text-left px-4 py-3 bg-white dark:bg-neutral-800 rounded-lg border border-amber-200 dark:border-amber-700 hover:border-amber-500 transition font-medium text-gray-800 dark:text-gray-200 flex items-center justify-between text-sm disabled:opacity-50"
-                  >
-                    <span className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-amber-500 shrink-0" />
-                      {loc.name}
-                    </span>
-                    <span className="text-xs text-gray-400 font-mono">{loc.id}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {step2Done && !step3Done && !loading && readiness?.locations?.length === 0 && (
-              <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
-                No active locations found on your Square account. Make sure you have an active location in Square Dashboard.
-              </p>
-            )}
-          </div>
-
-          {step2Done && !step3Done && (
-            <button
-              onClick={checkReadiness}
-              disabled={loading}
-              className="shrink-0 p-2 text-gray-400 hover:text-gray-600 transition"
-              title="Refresh"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-          )}
-        </div>
-
-        {/* All done! */}
-        {step1Done && step2Done && step3Done && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-            className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl"
-          >
-            <CheckCircle className="w-6 h-6 text-green-500 shrink-0" />
-            <div>
-              <p className="font-bold text-green-800 dark:text-green-300">You're live! 🎉</p>
-              <p className="text-sm text-green-700 dark:text-green-400">
-                Mobile orders are now active. They'll print on your Square terminal automatically.
-              </p>
-            </div>
-          </motion.div>
-        )}
+      <div className="p-5 flex items-center justify-between gap-4 flex-wrap">
+        <p className="text-sm text-gray-600 dark:text-gray-300 flex-1 min-w-[200px]">{m.body}</p>
+        <button
+          onClick={onClick}
+          className="shrink-0 bg-black dark:bg-white text-white dark:text-black font-semibold text-sm px-4 py-2 rounded-xl hover:opacity-90 transition"
+        >
+          {m.cta} →
+        </button>
       </div>
     </motion.div>
   );
 }
 
-// ── Main Dashboard ────────────────────────────────────────────────────────────
+// ── Main Dashboard ─────────────────────────────────────────────────────────
 
 export default function ShopOwnerDashboard() {
   const { shop, shopId, loading: shopLoading } = useShop();
   const navigate = useNavigate();
 
-  const [stats, setStats]         = useState({
+  const [stats, setStats] = useState({
     ordersToday: 0, revenueToday: 0,
     totalMenuItems: 0, activeMenuItems: 0,
     pendingOrders: 0,
   });
   const [recentOrders, setRecentOrders] = useState([]);
   const [loading, setLoading]           = useState(true);
-  const [squareReady, setSquareReady]   = useState(false);
+  const [posStatus, setPosStatus]       = useState(null);
 
   const squareConnected = !!shop?.square_merchant_id;
 
   useEffect(() => {
-    if (shopId) loadDashboardData();
+    if (shopId) {
+      loadDashboardData();
+      loadPosStatus();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shopId]);
+
+  const loadPosStatus = async () => {
+    if (!shopId) return;
+    try {
+      const data = await getPosStatus(shopId, "square");
+      setPosStatus(data);
+    } catch {
+      // status fetch failing shouldn't break the dashboard
+      setPosStatus(null);
+    }
+  };
 
   const loadDashboardData = async () => {
     if (!shopId) return;
@@ -323,6 +197,17 @@ export default function ShopOwnerDashboard() {
     cancelled: 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400',
   };
 
+  // Decide if we need to show a small "needs attention" banner.
+  // Only when Square is connected at DB level (shop.square_merchant_id is set)
+  // — the layout already hard-blocks brand-new unconnected shops, so we never
+  // need to re-prompt for the initial connect here.
+  const needsReauth = posStatus?.needs_reauth || posStatus?.status === "reauth_required";
+  const needsLocation = squareConnected && posStatus && !posStatus.location_id;
+  const issueKind =
+    needsReauth     ? "reauth"
+    : needsLocation ? "no_location"
+    : null;
+
   return (
     <div className="space-y-8 pb-8">
 
@@ -334,26 +219,33 @@ export default function ShopOwnerDashboard() {
             {shop.name} ☕
           </h1>
           <p className="text-gray-500 dark:text-gray-400 text-sm flex items-center gap-2">
-            <span className={`inline-block w-2 h-2 rounded-full ${squareConnected ? 'bg-green-500' : 'bg-amber-500'}`} />
-            {squareConnected ? 'Live — accepting mobile orders' : 'Setup required before accepting orders'}
+            <span className={`inline-block w-2 h-2 rounded-full ${
+              issueKind ? 'bg-amber-500' : squareConnected ? 'bg-green-500' : 'bg-amber-500'
+            }`} />
+            {issueKind === "reauth"
+              ? "Square needs reconnection"
+              : issueKind === "no_location"
+              ? "Pick your Square location to go live"
+              : squareConnected
+              ? "Live — accepting mobile orders"
+              : "Setup required before accepting orders"}
           </p>
         </div>
-        <button onClick={loadDashboardData} disabled={loading}
+        <button onClick={() => { loadDashboardData(); loadPosStatus(); }} disabled={loading}
           className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition rounded-lg hover:bg-gray-100 dark:hover:bg-neutral-800">
           <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
         </button>
       </motion.div>
 
-      {/* ── Square setup card — shown until fully configured ── */}
-      {!squareReady && (
-        <SquareSetupCard
-          shop={shop}
-          shopId={shopId}
-          onComplete={() => setSquareReady(true)}
+      {/* ── Slim issue banner — only when something is actually broken ── */}
+      {issueKind && (
+        <SquareIssueBanner
+          kind={issueKind}
+          onClick={() => navigate('/shop-owner/connect-square')}
         />
       )}
 
-      {/* ── Stats — only show meaningful ones when loading is done ── */}
+      {/* ── Stats ── */}
       {!loading && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
@@ -464,7 +356,7 @@ export default function ShopOwnerDashboard() {
       )}
 
       {/* No orders yet + Square is ready */}
-      {recentOrders.length === 0 && !loading && squareConnected && (
+      {recentOrders.length === 0 && !loading && squareConnected && !issueKind && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
           className="text-center py-12 bg-white dark:bg-neutral-900 rounded-2xl border border-dashed border-gray-200 dark:border-neutral-700">
           <Coffee className="w-10 h-10 text-amber-400 mx-auto mb-3" />
