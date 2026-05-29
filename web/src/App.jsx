@@ -84,11 +84,11 @@ export default function App() {
                 <Route element={<MainLayout />}>
                   <Route path="/" element={<RoleRedirect><Home /></RoleRedirect>} />
                   <Route path="/download" element={<Download />} />
-                  <Route path="/contact" element={<Contact />} />
-                  <Route path="/privacy" element={<Privacy />} />
-                  <Route path="/terms" element={<Terms />} />
-                  <Route path="/about" element={<About />} />
-                  <Route path="/pricing" element={<Pricing />} />
+                  <Route path="/contact"  element={<Contact />} />
+                  <Route path="/privacy"  element={<Privacy />} />
+                  <Route path="/terms"    element={<Terms />} />
+                  <Route path="/about"    element={<About />} />
+                  <Route path="/pricing"  element={<Pricing />} />
                 </Route>
 
                 {/* auth pages */}
@@ -135,21 +135,25 @@ export default function App() {
                     </RoleGuard>
                   }
                 >
-                  <Route path="/admin/dashboard"  element={<AdminDashboard />} />
-                  <Route path="/admin/shops"       element={<ShopManagement />} />
-                  <Route path="/admin/users"       element={<Users />} />
-                  <Route path="/admin/analytics"   element={<AdminAnalytics />} />
-                  <Route path="/admin/settings"    element={<AdminSettings />} />
-                  <Route path="/admin/audit-log"   element={<AuditLog />} />
+                  <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                  <Route path="/admin/shops"     element={<ShopManagement />} />
+                  <Route path="/admin/users"     element={<Users />} />
+                  <Route path="/admin/analytics" element={<AdminAnalytics />} />
+                  <Route path="/admin/settings"  element={<AdminSettings />} />
+                  <Route path="/admin/audit-log" element={<AuditLog />} />
                 </Route>
 
-                {/* redirects */}
+                {/* everything customer/order/menu related → app download */}
                 <Route path="/shops"          element={<Navigate to="/download" replace />} />
                 <Route path="/shops/:id"      element={<Navigate to="/download" replace />} />
                 <Route path="/rewards"        element={<Navigate to="/download" replace />} />
                 <Route path="/profile"        element={<Navigate to="/download" replace />} />
                 <Route path="/profile/edit"   element={<Navigate to="/download" replace />} />
                 <Route path="/register"       element={<Navigate to="/download" replace />} />
+                <Route path="/orders"         element={<Navigate to="/download" replace />} />
+                <Route path="/orders/:id"     element={<Navigate to="/download" replace />} />
+                <Route path="/menu"           element={<Navigate to="/download" replace />} />
+                <Route path="/menu/:id"       element={<Navigate to="/download" replace />} />
                 <Route path="/worker"         element={<Navigate to="/login" replace />} />
                 <Route path="/worker/summary" element={<Navigate to="/login" replace />} />
 

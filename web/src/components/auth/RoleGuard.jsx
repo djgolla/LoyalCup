@@ -7,8 +7,10 @@ export default function RoleGuard({ children, roles }) {
   // Don't redirect while auth is still resolving (prevents flash-redirect on refresh)
   if (loading) return null;
 
+  // Not logged in → send to login page so shop owners with expired sessions
+  // land on the sign-in form, not the public marketing page with no obvious way back
   if (!user) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   if (!hasRole(roles)) {
