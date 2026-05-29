@@ -11,7 +11,8 @@
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_sPqfXafWwdFwYsInn7BIOA_F8iw4aW-",
         "EXPO_PUBLIC_API_URL": "https://loyalcup-production.up.railway.app",
         "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51T71gKBAFZ67MfTHUdUxzWeK76Y5ffSfQpbmLsFffqsfneW6QXv3CfbwermG1Zm2mgQ7zPDD8ExoaFnNDcuDJGM000OKSMTtX7",
-        "EXPO_PUBLIC_SQUARE_APP_ID": "sandbox-sq0idb-h7MP1N9JszWnbSuaXhCxOg"
+        "EXPO_PUBLIC_SQUARE_APP_ID": "sq0idp-VlFH6S-bwcePHKZh4LUrIQ",
+        "EXPO_PUBLIC_SQUARE_ENV": "production"
       }
     },
     "preview": {
@@ -21,7 +22,8 @@
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_sPqfXafWwdFwYsInn7BIOA_F8iw4aW-",
         "EXPO_PUBLIC_API_URL": "https://loyalcup-production.up.railway.app",
         "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51T71gKBAFZ67MfTHUdUxzWeK76Y5ffSfQpbmLsFffqsfneW6QXv3CfbwermG1Zm2mgQ7zPDD8ExoaFnNDcuDJGM000OKSMTtX7",
-        "EXPO_PUBLIC_SQUARE_APP_ID": "sandbox-sq0idb-h7MP1N9JszWnbSuaXhCxOg"
+        "EXPO_PUBLIC_SQUARE_APP_ID": "sq0idp-VlFH6S-bwcePHKZh4LUrIQ",
+        "EXPO_PUBLIC_SQUARE_ENV": "production"
       }
     },
     "production": {
@@ -30,7 +32,8 @@
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_sPqfXafWwdFwYsInn7BIOA_F8iw4aW-",
         "EXPO_PUBLIC_API_URL": "https://loyalcup-production.up.railway.app",
         "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "pk_test_51T71gKBAFZ67MfTHUdUxzWeK76Y5ffSfQpbmLsFffqsfneW6QXv3CfbwermG1Zm2mgQ7zPDD8ExoaFnNDcuDJGM000OKSMTtX7",
-        "EXPO_PUBLIC_SQUARE_APP_ID": "sandbox-sq0idb-h7MP1N9JszWnbSuaXhCxOg"
+        "EXPO_PUBLIC_SQUARE_APP_ID": "sq0idp-VlFH6S-bwcePHKZh4LUrIQ",
+        "EXPO_PUBLIC_SQUARE_ENV": "production"
       }
     }
   },

@@ -131,7 +131,6 @@ class SquareAdapter(POSAdapter):
                     raise RuntimeError(f"Square catalog fetch failed {resp.status_code}: {resp.text}")
                 payload = resp.json()
                 all_objects.extend(payload.get("objects") or [])
-                # Also grab related objects (images, etc.)
                 all_objects.extend(payload.get("related_objects") or [])
                 cursor = payload.get("cursor")
                 if not cursor:
@@ -198,7 +197,6 @@ class SquareAdapter(POSAdapter):
             d    = mod_list.get("modifier_list_data") or {}
             mods: List[POSCatalogModifier] = []
             for m in d.get("modifiers") or []:
-                # Inline modifier object — has its own id + modifier_data
                 mod_id = m.get("id")
                 if not mod_id:
                     continue
@@ -231,8 +229,15 @@ class SquareAdapter(POSAdapter):
         access_token: str,
         location_id: str,
         order_payload: Dict[str, Any],
+        idempotency_key: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Create an OPEN order on Square POS — returns order with calculated tax."""
+        """
+        Create an OPEN order on Square POS — returns order with calculated tax.
+
+        idempotency_key: pass a stable, order-scoped key so that retries
+        of the same order do not create duplicate Square orders.
+        Falls back to a random UUID if not provided (legacy / one-off calls).
+        """
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
                 f"{_square_api()}/orders",
@@ -241,7 +246,7 @@ class SquareAdapter(POSAdapter):
                     "Content-Type": "application/json",
                 },
                 json={
-                    "idempotency_key": str(uuid.uuid4()),
+                    "idempotency_key": idempotency_key or str(uuid.uuid4()),
                     "order": {
                         "location_id": location_id,
                         **order_payload,
@@ -266,10 +271,15 @@ class SquareAdapter(POSAdapter):
         order_id: Optional[str] = None,
         reference_id: Optional[str] = None,
         customer_note: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Charge a card via Square Payments API.
         source_id is the nonce from the Square In-App Payments SDK.
+
+        idempotency_key: pass a stable, order-scoped key so that a network
+        retry of the same charge does not double-charge the customer.
+        Falls back to a random UUID if not provided (legacy / one-off calls).
         """
         if amount_cents <= 0:
             raise ValueError(
@@ -277,7 +287,7 @@ class SquareAdapter(POSAdapter):
             )
 
         payload: Dict[str, Any] = {
-            "idempotency_key": str(uuid.uuid4()),
+            "idempotency_key": idempotency_key or str(uuid.uuid4()),
             "source_id": source_id,
             "amount_money": {
                 "amount": amount_cents,
@@ -305,7 +315,6 @@ class SquareAdapter(POSAdapter):
             if resp.status_code != 200:
                 err = resp.json()
                 errors = err.get("errors", [])
-                # Surface human-readable Square error
                 msg = errors[0].get("detail") if errors else resp.text
                 raise RuntimeError(f"Square payment failed: {msg}")
             return resp.json()

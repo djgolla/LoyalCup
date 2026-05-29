@@ -1,6 +1,9 @@
 """
 Square payment + order flow.
 Handles both charged orders (card) and fully-loyalty-comped free orders.
+
+Idempotency keys are derived from loyalcup_order_id so that any network
+retry of the exact same order never creates a duplicate charge on Square.
 """
 import logging
 from typing import Any, Dict, List, Optional
@@ -83,7 +86,7 @@ async def push_order_to_pos(
         return None
 
 
-# ── Private helpers ───────────────────────────────────────────────────────────
+# ── Private helpers ──────────────────────────────────────────────────────────
 
 async def _get_square_connection(db, shop_id: str) -> Dict[str, Any]:
     conn_resp = (
@@ -151,7 +154,6 @@ async def _build_square_line_items(
         pos_id     = menu_row.get("pos_id")
         pos_source = (menu_row.get("pos_source") or "").lower()
 
-        # --- PATCH: Custom item support for non-Square menu items
         if pos_id and pos_source == "square":
             line_item["catalog_object_id"] = pos_id
         else:
@@ -200,13 +202,14 @@ async def _push_to_square(
         if customer_note:
             order_payload["customer_note"] = customer_note
 
-        result          = await _square.create_order(
+        result = await _square.create_order(
             access_token=access_token,
             location_id=location_id,
             order_payload=order_payload,
+            idempotency_key=f"{loyalcup_order_id}-push",
         )
         square_order_id = result.get("order", {}).get("id")
-        logger.info(f"[Square] Order push: {square_order_id}")
+        logger.info(f"[Square] Order push: loyalcup={loyalcup_order_id} square={square_order_id}")
         return square_order_id
     except Exception as e:
         logger.exception(f"[Square] Failed to push order {loyalcup_order_id}: {e}")
@@ -238,20 +241,22 @@ async def _process_square_payment(
     if customer_note:
         order_payload["customer_note"] = customer_note
 
-    # Create order → Square calculates real tax
-    logger.info(f"[Square] Creating order for {loyalcup_order_id}")
-    order_result    = await _square.create_order(
+    # Create order → Square calculates real tax.
+    # Idempotency key is tied to loyalcup_order_id — retries are safe.
+    logger.info(f"[Square] Creating order for loyalcup_order_id={loyalcup_order_id}")
+    order_result = await _square.create_order(
         access_token=access_token,
         location_id=location_id,
         order_payload=order_payload,
+        idempotency_key=f"{loyalcup_order_id}-create",
     )
     square_order    = order_result.get("order", {})
     square_order_id = square_order.get("id")
 
-    total_money  = square_order.get("total_money", {})
-    total_cents  = total_money.get("amount", 0)
-    currency     = total_money.get("currency", "USD")
-    tax_cents    = (square_order.get("total_tax_money") or {}).get("amount", 0)
+    total_money = square_order.get("total_money", {})
+    total_cents = total_money.get("amount", 0)
+    currency    = total_money.get("currency", "USD")
+    tax_cents   = (square_order.get("total_tax_money") or {}).get("amount", 0)
 
     # Apply loyalty discount — floor at 0
     charge_cents = max(0, total_cents - loyalty_discount_cents)
@@ -274,7 +279,9 @@ async def _process_square_payment(
         }
 
     # ── Charge card ───────────────────────────────────────────────────────
-    payment_result    = await _square.charge_payment(
+    # Idempotency key is tied to loyalcup_order_id — a network retry on this
+    # exact order will return the same payment result instead of double-charging.
+    payment_result = await _square.charge_payment(
         access_token=access_token,
         location_id=location_id,
         source_id=payment_nonce,
@@ -283,6 +290,7 @@ async def _process_square_payment(
         order_id=square_order_id,
         reference_id=loyalcup_order_id,
         customer_note=customer_note,
+        idempotency_key=f"{loyalcup_order_id}-charge",
     )
 
     payment           = payment_result.get("payment", {})

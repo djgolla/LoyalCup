@@ -4,16 +4,17 @@
  * Real-time status uses Supabase channels.
  *
  * NOTE: createOrder requires a payment_nonce (Square token).
- * All mobile orders are Square-paid. Use checkout.js which handles
- * card entry + nonce generation before calling this.
+ * All mobile card orders go through POST /api/v1/payments/create.
+ * All mobile cash/manual orders go through POST /api/v1/orders.
  */
 import { supabase } from '../lib/supabase';
 import { apiClient } from './apiClient';
 
 export const orderService = {
   /**
-   * Create + pay for an order via backend.
-   * Requires a Square payment nonce from the card tokenizer.
+   * Create + pay for an order via backend using a Square card nonce.
+   * Requires a Square payment nonce from the card tokenizer (checkout.js).
+   * Routes to POST /api/v1/payments/create — NOT the cash/manual orders endpoint.
    *
    * items: [{ menu_item_id, quantity, unit_price, base_price, customizations }]
    */
@@ -31,12 +32,42 @@ export const orderService = {
       customizations: item.customizations || [],
     }));
 
-    const response = await apiClient.post('/api/v1/orders', {
+    // POST to the payments endpoint — this charges the card AND creates the order.
+    // The cash/manual order endpoint is POST /api/v1/orders and does NOT charge a card.
+    const response = await apiClient.post('/api/v1/payments/create', {
       shop_id:                  shopId,
       items:                    orderItems,
       payment_nonce:            paymentNonce,
       loyalty_points_to_redeem: options.loyaltyPointsToRedeem || 0,
       customer_note:            options.customerNote || null,
+    }, token);
+
+    return response;
+  },
+
+  /**
+   * Create a cash / manual order (no card charge).
+   * Used for in-person / pay-at-counter flows.
+   * Routes to POST /api/v1/orders.
+   *
+   * items: [{ menu_item_id, quantity, base_price, customizations }]
+   */
+  createCashOrder: async (shopId, items, options = {}) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) throw new Error('Not authenticated — please log in again');
+
+    const orderItems = items.map(item => ({
+      menu_item_id:   item.id || item.menu_item_id,
+      quantity:       Math.max(1, item.quantity || 1),
+      base_price:     parseFloat(item.price || item.base_price) || 0,
+      customizations: item.customizations || [],
+    }));
+
+    const response = await apiClient.post('/api/v1/orders', {
+      shop_id:       shopId,
+      items:         orderItems,
+      customer_note: options.customerNote || null,
     }, token);
 
     return response;
