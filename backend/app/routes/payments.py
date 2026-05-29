@@ -11,10 +11,10 @@ Flow:
   3.  CREATE order row in DB  (status = payment_pending)
   4.  INSERT order_items rows
   5.  Charge Square — passing real order_id as reference + idempotent key
-        ↳ failure here  → mark order payment_failed, raise → client never charged
+        failure here  → mark order payment_failed, raise → client never charged
   6.  UPDATE order to confirmed + persist Square IDs / amounts
-        ↳ failure here  → CRITICAL log (payment taken, manual recovery needed)
-                          still return success to the user (they were charged)
+        failure here  → CRITICAL log (payment taken, manual recovery needed)
+                        still return success to the user (they were charged)
   7.  Deduct redeemed loyalty points
   8.  Award earned loyalty points
 """
@@ -25,7 +25,6 @@ from pydantic import BaseModel, validator
 
 from app.services.square_order_service import process_payment
 from app.services.loyalty_service import (
-    get_shop_config,
     get_balance,
     compute_redemption,
     award_points_for_order,
@@ -141,7 +140,7 @@ async def create_payment(
         loyalty_discount_cents = preview["discount_cents"]
 
     # ── 4. Create order in DB BEFORE charging (status = payment_pending) ──────
-    #      This is the critical safety step: if this fails we never charge.
+    #      If this fails we never charge. Card is safe.
     try:
         order_resp = (
             db.get_service_client().table("orders").insert({
@@ -149,7 +148,7 @@ async def create_payment(
                 "shop_id":     request.shop_id,
                 "status":      "payment_pending",
                 "subtotal":    subtotal_dollars,
-                "tax":         0.0,   # will be updated with Square's real tax after charge
+                "tax":         0.0,
                 "total":       subtotal_dollars,
                 "metadata": {
                     "pos_provider":            "square",
@@ -183,7 +182,6 @@ async def create_payment(
             for item in items_data
         ]).execute()
     except Exception as e:
-        # Order row exists but items failed — cancel it and abort before charging
         logger.error(f"[Payment] Failed to insert order items for order {order_id}: {e}")
         _mark_order_failed(db, order_id, f"order_items insert failed: {e}")
         raise HTTPException(
@@ -192,20 +190,19 @@ async def create_payment(
         )
 
     # ── 6. Charge Square ──────────────────────────────────────────────────────
-    #      Pass order_id as the reference so Square ties back to our record.
-    #      Idempotency key is derived from order_id so retries never double-charge.
+    #      Real order_id passed as reference. Idempotency key is order-scoped
+    #      so network retries can never double-charge.
     try:
         payment_result = await process_payment(
             db=db,
             shop_id=request.shop_id,
-            loyalcup_order_id=order_id,           # real ID now — not "pending"
+            loyalcup_order_id=order_id,
             items=items_data,
             payment_nonce=request.payment_nonce,
             loyalty_discount_cents=loyalty_discount_cents,
             customer_note=request.customer_note,
         )
     except (HTTPException, ValueError, RuntimeError) as charge_err:
-        # Charge definitively failed — card was NOT taken
         reason = str(charge_err) if not isinstance(charge_err, HTTPException) else charge_err.detail
         logger.warning(f"[Payment] Charge failed for order {order_id}: {reason}")
         _mark_order_failed(db, order_id, reason)
@@ -257,16 +254,15 @@ async def create_payment(
             order = update_resp.data
     except Exception as update_err:
         # CRITICAL: Payment succeeded but we couldn't update the DB record.
-        # The order row still exists as payment_pending. Log every ID for
-        # manual reconciliation — do NOT return an error to the user since
-        # they were charged.
+        # The order row still exists as payment_pending.
+        # Log every ID for manual reconciliation — do NOT return an error
+        # to the user since they were charged successfully.
         logger.critical(
             f"[Payment] PAYMENT_SUCCEEDED_ORDER_UPDATE_FAILED "
             f"order_id={order_id} square_payment_id={square_payment_id} "
             f"square_order_id={square_order_id} charged={charged_dollars:.2f} "
             f"error={update_err}"
         )
-        # Fall through and return success — the user was charged
 
     # ── 8. Deduct redeemed loyalty points ─────────────────────────────────────
     if request.loyalty_points_to_redeem > 0:
@@ -279,7 +275,6 @@ async def create_payment(
                 points_to_redeem=request.loyalty_points_to_redeem,
             )
         except Exception as e:
-            # Already charged — log but don't fail the order
             logger.error(
                 f"[Payment] Point deduction failed (already charged!) "
                 f"order={order_id} pts={request.loyalty_points_to_redeem}: {e}"
@@ -306,7 +301,10 @@ async def create_payment(
                     }
                 }).eq("id", order_id).execute()
             except Exception as meta_err:
-                logger.warning(f"[Payment] Could not persist points_earned to metadata order={order_id}: {meta_err}")
+                logger.warning(
+                    f"[Payment] Could not persist points_earned to metadata "
+                    f"order={order_id}: {meta_err}"
+                )
     except Exception as e:
         logger.warning(f"[Payment] Points award failed order={order_id}: {e}")
 

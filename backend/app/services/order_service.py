@@ -8,14 +8,14 @@ class OrderService:
     TAX_RATE = 0.0875  # fallback for cash/manual orders — Square calculates real tax
 
     VALID_TRANSITIONS = {
-        # Pre-payment states (card flow)
+        # Pre-payment states (card flow created in payments.py)
         "payment_pending": ["confirmed", "payment_failed"],
-        "payment_failed":  [],   # terminal — card was not charged
+        "payment_failed":  [],          # terminal — card was never charged
         # Normal order lifecycle
         "confirmed":  ["accepted", "cancelled"],
         "pending":    ["accepted", "cancelled"],
         "accepted":   ["preparing", "cancelled"],
-        "preparing":  ["ready", "cancelled"],
+        "preparing":  ["ready",     "cancelled"],
         "ready":      ["picked_up"],
         "picked_up":  ["completed"],
         "completed":  [],
@@ -210,7 +210,6 @@ class OrderService:
         )
         updated_order = update_response.data[0] if update_response.data else order
 
-        # Award loyalty points on completion
         if new_status == "completed":
             try:
                 from app.services.loyalty_service import award_points_for_order

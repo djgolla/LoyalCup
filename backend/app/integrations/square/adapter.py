@@ -14,7 +14,7 @@ from app.integrations.pos.base import (
 )
 from app.config import settings
 
-# ── env-driven API base ───────────────────────────────────────────────────────
+
 def _square_base() -> str:
     return (
         "https://connect.squareupsandbox.com"
@@ -59,11 +59,11 @@ class SquareAdapter(POSAdapter):
             resp = await client.post(
                 f"{_square_base()}/oauth2/token",
                 json={
-                    "client_id": settings.square_application_id,
+                    "client_id":     settings.square_application_id,
                     "client_secret": settings.square_application_secret,
-                    "code": code,
-                    "grant_type": "authorization_code",
-                    "redirect_uri": redirect_uri,
+                    "code":          code,
+                    "grant_type":    "authorization_code",
+                    "redirect_uri":  redirect_uri,
                 },
             )
             if resp.status_code != 200:
@@ -73,15 +73,14 @@ class SquareAdapter(POSAdapter):
             return resp.json()
 
     async def refresh_access_token(self, refresh_token: str) -> Dict[str, Any]:
-        """Refresh an expired Square access token."""
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
                 f"{_square_base()}/oauth2/token",
                 json={
-                    "client_id": settings.square_application_id,
+                    "client_id":     settings.square_application_id,
                     "client_secret": settings.square_application_secret,
                     "refresh_token": refresh_token,
-                    "grant_type": "refresh_token",
+                    "grant_type":    "refresh_token",
                 },
             )
             if resp.status_code != 200:
@@ -109,10 +108,6 @@ class SquareAdapter(POSAdapter):
             ]
 
     async def fetch_catalog(self, access_token: str, location_id: Optional[str] = None) -> POSCatalogSnapshot:
-        """
-        Paginated catalog fetch via POST /catalog/search.
-        Handles cursors so large catalogs don't get truncated.
-        """
         object_types = ["CATEGORY", "ITEM", "MODIFIER_LIST"]
         all_objects: List[Dict[str, Any]] = []
         cursor: Optional[str] = None
@@ -136,7 +131,6 @@ class SquareAdapter(POSAdapter):
                 if not cursor:
                     break
 
-        # De-duplicate by id
         seen: set = set()
         objects: List[Dict[str, Any]] = []
         for obj in all_objects:
@@ -233,17 +227,15 @@ class SquareAdapter(POSAdapter):
     ) -> Dict[str, Any]:
         """
         Create an OPEN order on Square POS — returns order with calculated tax.
-
-        idempotency_key: pass a stable, order-scoped key so that retries
-        of the same order do not create duplicate Square orders.
-        Falls back to a random UUID if not provided (legacy / one-off calls).
+        idempotency_key: pass a stable order-scoped key so retries never
+        create duplicate Square orders. Falls back to random UUID if not provided.
         """
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
                 f"{_square_api()}/orders",
                 headers={
                     "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json",
+                    "Content-Type":  "application/json",
                 },
                 json={
                     "idempotency_key": idempotency_key or str(uuid.uuid4()),
@@ -276,21 +268,20 @@ class SquareAdapter(POSAdapter):
         """
         Charge a card via Square Payments API.
         source_id is the nonce from the Square In-App Payments SDK.
-
-        idempotency_key: pass a stable, order-scoped key so that a network
-        retry of the same charge does not double-charge the customer.
-        Falls back to a random UUID if not provided (legacy / one-off calls).
+        idempotency_key: pass a stable order-scoped key so a network retry
+        never double-charges the customer. Falls back to random UUID if not provided.
         """
         if amount_cents <= 0:
             raise ValueError(
-                "Cannot charge $0 or negative amount. Handle free orders before calling charge_payment."
+                "Cannot charge $0 or negative amount. "
+                "Handle free orders before calling charge_payment."
             )
 
         payload: Dict[str, Any] = {
             "idempotency_key": idempotency_key or str(uuid.uuid4()),
-            "source_id": source_id,
+            "source_id":       source_id,
             "amount_money": {
-                "amount": amount_cents,
+                "amount":   amount_cents,
                 "currency": currency,
             },
             "location_id": location_id,
@@ -308,13 +299,13 @@ class SquareAdapter(POSAdapter):
                 f"{_square_api()}/payments",
                 headers={
                     "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json",
+                    "Content-Type":  "application/json",
                 },
                 json=payload,
             )
             if resp.status_code != 200:
-                err = resp.json()
+                err    = resp.json()
                 errors = err.get("errors", [])
-                msg = errors[0].get("detail") if errors else resp.text
+                msg    = errors[0].get("detail") if errors else resp.text
                 raise RuntimeError(f"Square payment failed: {msg}")
             return resp.json()

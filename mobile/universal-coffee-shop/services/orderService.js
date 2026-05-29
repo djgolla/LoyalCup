@@ -3,9 +3,8 @@
  * Reads hit Supabase directly for speed.
  * Real-time status uses Supabase channels.
  *
- * NOTE: createOrder requires a payment_nonce (Square token).
- * All mobile card orders go through POST /api/v1/payments/create.
- * All mobile cash/manual orders go through POST /api/v1/orders.
+ * createOrder   → POST /api/v1/payments/create  (card charge + order creation, atomic)
+ * createCashOrder → POST /api/v1/orders         (no charge, cash/in-person)
  */
 import { supabase } from '../lib/supabase';
 import { apiClient } from './apiClient';
@@ -13,8 +12,9 @@ import { apiClient } from './apiClient';
 export const orderService = {
   /**
    * Create + pay for an order via backend using a Square card nonce.
-   * Requires a Square payment nonce from the card tokenizer (checkout.js).
-   * Routes to POST /api/v1/payments/create — NOT the cash/manual orders endpoint.
+   * MUST go to /api/v1/payments/create — NOT the cash/manual orders endpoint.
+   * The backend creates the DB record before charging the card, so a failed
+   * charge never leaves the customer charged without an order.
    *
    * items: [{ menu_item_id, quantity, unit_price, base_price, customizations }]
    */
@@ -32,8 +32,6 @@ export const orderService = {
       customizations: item.customizations || [],
     }));
 
-    // POST to the payments endpoint — this charges the card AND creates the order.
-    // The cash/manual order endpoint is POST /api/v1/orders and does NOT charge a card.
     const response = await apiClient.post('/api/v1/payments/create', {
       shop_id:                  shopId,
       items:                    orderItems,
@@ -46,9 +44,9 @@ export const orderService = {
   },
 
   /**
-   * Create a cash / manual order (no card charge).
+   * Create a cash / manual order — no card charge.
    * Used for in-person / pay-at-counter flows.
-   * Routes to POST /api/v1/orders.
+   * Routes to POST /api/v1/orders (the cash endpoint).
    *
    * items: [{ menu_item_id, quantity, base_price, customizations }]
    */

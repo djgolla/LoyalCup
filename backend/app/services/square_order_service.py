@@ -230,7 +230,6 @@ async def _process_square_payment(
     access_token = conn["access_token"]
     location_id  = conn["location_id"]
 
-    # Build line items
     line_items = await _build_square_line_items(db, items)
 
     order_payload: Dict[str, Any] = {
@@ -241,8 +240,8 @@ async def _process_square_payment(
     if customer_note:
         order_payload["customer_note"] = customer_note
 
-    # Create order → Square calculates real tax.
-    # Idempotency key is tied to loyalcup_order_id — retries are safe.
+    # Create order on Square → Square calculates real tax.
+    # Idempotency key is order-scoped so retries never create duplicate orders.
     logger.info(f"[Square] Creating order for loyalcup_order_id={loyalcup_order_id}")
     order_result = await _square.create_order(
         access_token=access_token,
@@ -258,7 +257,6 @@ async def _process_square_payment(
     currency    = total_money.get("currency", "USD")
     tax_cents   = (square_order.get("total_tax_money") or {}).get("amount", 0)
 
-    # Apply loyalty discount — floor at 0
     charge_cents = max(0, total_cents - loyalty_discount_cents)
 
     logger.info(
@@ -279,8 +277,8 @@ async def _process_square_payment(
         }
 
     # ── Charge card ───────────────────────────────────────────────────────
-    # Idempotency key is tied to loyalcup_order_id — a network retry on this
-    # exact order will return the same payment result instead of double-charging.
+    # Idempotency key is order-scoped — a network retry of this exact order
+    # returns the same payment result instead of double-charging.
     payment_result = await _square.charge_payment(
         access_token=access_token,
         location_id=location_id,
