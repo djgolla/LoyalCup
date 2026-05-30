@@ -1,12 +1,7 @@
 /**
  * Home screen — shop discovery
- * Filters: All · Nearby (device GPS) · Open Now (hours JSON) · Popular (review_count)
- * Shows active shop offers inline on cards
- *
- * FIXES:
- *  - Hours day keys now match what the web shop-settings page writes
- *    (full names: monday, tuesday, ...) — previously short keys missed every day → always "Closed"
- *  - SVG logos render via a tiny WebView since RN <Image> can't render SVG
+ * Filters: All · Nearby (device GPS) · Open Now
+ * Heart button on each card → writes to customer_favorites via useFavorites hook
  */
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -21,6 +16,7 @@ import WebView from 'react-native-webview';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { supabase } from '../lib/supabase';
+import { useFavorites } from '../hooks/useFavorites';
 
 const deg2rad = (d) => d * (Math.PI / 180);
 
@@ -33,10 +29,8 @@ const haversineKm = (lat1, lon1, lat2, lon2) => {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
-// Full day names — matches what the web shop-settings page saves into shops.hours.
-const DAYS_FULL = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-// Short fallback for any legacy rows still using abbreviations.
-const DAYS_SHORT = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const DAYS_FULL  = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+const DAYS_SHORT = ['sun','mon','tue','wed','thu','fri','sat'];
 
 const isOpenNow = (shop) => {
   const hours = shop?.hours;
@@ -59,8 +53,6 @@ const getGreeting = (name) => {
   return name ? `${time}, ${name.split(' ')[0]}! ☕` : `${time}! ☕`;
 };
 
-// ── SVG-safe image. RN <Image> cannot render SVG.
-// For svg URLs we use a tiny WebView fallback; for everything else we use Image.
 const isSvgUrl = (url) => typeof url === 'string' && url.split('?')[0].toLowerCase().endsWith('.svg');
 
 const SvgImage = ({ uri, style, resizeMode = 'cover' }) => {
@@ -90,7 +82,7 @@ const ShopImage = ({ uri, style, resizeMode }) => {
   return <Image source={{ uri }} style={style} resizeMode={resizeMode} />;
 };
 
-const ShopCard = ({ item, onPress, distanceKm }) => {
+const ShopCard = ({ item, onPress, distanceKm, isFav, onToggleFav }) => {
   const open        = isOpenNow(item);
   const rating      = item.avg_rating ? parseFloat(item.avg_rating).toFixed(1) : null;
   const activeOffer = item.shop_offers?.find(o => o.is_active);
@@ -114,6 +106,19 @@ const ShopCard = ({ item, onPress, distanceKm }) => {
             <Text style={styles.openBadgeText}>{open ? 'Open' : 'Closed'}</Text>
           </View>
         )}
+        {/* Heart / favorite button */}
+        <TouchableOpacity
+          style={styles.heartButton}
+          onPress={(e) => { e.stopPropagation?.(); onToggleFav(item.id); }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Feather
+            name="heart"
+            size={18}
+            color={isFav ? '#ef4444' : '#fff'}
+            style={isFav ? styles.heartFilled : styles.heartOutline}
+          />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.shopCardContent}>
@@ -148,12 +153,6 @@ const ShopCard = ({ item, onPress, distanceKm }) => {
               <Text style={styles.shopBadgeText}>{item.review_count} reviews</Text>
             </View>
           )}
-          {item.featured && (
-            <View style={[styles.shopBadge, { backgroundColor: '#FEF3C7' }]}>
-              <Feather name="zap" size={11} color="#d97706" />
-              <Text style={[styles.shopBadgeText, { color: '#d97706' }]}>Featured</Text>
-            </View>
-          )}
         </View>
       </View>
     </TouchableOpacity>
@@ -161,9 +160,10 @@ const ShopCard = ({ item, onPress, distanceKm }) => {
 };
 
 export default function HomeScreen() {
-  const router           = useRouter();
-  const { user }         = useAuth();
-  const { getItemCount } = useCart();
+  const router              = useRouter();
+  const { user }            = useAuth();
+  const { getItemCount }    = useCart();
+  const { isFavorite, toggle } = useFavorites();
 
   const [shops,          setShops]          = useState([]);
   const [filteredShops,  setFilteredShops]  = useState([]);
@@ -174,14 +174,12 @@ export default function HomeScreen() {
   const [userLocation,   setUserLocation]   = useState(null);
   const [profile,        setProfile]        = useState(null);
   const [distances,      setDistances]      = useState({});
-  const locationGranted  = useRef(false);
 
+  // Popular and Featured removed — coming later
   const filters = [
-    { key: 'all',      label: 'All',      icon: 'grid' },
-    { key: 'nearby',   label: 'Nearby',   icon: 'map-pin' },
-    { key: 'open',     label: 'Open Now', icon: 'clock' },
-    { key: 'popular',  label: 'Popular',  icon: 'trending-up' },
-    { key: 'featured', label: 'Featured', icon: 'zap' },
+    { key: 'all',    label: 'All',      icon: 'grid' },
+    { key: 'nearby', label: 'Nearby',   icon: 'map-pin' },
+    { key: 'open',   label: 'Open Now', icon: 'clock' },
   ];
 
   useEffect(() => {
@@ -196,7 +194,6 @@ export default function HomeScreen() {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status === 'granted') {
-          locationGranted.current = true;
           const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
           setUserLocation({ lat: loc.coords.latitude, lon: loc.coords.longitude });
         }
@@ -212,11 +209,11 @@ export default function HomeScreen() {
         .from('shops')
         .select(`
           id, name, description, address, city, state, logo_url, banner_url,
-          hours, lat, lng, avg_rating, review_count, featured, status,
+          hours, lat, lng, avg_rating, review_count, status,
           shop_offers ( id, title, description, is_active )
         `)
         .eq('status', 'active')
-        .order('featured', { ascending: false });
+        .order('name', { ascending: true });
 
       if (error) throw error;
       setShops(data || []);
@@ -233,7 +230,7 @@ export default function HomeScreen() {
     if (!userLocation || !shops.length) return;
     const d = {};
     shops.forEach(shop => {
-      if (shop.lat && shop.lng) {
+      if (shop.lat != null && shop.lng != null) {
         d[shop.id] = haversineKm(userLocation.lat, userLocation.lon, shop.lat, shop.lng);
       }
     });
@@ -260,6 +257,16 @@ export default function HomeScreen() {
           setSelectedFilter('all');
           break;
         }
+        // If no shops have coordinates yet, show a helpful message instead of empty list
+        if (Object.keys(distances).length === 0) {
+          Alert.alert(
+            'No Location Data',
+            'Shops haven\'t set their location yet. Check back soon!',
+            [{ text: 'OK' }]
+          );
+          setSelectedFilter('all');
+          break;
+        }
         result = result
           .filter(s => distances[s.id] !== undefined)
           .sort((a, b) => (distances[a.id] ?? 999) - (distances[b.id] ?? 999))
@@ -268,14 +275,6 @@ export default function HomeScreen() {
 
       case 'open':
         result = result.filter(s => isOpenNow(s) === true);
-        break;
-
-      case 'popular':
-        result = [...result].sort((a, b) => (b.review_count || 0) - (a.review_count || 0));
-        break;
-
-      case 'featured':
-        result = result.filter(s => s.featured === true);
         break;
 
       default:
@@ -373,8 +372,6 @@ export default function HomeScreen() {
               ? 'No shops appear open right now'
               : selectedFilter === 'nearby'
               ? 'No shops found near you'
-              : selectedFilter === 'featured'
-              ? 'No featured shops right now'
               : 'Check back soon!'}
           </Text>
           {(searchQuery || selectedFilter !== 'all') && (
@@ -391,6 +388,8 @@ export default function HomeScreen() {
             <ShopCard
               item={item}
               distanceKm={distances[item.id]}
+              isFav={isFavorite(item.id)}
+              onToggleFav={toggle}
               onPress={() => router.push(`/shop/${item.id}`)}
             />
           )}
@@ -419,7 +418,7 @@ const styles = StyleSheet.create({
   subGreeting:          { fontSize: 13, color: '#999', marginTop: 2 },
   headerButtons:        { flexDirection: 'row', gap: 10 },
   headerButton:         { width: 42, height: 42, borderRadius: 21, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center', position: 'relative' },
-  headerBadge:          { position: 'absolute', top: -3, right: -3, backgroundColor: '#FF3B30', borderRadius: 9, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5 },
+  headerBadge:          { position: 'absolute', top: -3, right: -3, backgroundColor: '#FF3B30', borderRadius: 9, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 },
   headerBadgeText:      { color: '#FFF', fontSize: 11, fontWeight: '800' },
   searchContainer:      { marginBottom: 12 },
   searchBar:            { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, gap: 10 },
@@ -431,7 +430,7 @@ const styles = StyleSheet.create({
   filterChipTextActive: { color: '#FFF' },
   resultsCount:         { paddingTop: 4, paddingBottom: 8, fontSize: 12, fontWeight: '600', color: '#999' },
   shopsList:            { paddingHorizontal: 16, paddingBottom: 24 },
-  shopCard:             { backgroundColor: '#FFF', borderRadius: 16, marginBottom: 14, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 6, elevation: 2 },
+  shopCard:             { backgroundColor: '#FFF', borderRadius: 16, marginBottom: 14, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3 },
   offerRibbon:          { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#f59e0b', paddingHorizontal: 12, paddingVertical: 5 },
   offerRibbonText:      { color: '#fff', fontSize: 11, fontWeight: '700' },
   shopImageContainer:   { width: '100%', height: 130, position: 'relative', backgroundColor: '#E8F5E9' },
@@ -439,6 +438,9 @@ const styles = StyleSheet.create({
   shopImagePlaceholder: { width: '100%', height: '100%', backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
   openBadge:            { position: 'absolute', top: 10, right: 10, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   openBadgeText:        { color: '#FFF', fontSize: 11, fontWeight: '700' },
+  heartButton:          { position: 'absolute', top: 10, left: 10, width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center' },
+  heartFilled:          { },
+  heartOutline:         { opacity: 0.9 },
   shopCardContent:      { padding: 14 },
   shopName:             { fontSize: 18, fontWeight: '800', color: '#000', marginBottom: 3 },
   shopDescription:      { fontSize: 13, color: '#666', lineHeight: 18, marginBottom: 8 },

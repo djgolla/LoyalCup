@@ -18,40 +18,63 @@ const DEFAULT_HOURS = {
   sunday:    { open: '10:00', close: '16:00', closed: false },
 };
 
-const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-const DAY_ABBR = { monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu', friday: 'Fri', saturday: 'Sat', sunday: 'Sun' };
+const DAYS    = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+const DAY_ABBR = { monday:'Mon', tuesday:'Tue', wednesday:'Wed', thursday:'Thu', friday:'Fri', saturday:'Sat', sunday:'Sun' };
 
-// Quick time options
 const TIME_OPTIONS = [];
 for (let h = 0; h < 24; h++) {
   for (let m of [0, 30]) {
-    const hh = String(h).padStart(2, '0');
-    const mm = String(m).padStart(2, '0');
-    const label12 = h === 0 ? `12:${mm} AM` : h < 12 ? `${h}:${mm} AM` : h === 12 ? `12:${mm} PM` : `${h - 12}:${mm} PM`;
+    const hh      = String(h).padStart(2, '0');
+    const mm      = String(m).padStart(2, '0');
+    const label12 = h === 0 ? `12:${mm} AM` : h < 12 ? `${h}:${mm} AM` : h === 12 ? `12:${mm} PM` : `${h-12}:${mm} PM`;
     TIME_OPTIONS.push({ value: `${hh}:${mm}`, label: label12 });
+  }
+}
+
+/**
+ * Geocode a full address string → { lat, lng } using OpenStreetMap Nominatim.
+ * Free, no API key required.
+ * Returns null if the address can't be resolved.
+ */
+async function geocodeAddress(address, city, state, zip) {
+  const parts = [address, city, state, zip].filter(Boolean).join(', ');
+  if (!parts.trim()) return null;
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(parts)}`;
+    const res  = await fetch(url, { headers: { 'User-Agent': 'LoyalCup/1.0' } });
+    const data = await res.json();
+    if (data?.length) {
+      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
 
 export default function ShopSettings() {
   const { shop, shopId, loadShop } = useShop();
-  const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(null); // 'logo' | 'banner' | null
+  const [loading,   setLoading]   = useState(false);
+  const [uploading, setUploading] = useState(null);
   const [dragActive, setDragActive] = useState(null);
 
   const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    address: '',
-    city: '',
-    state: '',
-    zip: '',
-    phone: '',
-    website: '',
-    logo_url: '',
-    banner_url: '',
-    hours: DEFAULT_HOURS,
+    name:                    '',
+    description:             '',
+    address:                 '',
+    city:                    '',
+    state:                   '',
+    zip:                     '',
+    phone:                   '',
+    website:                 '',
+    logo_url:                '',
+    banner_url:              '',
+    hours:                   DEFAULT_HOURS,
     mobile_ordering_enabled: true,
   });
+
+  // Track original address so we only re-geocode when it actually changes
+  const [savedAddress, setSavedAddress] = useState('');
 
   useEffect(() => {
     if (shop) {
@@ -69,6 +92,8 @@ export default function ShopSettings() {
         hours:                   shop.hours                   || DEFAULT_HOURS,
         mobile_ordering_enabled: shop.mobile_ordering_enabled ?? true,
       });
+      // Build a canonical address string to compare later
+      setSavedAddress([shop.address, shop.city, shop.state, shop.zip].filter(Boolean).join(', '));
     }
   }, [shop]);
 
@@ -84,7 +109,7 @@ export default function ShopSettings() {
       const field = type === 'logo' ? 'logo_url' : 'banner_url';
       setFormData(prev => ({ ...prev, [field]: publicUrl }));
       toast.success('Image uploaded!');
-    } catch (error) {
+    } catch {
       toast.error('Failed to upload image');
     } finally {
       setUploading(null);
@@ -108,7 +133,6 @@ export default function ShopSettings() {
     }));
   };
 
-  // Apply same hours to all weekdays or all days
   const applyToAll = (sourceDay) => {
     const source = formData.hours[sourceDay];
     const newHours = {};
@@ -117,9 +141,9 @@ export default function ShopSettings() {
     toast.success('Hours applied to all days');
   };
   const applyToWeekdays = (sourceDay) => {
-    const source = formData.hours[sourceDay];
+    const source   = formData.hours[sourceDay];
     const newHours = { ...formData.hours };
-    ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'].forEach(d => { newHours[d] = { ...source }; });
+    ['monday','tuesday','wednesday','thursday','friday'].forEach(d => { newHours[d] = { ...source }; });
     setFormData(prev => ({ ...prev, hours: newHours }));
     toast.success('Hours applied to weekdays');
   };
@@ -128,6 +152,26 @@ export default function ShopSettings() {
     e.preventDefault();
     try {
       setLoading(true);
+
+      // Only geocode if the address fields actually changed
+      const newAddressStr = [formData.address, formData.city, formData.state, formData.zip]
+        .filter(Boolean).join(', ');
+
+      let geoUpdate = {};
+      if (newAddressStr && newAddressStr !== savedAddress) {
+        toast.loading('Looking up location coordinates…', { id: 'geo' });
+        const coords = await geocodeAddress(
+          formData.address, formData.city, formData.state, formData.zip
+        );
+        toast.dismiss('geo');
+        if (coords) {
+          geoUpdate = { lat: coords.lat, lng: coords.lng };
+        } else {
+          // Non-fatal — save the address text but warn the owner
+          toast.warning('Could not find coordinates for this address. Nearby filter may not include your shop until the address is updated.');
+        }
+      }
+
       const { error } = await supabase.from('shops').update({
         name:                    formData.name,
         description:             formData.description             || null,
@@ -142,11 +186,17 @@ export default function ShopSettings() {
         hours:                   formData.hours,
         mobile_ordering_enabled: formData.mobile_ordering_enabled,
         updated_at:              new Date().toISOString(),
+        ...geoUpdate,
       }).eq('id', shopId);
+
       if (error) throw error;
+
+      // Update saved address so we don't re-geocode on next save unless it changes again
+      setSavedAddress(newAddressStr);
+
       toast.success('Settings saved!');
       loadShop();
-    } catch (error) {
+    } catch {
       toast.error('Failed to save settings');
     } finally {
       setLoading(false);
@@ -203,7 +253,7 @@ export default function ShopSettings() {
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {[
-              { type: 'logo', label: 'Logo', field: 'logo_url', aspect: 'w-32 h-32 mx-auto object-cover rounded-xl' },
+              { type: 'logo',   label: 'Logo',   field: 'logo_url',   aspect: 'w-32 h-32 mx-auto object-cover rounded-xl' },
               { type: 'banner', label: 'Banner', field: 'banner_url', aspect: 'w-full h-32 object-cover rounded-xl' },
             ].map(({ type, label, field, aspect }) => (
               <div key={type}>
@@ -211,7 +261,7 @@ export default function ShopSettings() {
                 <div
                   onDragEnter={e => handleDrag(e, type)} onDragLeave={e => handleDrag(e, type)}
                   onDragOver={e => handleDrag(e, type)} onDrop={e => handleDrop(e, type)}
-                  className={`relative border-2 border-dashed rounded-2xl p-4 text-center transition ${dragActive === type ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20' : 'border-gray-300 dark:border-neutral-700'}`}
+                  className={`relative border-2 border-dashed rounded-2xl p-4 text-center transition ${dragActive === type ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20' : 'border-gray-300 dark:border-neutral-700 hover:border-amber-400'}`}
                 >
                   {formData[field] ? (
                     <div className="relative">
@@ -276,12 +326,15 @@ export default function ShopSettings() {
         {/* ── Location ── */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
           className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border-2 border-gray-200 dark:border-neutral-800 shadow-lg">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-5 flex items-center gap-2">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
             <MapPin className="w-5 h-5 text-amber-600" /> Location
           </h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
+            Your full address is used to show your shop in the "Nearby" filter on the app. Make sure it's accurate.
+          </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
-              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">Address</label>
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">Street Address</label>
               <input type="text" value={formData.address}
                 onChange={e => setFormData(prev => ({ ...prev, address: e.target.value }))}
                 className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition" />
@@ -307,30 +360,25 @@ export default function ShopSettings() {
           </div>
         </motion.div>
 
-        {/* ── Business Hours ── COMPACT ── */}
+        {/* ── Business Hours ── */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
           className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border-2 border-gray-200 dark:border-neutral-800 shadow-lg">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-5 flex items-center gap-2">
             <Clock className="w-5 h-5 text-amber-600" /> Business Hours
           </h2>
-
           <div className="space-y-2">
             {DAYS.map(day => {
               const h = formData.hours[day] || { open: '09:00', close: '17:00', closed: false };
               return (
                 <div key={day} className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition ${h.closed ? 'bg-gray-50 dark:bg-neutral-800/50 opacity-60' : 'bg-gray-50 dark:bg-neutral-800'}`}>
-                  {/* Day name */}
                   <span className="w-10 text-sm font-bold text-gray-700 dark:text-gray-300 shrink-0">{DAY_ABBR[day]}</span>
-
-                  {/* Closed toggle */}
                   <button type="button"
                     onClick={() => handleHoursChange(day, 'closed', !h.closed)}
-                    className={`w-8 h-4.5 rounded-full transition-colors shrink-0 ${h.closed ? 'bg-red-400' : 'bg-green-500'}`}
-                    style={{ height: '18px', width: '32px', minWidth: '32px' }}
+                    className={`rounded-full transition-colors shrink-0 ${h.closed ? 'bg-red-400' : 'bg-green-500'}`}
+                    style={{ height: '18px', width: '32px', minWidth: '32px', position: 'relative' }}
                   >
-                    <div className={`w-3.5 h-3.5 bg-white rounded-full shadow mx-0.5 transition-transform ${h.closed ? 'translate-x-0' : 'translate-x-3.5'}`} style={{ marginTop: '1px' }} />
+                    <div className={`absolute top-0.5 w-3.5 h-3.5 bg-white rounded-full shadow transition-transform ${h.closed ? 'left-0.5' : 'left-[14px]'}`} />
                   </button>
-
                   {h.closed ? (
                     <span className="text-sm text-red-500 font-semibold flex-1">Closed</span>
                   ) : (
@@ -346,17 +394,13 @@ export default function ShopSettings() {
                       </select>
                     </div>
                   )}
-
-                  {/* Apply shortcuts */}
                   {!h.closed && (
                     <div className="flex gap-1 shrink-0">
-                      <button type="button" onClick={() => applyToWeekdays(day)}
-                        title="Apply to weekdays"
+                      <button type="button" onClick={() => applyToWeekdays(day)} title="Apply to weekdays"
                         className="text-[10px] px-2 py-1 bg-gray-200 dark:bg-neutral-700 text-gray-500 rounded-lg hover:bg-amber-100 hover:text-amber-700 transition font-semibold">
                         M-F
                       </button>
-                      <button type="button" onClick={() => applyToAll(day)}
-                        title="Apply to all days"
+                      <button type="button" onClick={() => applyToAll(day)} title="Apply to all days"
                         className="text-[10px] px-2 py-1 bg-gray-200 dark:bg-neutral-700 text-gray-500 rounded-lg hover:bg-amber-100 hover:text-amber-700 transition font-semibold">
                         All
                       </button>
