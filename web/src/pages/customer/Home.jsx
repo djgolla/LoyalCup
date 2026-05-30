@@ -2,30 +2,29 @@ import { useRef, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, useScroll, useTransform, useInView, useAnimation } from 'framer-motion';
 import {
-  Coffee, Gift, Store, Users, TrendingUp,
-  Smartphone, ArrowRight, Sparkles, Download
+  Coffee, Gift, Smartphone, ArrowRight,
+  Sparkles, Download, Star, MapPin, Zap
 } from 'lucide-react';
 import supabase from '../../lib/supabase';
 
-// ─── Decorative floating coffee emoji ───────────────────────────────────────
+// ─── Floating coffee deco ────────────────────────────────────────────────────
 const FloatingCoffee = ({ delay = 0, style = {} }) => (
   <motion.div
     initial={{ y: 0 }}
     animate={{ y: [-20, 20, -20] }}
     transition={{ duration: 4, delay, repeat: Infinity, ease: 'easeInOut' }}
-    className="absolute text-6xl opacity-20 pointer-events-none"
+    className="absolute text-6xl opacity-20 pointer-events-none select-none"
     style={style}
   >
     ☕
   </motion.div>
 );
 
-// ─── Animated number counter ────────────────────────────────────────────────
+// ─── Animated counter ────────────────────────────────────────────────────────
 const CountUpNumber = ({ end, duration = 2 }) => {
   const [count, setCount] = useState(0);
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true });
-
   useEffect(() => {
     if (!isInView) return;
     let start = 0;
@@ -33,15 +32,14 @@ const CountUpNumber = ({ end, duration = 2 }) => {
     const timer = setInterval(() => {
       start += increment;
       if (start >= end) { setCount(end); clearInterval(timer); }
-      else { setCount(Math.floor(start)); }
+      else setCount(Math.floor(start));
     }, 1000 / 60);
     return () => clearInterval(timer);
   }, [isInView, end, duration]);
-
   return <span ref={ref}>{count.toLocaleString()}</span>;
 };
 
-// ─── Stat card with shimmer skeleton ────────────────────────────────────────
+// ─── Stat card ───────────────────────────────────────────────────────────────
 const StatCard = ({ num, label, suffix, loading, delay }) => (
   <motion.div
     initial={{ opacity: 0, scale: 0.5 }}
@@ -69,23 +67,19 @@ const StatCard = ({ num, label, suffix, loading, delay }) => (
   </motion.div>
 );
 
-// ─── How-it-works feature card ───────────────────────────────────────────────
+// ─── Feature card ─────────────────────────────────────────────────────────────
 const FeatureCard = ({ icon: Icon, title, description, color, delay }) => {
   const controls = useAnimation();
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true });
-
-  useEffect(() => {
-    if (isInView) controls.start('visible');
-  }, [isInView, controls]);
-
+  useEffect(() => { if (isInView) controls.start('visible'); }, [isInView, controls]);
   return (
     <motion.div
       ref={ref}
       initial="hidden"
       animate={controls}
       variants={{
-        hidden: { opacity: 0, y: 50 },
+        hidden:  { opacity: 0, y: 50 },
         visible: { opacity: 1, y: 0, transition: { duration: 0.6, delay } },
       }}
       whileHover={{ y: -10, transition: { duration: 0.2 } }}
@@ -107,7 +101,7 @@ const FeatureCard = ({ icon: Icon, title, description, color, delay }) => {
   );
 };
 
-// ─── Main component ──────────────────────────────────────────────────────────
+// ─── Main ─────────────────────────────────────────────────────────────────────
 export default function Home() {
   const navigate = useNavigate();
   const { scrollY } = useScroll();
@@ -115,58 +109,38 @@ export default function Home() {
   const heroScale   = useTransform(scrollY, [0, 300], [1, 0.9]);
 
   const [statsLoading, setStatsLoading] = useState(true);
-  const [stats, setStats] = useState({
-    shopCount:  0,
-    orderCount: 0,
-    userCount:  0,
-  });
+  const [stats, setStats] = useState({ shopCount: 0, orderCount: 0, userCount: 0 });
 
-  // ── Pull live counts from Supabase ─────────────────────────────────────────
   useEffect(() => {
-    const loadStats = async () => {
+    (async () => {
       try {
         const [shopsRes, ordersRes, usersRes] = await Promise.all([
-          supabase
-            .from('shops')
-            .select('*', { count: 'exact', head: true })
-            .eq('status', 'active'),
-          supabase
-            .from('orders')
-            .select('*', { count: 'exact', head: true }),
-          supabase
-            .from('profiles')
-            .select('*', { count: 'exact', head: true }),
+          supabase.from('shops').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+          supabase.from('orders').select('*', { count: 'exact', head: true }),
+          supabase.from('profiles').select('*', { count: 'exact', head: true }),
         ]);
-
         setStats({
           shopCount:  shopsRes.count  ?? 0,
           orderCount: ordersRes.count ?? 0,
           userCount:  usersRes.count  ?? 0,
         });
-      } catch (err) {
-        console.error('Failed to load home stats:', err);
-        // silently fall back — stats stay at 0
-      } finally {
-        setStatsLoading(false);
-      }
-    };
-
-    loadStats();
+      } catch { /* silently fallback */ }
+      finally { setStatsLoading(false); }
+    })();
   }, []);
 
   const handleDownloadApp = () => {
     const ua = navigator.userAgent.toLowerCase();
-    if (/iphone|ipad|ipod/.test(ua))   window.open('https://apps.apple.com/app/loyalcup', '_blank');
-    else if (/android/.test(ua))        window.open('https://play.google.com/store/apps/details?id=com.loyalcup', '_blank');
-    else                                navigate('/download');
+    if (/iphone|ipad|ipod/.test(ua))  window.open('https://apps.apple.com/app/loyalcup', '_blank');
+    else if (/android/.test(ua))       window.open('https://play.google.com/store/apps/details?id=com.loyalcup', '_blank');
+    else                               navigate('/download');
   };
 
-  // Build the stats row from live data
   const statsRow = [
-    { num: stats.shopCount,  label: 'Local Shops',      suffix: '+' },
-    { num: stats.userCount,  label: 'Happy Customers',  suffix: '+' },
-    { num: stats.orderCount, label: 'Orders Placed',    suffix: '+' },
-    { num: 4.8,              label: 'Average Rating',   suffix: '★' },
+    { num: stats.shopCount,  label: 'Local Shops',     suffix: '+' },
+    { num: stats.userCount,  label: 'Happy Customers', suffix: '+' },
+    { num: stats.orderCount, label: 'Orders Placed',   suffix: '+' },
+    { num: 4.8,              label: 'Average Rating',  suffix: '★' },
   ];
 
   return (
@@ -174,8 +148,8 @@ export default function Home() {
 
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <div className="relative bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 dark:from-neutral-900 dark:via-neutral-800 dark:to-neutral-900 py-32 overflow-hidden">
-        <FloatingCoffee delay={0} style={{ top: '10%',  left:  '5%' }} />
-        <FloatingCoffee delay={1} style={{ top: '20%',  right: '8%' }} />
+        <FloatingCoffee delay={0} style={{ top: '10%',   left:  '5%'  }} />
+        <FloatingCoffee delay={1} style={{ top: '20%',   right: '8%'  }} />
         <FloatingCoffee delay={2} style={{ bottom: '15%', left: '15%' }} />
 
         <motion.div
@@ -224,7 +198,7 @@ export default function Home() {
               </motion.span>
             </motion.h1>
 
-            {/* Subheading */}
+            {/* Sub */}
             <motion.p
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
@@ -234,12 +208,12 @@ export default function Home() {
               Order ahead, earn rewards, and support your favorite local coffee shops — all in one place.
             </motion.p>
 
-            {/* CTA buttons */}
+            {/* CTA */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.5 }}
-              className="flex flex-col sm:flex-row gap-6 justify-center mb-8"
+              className="flex flex-col sm:flex-row gap-4 justify-center mb-8"
             >
               <motion.button
                 whileHover={{ scale: 1.05, boxShadow: '0 20px 60px rgba(245,158,11,0.4)' }}
@@ -259,22 +233,13 @@ export default function Home() {
                   </motion.div>
                 </span>
               </motion.button>
-
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => navigate('/shop-application')}
-                className="px-10 py-5 bg-white dark:bg-neutral-800 text-amber-700 dark:text-amber-400 border-2 border-amber-700 dark:border-amber-600 rounded-full text-xl font-bold shadow-xl hover:shadow-2xl transition-all"
-              >
-                List Your Shop
-              </motion.button>
             </motion.div>
 
             <motion.p
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }}
-              className="text-gray-600 dark:text-gray-400 text-sm"
+              className="text-gray-500 dark:text-gray-400 text-sm"
             >
-              Available on iOS and Android
+              Available free on iOS and Android
             </motion.p>
           </motion.div>
         </motion.div>
@@ -283,7 +248,7 @@ export default function Home() {
       </div>
 
       {/* ── Live Stats ───────────────────────────────────────────────────── */}
-      <div className="py-20 bg-white dark:bg-neutral-900 relative">
+      <div className="py-20 bg-white dark:bg-neutral-900">
         <div className="max-w-7xl mx-auto px-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             {statsRow.map((stat, i) => (
@@ -292,7 +257,7 @@ export default function Home() {
                 num={stat.num}
                 label={stat.label}
                 suffix={stat.suffix}
-                loading={statsLoading && i < 3} // 4th stat (rating) is always static
+                loading={statsLoading && i < 3}
                 delay={i * 0.1}
               />
             ))}
@@ -334,16 +299,16 @@ export default function Home() {
               delay={0.2}
             />
             <FeatureCard
-              icon={Coffee}
-              title="Browse & Order"
-              description="Discover local shops, browse menus, and place your order ahead of time"
+              icon={MapPin}
+              title="Find Your Spot"
+              description="Discover local coffee shops near you, browse their menus, and order ahead"
               color="bg-gradient-to-br from-amber-500 to-orange-500"
               delay={0.4}
             />
             <FeatureCard
               icon={Gift}
-              title="Earn Rewards"
-              description="Get loyalty points with every purchase and redeem them for free drinks"
+              title="Earn Every Visit"
+              description="Rack up loyalty points with every order and redeem them for free drinks"
               color="bg-gradient-to-br from-purple-500 to-pink-500"
               delay={0.6}
             />
@@ -351,69 +316,47 @@ export default function Home() {
         </div>
       </div>
 
-      {/* ── For Shop Owners ──────────────────────────────────────────────── */}
-      <div className="py-32 bg-gradient-to-br from-amber-600 via-orange-600 to-amber-700 text-white relative overflow-hidden">
-        <motion.div
-          className="absolute inset-0"
-          animate={{ backgroundPosition: ['0% 0%', '100% 100%'] }}
-          transition={{ duration: 20, repeat: Infinity, repeatType: 'reverse' }}
-          style={{
-            backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(255,255,255,0.1) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(255,255,255,0.1) 0%, transparent 50%)',
-            backgroundSize: '100% 100%',
-          }}
-        />
-        <div className="max-w-7xl mx-auto px-4 relative z-10">
+      {/* ── Why people love it ───────────────────────────────────────────── */}
+      <div className="py-24 bg-white dark:bg-neutral-900">
+        <div className="max-w-5xl mx-auto px-4">
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className="text-5xl lg:text-6xl font-black mb-6">Grow Your Business</h2>
-            <p className="text-2xl opacity-90 max-w-3xl mx-auto">
-              Join other local coffee shops already thriving on our platform
+            <h2 className="text-4xl lg:text-5xl font-black text-gray-900 dark:text-white mb-4">
+              Everything you want from your local café
+            </h2>
+            <p className="text-xl text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">
+              Skip the line, earn perks, and support the places that make your neighborhood great
             </p>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
-              { icon: Users,      title: 'Reach More Customers',     desc: 'Get discovered by coffee lovers in your area and beyond' },
-              { icon: Store,      title: 'Easy Menu Management',     desc: 'Update your menu in real-time with our intuitive dashboard' },
-              { icon: TrendingUp, title: 'Built-in Loyalty Program', desc: 'Keep customers coming back with automatic rewards' },
+              { icon: Zap,      color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20',   title: 'Order Ahead',      desc: 'Skip the wait. Your order is ready when you walk in the door.' },
+              { icon: Star,     color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-900/20', title: 'Real Rewards',     desc: 'Points on every purchase. Redeem for free drinks at any shop on LoyalCup.' },
+              { icon: Coffee,   color: 'text-orange-600', bg: 'bg-orange-50 dark:bg-orange-900/20', title: 'Local First',      desc: 'Every shop on LoyalCup is an independent local café. No chains.' },
             ].map((item, i) => (
               <motion.div
                 key={i}
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: i * 0.2 }}
-                whileHover={{ scale: 1.05, y: -10 }}
-                className="bg-white/10 backdrop-blur-xl rounded-2xl p-8 text-center border border-white/20 shadow-2xl"
+                transition={{ delay: i * 0.15 }}
+                className="flex flex-col gap-4 p-6 rounded-2xl border border-gray-100 dark:border-neutral-800 bg-gray-50 dark:bg-neutral-800/50"
               >
-                <motion.div whileHover={{ rotate: 360 }} transition={{ duration: 0.6 }}>
-                  <item.icon className="w-16 h-16 mx-auto mb-6" />
-                </motion.div>
-                <h3 className="text-2xl font-bold mb-4">{item.title}</h3>
-                <p className="opacity-90 text-lg">{item.desc}</p>
+                <div className={`w-12 h-12 ${item.bg} rounded-xl flex items-center justify-center`}>
+                  <item.icon className={`w-6 h-6 ${item.color}`} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 dark:text-white text-lg mb-1">{item.title}</h3>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed">{item.desc}</p>
+                </div>
               </motion.div>
             ))}
           </div>
-
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            className="text-center"
-          >
-            <motion.button
-              whileHover={{ scale: 1.1, boxShadow: '0 25px 70px rgba(0,0,0,0.3)' }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => navigate('/shop-application')}
-              className="bg-white text-amber-700 px-12 py-6 rounded-full text-xl font-bold shadow-2xl hover:shadow-3xl transition-all"
-            >
-              Apply to Join LoyalCup
-            </motion.button>
-          </motion.div>
         </div>
       </div>
 
@@ -470,6 +413,42 @@ export default function Home() {
               <ArrowRight className="w-6 h-6" />
             </span>
           </motion.button>
+
+          <motion.p
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.6 }}
+            className="mt-6 text-sm text-gray-400 dark:text-gray-500"
+          >
+            Free on iOS & Android · No account needed to browse
+          </motion.p>
+        </div>
+      </div>
+
+      {/* ── Shop owner strip — small, tasteful, not competing ────────────── */}
+      <div className="border-t border-gray-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 py-10">
+        <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div>
+            <p className="text-gray-900 dark:text-white font-semibold text-sm">Own a coffee shop?</p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">
+              Join LoyalCup and put your shop in front of thousands of local coffee lovers.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              onClick={() => navigate('/shop-application')}
+              className="px-5 py-2.5 bg-amber-600 text-white text-sm font-semibold rounded-xl hover:bg-amber-700 transition"
+            >
+              Apply to join
+            </button>
+            <button
+              onClick={() => navigate('/login')}
+              className="px-5 py-2.5 text-gray-600 dark:text-gray-400 text-sm font-medium hover:text-amber-700 dark:hover:text-amber-400 transition"
+            >
+              Sign in →
+            </button>
+          </div>
         </div>
       </div>
 
