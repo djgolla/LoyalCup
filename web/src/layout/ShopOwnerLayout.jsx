@@ -59,7 +59,7 @@ export default function ShopOwnerLayout() {
               onClick={() => navigate('/shop-owner/subscribe')}
               className="w-full bg-gradient-to-r from-amber-600 to-orange-600 text-white py-3 rounded-xl font-bold hover:opacity-90 transition flex items-center justify-center gap-2"
             >
-              <CreditCard size={18} /> Subscribe — $150/mo
+              <CreditCard size={18} /> Subscribe — $200/mo
             </button>
             <p className="mt-3 text-xs text-gray-400">Activates instantly · Cancel anytime</p>
           </div>
@@ -90,7 +90,7 @@ export default function ShopOwnerLayout() {
     );
   }
 
-  const isPastDue      = shop.subscription_status === 'past_due';
+  const isPastDue       = shop.subscription_status === 'past_due';
   const squareConnected = !!shop.square_merchant_id;
 
   if (!squareConnected && location.pathname !== '/shop-owner/connect-square' && location.pathname !== '/shop-owner/settings') {
@@ -110,7 +110,7 @@ export default function ShopOwnerLayout() {
           >
             <Terminal size={18} /> Connect Square
           </button>
-          <p className="mt-3 text-xs text-gray-400">Takes 2 minutes · All your items sync automatically</p>
+          <p className="mt-3 text-xs text-gray-400">Takes 2 minutes · Your entire menu syncs automatically</p>
         </div>
       </div>
     );

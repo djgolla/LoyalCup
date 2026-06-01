@@ -15,14 +15,14 @@ export default function About() {
             About LoyalCup
           </h1>
           <p className="text-xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
-            Empowering local coffee shops with enterprise-level loyalty technology, 
+            Empowering local coffee shops with enterprise-level loyalty technology,
             one cup at a time.
           </p>
         </div>
       </div>
 
       <div className="max-w-6xl mx-auto px-4 py-16 space-y-16">
-        
+
         {/* Mission Section */}
         <section className="bg-white dark:bg-neutral-800 rounded-xl shadow-lg p-8 lg:p-12">
           <div className="flex items-center gap-3 mb-6">
@@ -32,13 +32,13 @@ export default function About() {
             </h2>
           </div>
           <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed mb-4">
-            LoyalCup was born from a simple observation: while big chains have 
-            sophisticated mobile apps and loyalty programs, local coffee shops struggle to compete 
+            LoyalCup was born from a simple observation: while big chains have
+            sophisticated mobile apps and loyalty programs, local coffee shops struggle to compete
             with outdated technology or expensive, complex systems.
           </p>
           <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed">
-            We believe every coffee shop deserves the same powerful tools as the big brands. 
-            Our mission is to level the playing field by providing an affordable, easy-to-use 
+            We believe every coffee shop deserves the same powerful tools as the big brands.
+            Our mission is to level the playing field by providing an affordable, easy-to-use
             platform that helps local shops build customer loyalty, streamline operations, and grow their business.
           </p>
         </section>
@@ -55,11 +55,9 @@ export default function About() {
                   <Heart className="text-amber-700" size={32} />
                 </div>
               </div>
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
-                Local First
-              </h3>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">Local First</h3>
               <p className="text-gray-600 dark:text-gray-400">
-                We're passionate about supporting local businesses and helping communities 
+                We're passionate about supporting local businesses and helping communities
                 thrive by keeping coffee dollars local.
               </p>
             </div>
@@ -70,11 +68,9 @@ export default function About() {
                   <Sparkles className="text-amber-700" size={32} />
                 </div>
               </div>
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
-                Simple & Powerful
-              </h3>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">Simple &amp; Powerful</h3>
               <p className="text-gray-600 dark:text-gray-400">
-                Technology should work for you, not against you. We build tools that are 
+                Technology should work for you, not against you. We build tools that are
                 intuitive yet powerful enough to scale.
               </p>
             </div>
@@ -85,11 +81,9 @@ export default function About() {
                   <Award className="text-amber-700" size={32} />
                 </div>
               </div>
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
-                Customer Loyalty
-              </h3>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">Customer Loyalty</h3>
               <p className="text-gray-600 dark:text-gray-400">
-                Building lasting relationships between shops and customers through 
+                Building lasting relationships between shops and customers through
                 rewards, convenience, and delightful experiences.
               </p>
             </div>
@@ -103,66 +97,40 @@ export default function About() {
           </h2>
           <div className="grid md:grid-cols-2 gap-8">
             <div>
-              <h3 className="text-xl font-bold text-amber-700 mb-3">
-                For Customers
-              </h3>
+              <h3 className="text-xl font-bold text-amber-700 mb-3">For Customers</h3>
               <ul className="space-y-3 text-gray-600 dark:text-gray-400">
-                <li className="flex items-start gap-3">
-                  <div className="bg-amber-100 dark:bg-amber-900/30 p-1 rounded-full mt-1">
-                    <Coffee size={16} className="text-amber-700" />
-                  </div>
-                  <span>Discover amazing local coffee shops in your area</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <div className="bg-amber-100 dark:bg-amber-900/30 p-1 rounded-full mt-1">
-                    <Coffee size={16} className="text-amber-700" />
-                  </div>
-                  <span>Browse menus and place orders ahead</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <div className="bg-amber-100 dark:bg-amber-900/30 p-1 rounded-full mt-1">
-                    <Coffee size={16} className="text-amber-700" />
-                  </div>
-                  <span>Earn loyalty points with every purchase</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <div className="bg-amber-100 dark:bg-amber-900/30 p-1 rounded-full mt-1">
-                    <Coffee size={16} className="text-amber-700" />
-                  </div>
-                  <span>Redeem rewards for free drinks and treats</span>
-                </li>
+                {[
+                  'Discover local coffee shops in your area',
+                  'Browse their full menu and order ahead from the app',
+                  'Earn loyalty points with every purchase',
+                  'Redeem rewards for free drinks and treats',
+                ].map((item, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <div className="bg-amber-100 dark:bg-amber-900/30 p-1 rounded-full mt-1">
+                      <Coffee size={16} className="text-amber-700" />
+                    </div>
+                    <span>{item}</span>
+                  </li>
+                ))}
               </ul>
             </div>
 
             <div>
-              <h3 className="text-xl font-bold text-amber-700 mb-3">
-                For Shop Owners
-              </h3>
+              <h3 className="text-xl font-bold text-amber-700 mb-3">For Shop Owners</h3>
               <ul className="space-y-3 text-gray-600 dark:text-gray-400">
-                <li className="flex items-start gap-3">
-                  <div className="bg-amber-100 dark:bg-amber-900/30 p-1 rounded-full mt-1">
-                    <Coffee size={16} className="text-amber-700" />
-                  </div>
-                  <span>Set up your shop in minutes with our simple dashboard</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <div className="bg-amber-100 dark:bg-amber-900/30 p-1 rounded-full mt-1">
-                    <Coffee size={16} className="text-amber-700" />
-                  </div>
-                  <span>Manage your menu, pricing, and customizations</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <div className="bg-amber-100 dark:bg-amber-900/30 p-1 rounded-full mt-1">
-                    <Coffee size={16} className="text-amber-700" />
-                  </div>
-                  <span>Create custom loyalty programs and rewards</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <div className="bg-amber-100 dark:bg-amber-900/30 p-1 rounded-full mt-1">
-                    <Coffee size={16} className="text-amber-700" />
-                  </div>
-                  <span>Track orders, analytics, and customer insights</span>
-                </li>
+                {[
+                  'Connect your Square POS — your entire menu imports automatically',
+                  'Customers order through the app, orders print on your Square terminal',
+                  'Built-in loyalty program keeps customers coming back',
+                  'Track orders, analytics, and customer insights in real time',
+                ].map((item, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <div className="bg-amber-100 dark:bg-amber-900/30 p-1 rounded-full mt-1">
+                      <Coffee size={16} className="text-amber-700" />
+                    </div>
+                    <span>{item}</span>
+                  </li>
+                ))}
               </ul>
             </div>
           </div>
@@ -172,38 +140,34 @@ export default function About() {
         <section>
           <div className="flex items-center justify-center gap-3 mb-8">
             <Users className="text-amber-700" size={32} />
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-              Our Team
-            </h2>
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Our Team</h2>
           </div>
           <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-lg p-8 lg:p-12 text-center">
             <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed mb-6">
-              LoyalCup is built by a small but passionate team of coffee lovers, 
-              developers, and entrepreneurs who believe in the power of local businesses. 
-              We've worked with dozens of coffee shop owners to understand their challenges 
+              LoyalCup is built by a small but passionate team of coffee lovers,
+              developers, and entrepreneurs who believe in the power of local businesses.
+              We've worked closely with coffee shop owners to understand their real challenges
               and build a platform that truly meets their needs.
             </p>
             <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed">
-              Based in San Francisco but supporting coffee shops nationwide, we're committed 
-              to continuous improvement based on feedback from our community of shop owners and customers.
+              Supporting coffee shops nationwide, we're committed to continuous improvement
+              based on feedback from our growing community of shop owners and customers.
             </p>
           </div>
         </section>
 
         {/* CTA Section */}
         <section className="bg-gradient-to-br from-amber-700 to-orange-600 rounded-xl shadow-xl p-12 text-center text-white">
-          <h2 className="text-3xl font-bold mb-4">
-            Ready to Join LoyalCup?
-          </h2>
+          <h2 className="text-3xl font-bold mb-4">Ready to Join LoyalCup?</h2>
           <p className="text-xl mb-8 opacity-90">
             Whether you're a coffee lover or a shop owner, we'd love to have you.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a
-              href="/register"
+              href="/download"
               className="bg-white text-amber-700 px-8 py-3 rounded-lg hover:bg-gray-100 transition font-bold"
             >
-              Sign Up as Customer
+              Download the App
             </a>
             <a
               href="/shop-application"

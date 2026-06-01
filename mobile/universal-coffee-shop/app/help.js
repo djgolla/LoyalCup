@@ -20,19 +20,19 @@ const FAQS = [
     items: [
       {
         q: 'How do I place a mobile order?',
-        a: 'Browse shops on the home screen, tap a shop to open its menu, add items to your cart, then tap "View Cart" and proceed to checkout. Your card is charged only when the order is confirmed.',
+        a: "Browse shops on the home screen, tap a shop to open its menu, add items to your cart, then tap \"View Cart\" and proceed to checkout. Your card is charged only when the order is confirmed.",
       },
       {
         q: 'Can I cancel an order after placing it?',
-        a: 'You can cancel an order while it\'s still in "Pending" or "Confirmed" status — before the shop starts preparing it. Go to Order History, tap the order, and hit Cancel. Once a shop starts preparing your order it can\'t be cancelled through the app — contact the shop directly.',
+        a: "You can cancel an order while it's still in \"Pending\" or \"Confirmed\" status — before the shop starts preparing it. Go to Order History, tap the order, and hit Cancel. Once a shop starts making it, cancellation is no longer available.",
       },
       {
-        q: 'My card was charged but I got an error — what happened?',
-        a: 'This is rare but can happen if your connection drops at the wrong moment. If you were charged and don\'t see an order in your Order History, email us at support@loyalcupapp.com with your order details and we\'ll sort it out immediately.',
+        q: "My card was charged but I got an error — what happened?",
+        a: "This is rare but can happen if your connection drops at the wrong moment. If you were charged and don't see an order in your Order History, email us at support@loyalcupapp.com with your email and approximate order time.",
       },
       {
         q: 'How do I know when my order is ready?',
-        a: 'You\'ll receive a push notification when the shop marks your order "Ready for pickup". You can also track your order status in real time under Order History.',
+        a: "You'll receive a push notification when the shop marks your order \"Ready for pickup\". You can also track your order status in real time under Order History.",
       },
     ],
   },
@@ -41,19 +41,19 @@ const FAQS = [
     items: [
       {
         q: 'How do I earn loyalty points?',
-        a: 'Points are awarded automatically after each completed mobile order. Each shop sets its own earn rate — for example, 10 points per dollar spent. You can see a shop\'s loyalty details on its menu page.',
+        a: "Points are awarded automatically after each completed mobile order. Each shop sets its own earn rate — for example, 10 points per dollar spent. You can see a shop's loyalty details on their menu page.",
       },
       {
         q: 'How do I redeem points?',
-        a: 'At checkout, if you have enough points at that shop, you\'ll see a "Redeem Points" option. Toggle it on and select how many points to apply — they\'ll reduce your total. Tap the Rewards tab in your profile to check your balance across all shops.',
+        a: "At checkout, if you have enough points at that shop, you'll see a \"Redeem Points\" option. Toggle it on and select how many points to apply — they'll reduce your total.",
       },
       {
         q: 'Do my points expire?',
-        a: 'Point expiration is set by each individual shop. Check the Rewards screen for expiration info specific to each shop you\'ve earned points at.',
+        a: "Point expiration is set by each individual shop. Check the Rewards screen for expiration info specific to each shop you've earned points at.",
       },
       {
         q: 'Why do I have different point balances at different shops?',
-        a: 'Each shop runs its own loyalty program with its own earn rate and rewards. Your points at one shop can only be redeemed at that shop. Your profile shows a combined global total for reference.',
+        a: "Each shop runs its own loyalty program. Your points at one shop can only be redeemed at that shop. Your profile shows a combined global total for reference.",
       },
     ],
   },
@@ -62,19 +62,19 @@ const FAQS = [
     items: [
       {
         q: 'How do I update my name or email?',
-        a: 'Go to Profile → Settings → Edit Profile to update your display name. Email changes aren\'t supported in-app right now — email us at support@loyalcupapp.com and we\'ll help.',
+        a: "Go to Profile → Settings → Edit Profile to update your display name. Email changes aren't supported in-app right now — email us at support@loyalcupapp.com and we'll help.",
       },
       {
         q: 'I forgot my password — how do I reset it?',
-        a: 'On the login screen tap "Forgot password?" and enter your email. You\'ll receive a reset link. Check your spam folder if it doesn\'t arrive within a few minutes.',
+        a: "On the login screen tap \"Forgot password?\" and enter your email. You'll receive a reset link. Check your spam folder if it doesn't arrive within a few minutes.",
       },
       {
         q: 'Which payment methods are supported?',
-        a: 'LoyalCup accepts all major credit and debit cards (Visa, Mastercard, Amex, Discover) processed securely through Square. Apple Pay and Google Pay support is coming soon.',
+        a: 'LoyalCup accepts all major credit and debit cards (Visa, Mastercard, Amex, Discover) processed securely through Square.',
       },
       {
         q: 'How do I find shops near me?',
-        a: 'On the home screen tap the "Nearby" filter chip. The app will ask for location permission — grant it and shops within your area will be sorted by distance. Make sure you\'ve allowed location access in your phone\'s Settings if the filter isn\'t working.',
+        a: "On the home screen tap the \"Nearby\" filter chip. The app will ask for location permission — grant it and shops within your area will be sorted by distance.",
       },
     ],
   },
@@ -83,11 +83,11 @@ const FAQS = [
     items: [
       {
         q: 'How do I get a refund?',
-        a: 'Refunds are handled by each shop individually — LoyalCup processes the payment but the shop owner approves refunds. Tap the order in Order History and use "Contact Shop" or reach out to us at support@loyalcupapp.com and we\'ll facilitate it.',
+        a: "Refunds are handled by each shop individually — LoyalCup processes the payment but the shop owner approves refunds. Tap the order in Order History and use \"Contact Shop\" or reach out to support@loyalcupapp.com.",
       },
       {
         q: 'My order was wrong or incomplete — what do I do?',
-        a: 'Contact the shop directly first — most issues get resolved on the spot. If the shop isn\'t responsive, email us at support@loyalcupapp.com with your order number and we\'ll step in.',
+        a: "Contact the shop directly first — most issues get resolved on the spot. If the shop isn't responsive, email us at support@loyalcupapp.com with your order number and we'll step in.",
       },
     ],
   },
@@ -128,7 +128,6 @@ export default function HelpScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
-        {/* FAQ sections */}
         {FAQS.map(section => (
           <View key={section.category} style={styles.section}>
             <Text style={styles.sectionTitle}>{section.category}</Text>
@@ -140,18 +139,11 @@ export default function HelpScreen() {
           </View>
         ))}
 
-        {/* Contact */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Contact Us</Text>
           <View style={styles.card}>
-
-            <TouchableOpacity
-              style={styles.contactRow}
-              onPress={() => Linking.openURL('mailto:support@loyalcupapp.com')}
-            >
-              <View style={styles.contactIcon}>
-                <Feather name="mail" size={20} color="#00704A" />
-              </View>
+            <TouchableOpacity style={styles.contactRow} onPress={() => Linking.openURL('mailto:support@loyalcupapp.com')}>
+              <View style={styles.contactIcon}><Feather name="mail" size={20} color="#00704A" /></View>
               <View style={styles.contactText}>
                 <Text style={styles.contactLabel}>Email Support</Text>
                 <Text style={styles.contactValue}>support@loyalcupapp.com</Text>
@@ -161,13 +153,8 @@ export default function HelpScreen() {
 
             <View style={styles.contactDivider} />
 
-            <TouchableOpacity
-              style={styles.contactRow}
-              onPress={() => Linking.openURL('https://loyalcupapp.com')}
-            >
-              <View style={styles.contactIcon}>
-                <Feather name="globe" size={20} color="#00704A" />
-              </View>
+            <TouchableOpacity style={styles.contactRow} onPress={() => Linking.openURL('https://loyalcupapp.com')}>
+              <View style={styles.contactIcon}><Feather name="globe" size={20} color="#00704A" /></View>
               <View style={styles.contactText}>
                 <Text style={styles.contactLabel}>Website</Text>
                 <Text style={styles.contactValue}>loyalcupapp.com</Text>
@@ -178,9 +165,7 @@ export default function HelpScreen() {
             <View style={styles.contactDivider} />
 
             <View style={styles.contactRow}>
-              <View style={styles.contactIcon}>
-                <Feather name="clock" size={20} color="#00704A" />
-              </View>
+              <View style={styles.contactIcon}><Feather name="clock" size={20} color="#00704A" /></View>
               <View style={styles.contactText}>
                 <Text style={styles.contactLabel}>Response Time</Text>
                 <Text style={styles.contactValue}>Within 24 hours · Mon–Fri</Text>

@@ -1,8 +1,5 @@
 /**
  * Help & Support screen
- * - FAQ accordion (no network needed, baked in)
- * - Email support button
- * - Link to privacy/terms
  */
 import React, { useState } from 'react';
 import {
@@ -12,14 +9,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
+const CONTACT_EMAIL = 'support@loyalcupapp.com';
+
 const FAQS = [
   {
     q: 'How do I place an order?',
-    a: 'Browse shops on the home screen, tap a shop to view the menu, add items to your cart, then tap "Checkout." Your card is charged securely through Square and your order prints on the shop\'s terminal instantly.',
+    a: "Browse shops on the home screen, tap a shop to view the menu, add items to your cart, then tap \"Checkout.\" Your card is charged securely through Square and your order prints on the shop's terminal.",
   },
   {
     q: 'What payment methods are accepted?',
-    a: 'We accept all major credit and debit cards (Visa, Mastercard, Amex, Discover) processed securely through Square. Apple Pay and Google Pay support is coming soon.',
+    a: 'We accept all major credit and debit cards (Visa, Mastercard, Amex, Discover) processed securely through Square.',
   },
   {
     q: 'How do I earn loyalty points?',
@@ -27,35 +26,33 @@ const FAQS = [
   },
   {
     q: 'Can I cancel my order?',
-    a: 'You can cancel a confirmed order before the shop accepts it. Once a barista accepts it, it can no longer be cancelled through the app — contact the shop directly if you need help.',
+    a: "You can cancel a confirmed order before the shop accepts it. Once a barista accepts it, it can no longer be cancelled through the app — contact the shop directly if you need help.",
   },
   {
     q: 'How do I know when my order is ready?',
-    a: 'You\'ll receive a push notification when your order is marked ready. Make sure notifications are enabled in your phone\'s settings for LoyalCup. You\'ll also see a "Ready!" status on the order tracking screen.',
+    a: "You'll receive a push notification when your order is marked ready. Make sure notifications are enabled in your phone's settings for LoyalCup.",
   },
   {
-    q: 'I was charged but didn\'t receive my order. What do I do?',
-    a: 'Contact us at support@loyalcup.com with your order number (shown in Order History). We\'ll work with the shop to resolve it. Refunds are processed through Square and typically appear in 3–5 business days.',
+    q: "I was charged but didn't receive my order. What do I do?",
+    a: `Contact us at ${CONTACT_EMAIL} with your order number (shown in Order History). We'll work with the shop to resolve it. Refunds are processed through Square and typically appear in 3–5 business days.`,
   },
   {
-    q: 'Why can\'t I see a shop near me?',
-    a: 'LoyalCup is growing! Shops must sign up and complete Square setup before appearing. If your local shop isn\'t listed, share the app with them — they can sign up at loyalcup.com.',
+    q: "Why can't I see a shop near me?",
+    a: "LoyalCup is growing! Shops must sign up and complete Square setup before appearing. If your local shop isn't listed, share the app with them — they can sign up at loyalcupapp.com.",
   },
   {
     q: 'How do I update my email or password?',
-    a: 'Tap your profile icon, then go to Settings. You can update your email and password there. If you signed up with Google, your password is managed through Google.',
+    a: 'Tap your profile icon, then go to Settings. You can update your name and password there.',
   },
   {
     q: 'Is my payment info stored in the app?',
-    a: 'No. We never store card numbers. All payment info is handled by Square\'s PCI-compliant infrastructure. We only receive a confirmation token after payment succeeds.',
+    a: "No. We never store card numbers. All payment info is handled by Square's PCI-compliant infrastructure. We only receive a confirmation token after payment succeeds.",
   },
   {
     q: 'How do I delete my account?',
-    a: 'Email support@loyalcup.com with the subject "Delete My Account." We\'ll process it within 48 hours and send confirmation. All your data will be permanently removed.',
+    a: `Email ${CONTACT_EMAIL} with the subject "Delete My Account." We'll process it within 48 hours and send confirmation. All your data will be permanently removed.`,
   },
 ];
-
-const CONTACT_EMAIL = 'support@loyalcup.com';
 
 const FAQItem = ({ item }) => {
   const [open, setOpen] = useState(false);
@@ -95,7 +92,6 @@ export default function SupportScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 48 }}>
 
-        {/* Hero */}
         <View style={styles.hero}>
           <View style={styles.heroIcon}>
             <Feather name="help-circle" size={32} color="#00704A" />
@@ -104,7 +100,6 @@ export default function SupportScreen() {
           <Text style={styles.heroSub}>Find answers below or reach out directly.</Text>
         </View>
 
-        {/* Contact card */}
         <View style={styles.contactCard}>
           <View style={styles.contactCardLeft}>
             <Text style={styles.contactCardTitle}>Talk to us</Text>
@@ -116,19 +111,17 @@ export default function SupportScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* FAQ */}
         <View style={styles.faqSection}>
           <Text style={styles.faqSectionLabel}>FREQUENTLY ASKED QUESTIONS</Text>
           {FAQS.map((item, i) => <FAQItem key={i} item={item} />)}
         </View>
 
-        {/* Footer links */}
         <View style={styles.footerLinks}>
-          <TouchableOpacity onPress={() => Linking.openURL('https://loyalcup.com/privacy')}>
+          <TouchableOpacity onPress={() => Linking.openURL('https://loyalcupapp.com/privacy')}>
             <Text style={styles.footerLink}>Privacy Policy</Text>
           </TouchableOpacity>
           <Text style={styles.footerDivider}>·</Text>
-          <TouchableOpacity onPress={() => Linking.openURL('https://loyalcup.com/terms')}>
+          <TouchableOpacity onPress={() => Linking.openURL('https://loyalcupapp.com/terms')}>
             <Text style={styles.footerLink}>Terms of Service</Text>
           </TouchableOpacity>
         </View>
@@ -140,28 +133,28 @@ export default function SupportScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:          { flex: 1, backgroundColor: '#FAFAFA' },
-  header:             { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  headerTitle:        { fontSize: 20, fontWeight: '800', color: '#000' },
-  hero:               { alignItems: 'center', paddingVertical: 32, paddingHorizontal: 24 },
-  heroIcon:           { width: 72, height: 72, borderRadius: 36, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
-  heroTitle:          { fontSize: 26, fontWeight: '900', color: '#000', marginBottom: 6 },
-  heroSub:            { fontSize: 14, color: '#9ca3af', textAlign: 'center' },
-  contactCard:        { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginBottom: 24, backgroundColor: '#FFF', borderRadius: 16, padding: 18, borderWidth: 1.5, borderColor: '#E8F5E9', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
-  contactCardLeft:    { flex: 1 },
-  contactCardTitle:   { fontSize: 16, fontWeight: '800', color: '#000', marginBottom: 3 },
-  contactCardSub:     { fontSize: 12, color: '#9ca3af', lineHeight: 17 },
-  emailBtn:           { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#00704A', paddingHorizontal: 16, paddingVertical: 11, borderRadius: 12 },
-  emailBtnText:       { color: '#FFF', fontWeight: '700', fontSize: 14 },
-  faqSection:         { paddingHorizontal: 16 },
-  faqSectionLabel:    { fontSize: 11, fontWeight: '800', color: '#9ca3af', letterSpacing: 1.2, marginBottom: 12 },
-  faqItem:            { backgroundColor: '#FFF', borderRadius: 14, padding: 16, marginBottom: 8, borderWidth: 1.5, borderColor: '#F0F0F0' },
-  faqItemOpen:        { borderColor: '#00704A', backgroundColor: '#f0faf5' },
-  faqHeader:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 },
-  faqQ:               { flex: 1, fontSize: 14, fontWeight: '700', color: '#111827', lineHeight: 20 },
-  faqA:               { fontSize: 13, color: '#6b7280', lineHeight: 20, marginTop: 10 },
-  footerLinks:        { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, marginTop: 28, marginBottom: 8 },
-  footerLink:         { fontSize: 13, color: '#00704A', fontWeight: '600' },
-  footerDivider:      { color: '#d1d5db' },
-  versionText:        { textAlign: 'center', fontSize: 11, color: '#d1d5db', marginTop: 4 },
+  container:        { flex: 1, backgroundColor: '#FAFAFA' },
+  header:           { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  headerTitle:      { fontSize: 20, fontWeight: '800', color: '#000' },
+  hero:             { alignItems: 'center', paddingVertical: 32, paddingHorizontal: 24 },
+  heroIcon:         { width: 72, height: 72, borderRadius: 36, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
+  heroTitle:        { fontSize: 26, fontWeight: '900', color: '#000', marginBottom: 6 },
+  heroSub:          { fontSize: 14, color: '#9ca3af', textAlign: 'center' },
+  contactCard:      { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginBottom: 24, backgroundColor: '#FFF', borderRadius: 16, padding: 18, borderWidth: 1.5, borderColor: '#E8F5E9', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
+  contactCardLeft:  { flex: 1 },
+  contactCardTitle: { fontSize: 16, fontWeight: '800', color: '#000', marginBottom: 3 },
+  contactCardSub:   { fontSize: 12, color: '#9ca3af', lineHeight: 17 },
+  emailBtn:         { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: '#00704A', paddingHorizontal: 16, paddingVertical: 11, borderRadius: 12 },
+  emailBtnText:     { color: '#FFF', fontWeight: '700', fontSize: 14 },
+  faqSection:       { paddingHorizontal: 16 },
+  faqSectionLabel:  { fontSize: 11, fontWeight: '800', color: '#9ca3af', letterSpacing: 1.2, marginBottom: 12 },
+  faqItem:          { backgroundColor: '#FFF', borderRadius: 14, padding: 16, marginBottom: 8, borderWidth: 1.5, borderColor: '#F0F0F0' },
+  faqItemOpen:      { borderColor: '#00704A', backgroundColor: '#f0faf5' },
+  faqHeader:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 },
+  faqQ:             { flex: 1, fontSize: 14, fontWeight: '700', color: '#111827', lineHeight: 20 },
+  faqA:             { fontSize: 13, color: '#6b7280', lineHeight: 20, marginTop: 10 },
+  footerLinks:      { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, marginTop: 28, marginBottom: 8 },
+  footerLink:       { fontSize: 13, color: '#00704A', fontWeight: '600' },
+  footerDivider:    { color: '#d1d5db' },
+  versionText:      { textAlign: 'center', fontSize: 11, color: '#d1d5db', marginTop: 4 },
 });

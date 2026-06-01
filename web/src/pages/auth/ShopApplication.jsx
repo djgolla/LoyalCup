@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Store, MapPin, Phone, Mail, Globe, FileText, Check, ArrowRight } from 'lucide-react';
+import { Store, MapPin, Phone, Mail, Globe, FileText, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import supabase from '../../lib/supabase';
 
@@ -40,19 +40,15 @@ export default function ShopApplication() {
     }
     setLoading(true);
     try {
-      // Check if already logged in
       const { data: { session: existingSession } } = await supabase.auth.getSession();
       let userId;
       let userEmail = formData.email;
 
       if (existingSession) {
-        // Already logged in — use their account
         userId = existingSession.user.id;
         userEmail = existingSession.user.email;
       } else {
-        // Create account AND sign them in immediately
         const tempPassword = formData.password;
-
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email: formData.email,
           password: tempPassword,
@@ -63,8 +59,6 @@ export default function ShopApplication() {
 
         if (signUpError) throw signUpError;
 
-        // signUp in Supabase auto-signs them in if email confirmation is disabled
-        // If email confirmation IS enabled, we need to sign in immediately
         if (!signUpData.session) {
           const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
             email: formData.email,
@@ -79,8 +73,7 @@ export default function ShopApplication() {
         if (!userId) throw new Error('Failed to create account');
       }
 
-      // Create shop with status = pending_payment
-      const { data: shop, error: shopError } = await supabase
+      const { error: shopError } = await supabase
         .from('shops')
         .insert({
           owner_id:    userId,
@@ -109,7 +102,7 @@ export default function ShopApplication() {
     }
   };
 
-  const ic = 'w-full px-4 py-3 border-2 border-gray-200 dark:border-neutral-700 rounded-xl bg-white dark:bg-neutral-800 text-gray-900 dark:text-white focus:outline-none focus:border-amber-500 transition text-sm';
+  const ic = 'w-full px-4 py-3 border-2 border-gray-200 dark:border-neutral-700 rounded-xl bg-white dark:bg-neutral-800 text-gray-900 dark:text-white focus:outline-none focus:border-amber-500 transition';
 
   return (
     <div className="max-w-2xl mx-auto py-12 px-4">
@@ -118,7 +111,6 @@ export default function ShopApplication() {
         <p className="text-gray-500 dark:text-gray-400 text-lg">
           Tell us about your shop — then subscribe to go live instantly.
         </p>
-        {/* Step indicator */}
         <div className="flex items-center justify-center gap-3 mt-6 flex-wrap">
           <div className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-full text-sm font-bold">
             <span>1</span> <span>Shop Details</span>
@@ -129,7 +121,7 @@ export default function ShopApplication() {
           </div>
           <div className="w-6 h-0.5 bg-gray-300 dark:bg-neutral-700" />
           <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-neutral-800 text-gray-400 rounded-full text-sm font-bold">
-            <span>3</span> <span>Setup &amp; Go Live</span>
+            <span>3</span> <span>Connect Square &amp; Go Live</span>
           </div>
         </div>
       </motion.div>
@@ -167,7 +159,6 @@ export default function ShopApplication() {
               placeholder="you@yourbusiness.com" required className={ic} />
           </div>
 
-          {/* Password — needed so they can log back in */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
               Password * <span className="text-gray-400 font-normal">(you'll use this to log in)</span>
@@ -242,7 +233,7 @@ export default function ShopApplication() {
           </motion.button>
 
           <p className="text-center text-xs text-gray-400">
-            Next step: $150/mo subscription · Activates instantly · Cancel anytime
+            Next step: $200/mo subscription · Card required · Activates instantly · Cancel anytime
           </p>
         </form>
       </motion.div>

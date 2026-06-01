@@ -33,7 +33,7 @@ export default function ApplicationPending() {
               </li>
               <li className="flex items-center gap-2 opacity-60">
                 <CreditCard className="w-4 h-4 shrink-0" />
-                <span>Subscribe to activate ($150/mo · cancel anytime)</span>
+                <span>Subscribe to activate ($200/mo · card required · cancel anytime)</span>
               </li>
               <li className="flex items-center gap-2 opacity-40">
                 <CheckCircle className="w-4 h-4 shrink-0" />
