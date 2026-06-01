@@ -503,10 +503,6 @@ export default function ShopDetailScreen() {
   );
 }
 
-const HERO_HEIGHT    = 220;
-const LOGO_OVERLAP   = 44;
-const LOGO_SIZE      = 100;
-
 const styles = StyleSheet.create({
   container:  { flex: 1, backgroundColor: '#FAFAFA' },
   centered:   { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
