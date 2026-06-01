@@ -68,16 +68,16 @@ export default function Pricing() {
   const navigate = useNavigate();
 
   const features = [
-    { icon: Smartphone,  title: 'Customer Mobile App Listing',    desc: 'Your shop is discoverable by thousands of coffee lovers on iOS & Android' },
-    { icon: Menu,        title: 'Full Menu Management',           desc: 'Build and update your menu in real-time — items, categories, modifiers, pricing' },
-    { icon: ShoppingBag, title: 'Online & Mobile Ordering',       desc: 'Accept orders ahead of time directly through the LoyalCup app' },
-    { icon: Award,       title: 'Built-in Loyalty Program',       desc: 'Automatic points, rewards, and punch cards to keep customers coming back' },
-    { icon: RefreshCw,   title: 'Square POS Sync',                desc: 'Two-way sync with your existing Square setup — no double entry' },
-    { icon: BarChart3,   title: 'Analytics Dashboard',            desc: 'Track orders, revenue, popular items, and customer trends in real time' },
-    { icon: Users,       title: 'Customer Insights',              desc: 'See who your regulars are, their order history, and lifetime spend' },
-    { icon: Headphones,  title: 'Priority Support',               desc: 'Direct access to our team — real people, fast responses, no bots' },
-    { icon: Shield,      title: 'Secure Payments',                desc: 'PCI-compliant payment processing via Stripe. You never touch card data.' },
-    { icon: Zap,         title: 'Instant Setup',                  desc: 'Go live in under 30 minutes — no dev skills required' },
+    { icon: Smartphone,  title: 'Customer Mobile App Listing',    desc: 'Your shop is listed on iOS & Android — customers in your area can discover you, browse your full menu, and order ahead.' },
+    { icon: Menu,        title: 'Full Menu Import & Management',   desc: 'Your entire Square menu — items, categories, modifiers, and pricing — pulls in automatically. Keep it updated in real time.' },
+    { icon: ShoppingBag, title: 'Mobile Ordering via Square',      desc: 'All customer orders are placed through your Square POS. Orders print on your terminal just like any other Square order.' },
+    { icon: Award,       title: 'Built-in Loyalty Program',        desc: 'Automatic points, rewards, and punch cards to keep customers coming back — fully managed for you.' },
+    { icon: RefreshCw,   title: 'Square POS Sync',                 desc: 'Two-way sync with your existing Square setup — no double entry, no extra hardware.' },
+    { icon: BarChart3,   title: 'Analytics Dashboard',             desc: 'Track orders, revenue, popular items, and customer trends in real time.' },
+    { icon: Users,       title: 'Customer Insights',               desc: 'See who your regulars are, their order history, and lifetime spend.' },
+    { icon: Headphones,  title: 'Priority Support',                desc: 'Direct access to our team — real people, fast responses, no bots.' },
+    { icon: Shield,      title: 'Secure Payments',                 desc: 'Customer orders are processed securely through Square. Your monthly subscription is billed via Stripe. You never touch card data.' },
+    { icon: Zap,         title: 'Instant Setup',                   desc: 'Go live in under 30 minutes — no dev skills required.' },
   ];
 
   const faqs = [
@@ -87,7 +87,11 @@ export default function Pricing() {
     },
     {
       q: 'Do I need Square to use LoyalCup?',
-      a: 'Yes — Square POS is required for the initial launch. We\'re working on support for other POS systems and will let you know when more options are available.',
+      a: 'Yes — Square POS is required. All customer orders are placed through Square, so orders print right on your existing terminal. Your monthly LoyalCup subscription is billed separately via Stripe.',
+    },
+    {
+      q: 'How does payment processing work for customer orders?',
+      a: 'All customer orders are processed through Square — the same system you already use. Square\'s standard processing fees apply to each transaction. LoyalCup\'s $200/mo platform fee is separate and covers everything else.',
     },
     {
       q: 'What happens to my price if you raise it later?',
@@ -98,12 +102,8 @@ export default function Pricing() {
       a: 'If you have a promo code, enter it at checkout when you subscribe. Discounts are applied immediately and locked in for the duration specified in the code.',
     },
     {
-      q: 'What are the payment processing fees for customer orders?',
-      a: 'Standard Stripe fees apply to customer orders (2.9% + 30¢ per transaction). These are separate from the $150/mo platform fee and are industry standard.',
-    },
-    {
-      q: 'How do I get approved?',
-      a: 'Submit your shop application and our team reviews it within 24–48 hours. Once approved, you\'ll get an email with next steps to get set up and go live.',
+      q: 'Does LoyalCup pull in my entire Square menu?',
+      a: 'Yes — your complete Square menu imports automatically. Every item, category, modifier group, and price comes in as-is. You can also manage your menu directly in the LoyalCup dashboard.',
     },
   ];
 
@@ -174,7 +174,7 @@ export default function Pricing() {
 
               <div className="text-center mb-8 mt-2">
                 <div className="flex items-end justify-center gap-2 mb-2">
-                  <span className="text-7xl font-black text-gray-900 dark:text-white">$150</span>
+                  <span className="text-7xl font-black text-gray-900 dark:text-white">$200</span>
                   <span className="text-2xl text-gray-500 dark:text-gray-400 mb-3">/mo</span>
                 </div>
                 <p className="text-gray-500 dark:text-gray-400">per shop · cancel anytime</p>
@@ -183,10 +183,10 @@ export default function Pricing() {
               {/* Quick feature list */}
               <ul className="space-y-3 mb-8">
                 {[
+                  'Full menu import from Square — automatic',
                   'Customer mobile app listing',
-                  'Full menu & order management',
+                  'Mobile ordering through Square POS',
                   'Built-in loyalty program',
-                  'Square POS sync',
                   'Analytics dashboard',
                   'Priority support',
                 ].map((item, i) => (
@@ -217,14 +217,14 @@ export default function Pricing() {
                 onClick={() => navigate('/shop-application')}
                 className="w-full bg-gradient-to-r from-amber-600 to-orange-600 text-white py-4 rounded-2xl font-bold text-lg shadow-xl flex items-center justify-center gap-2 group"
               >
-                Apply to Join LoyalCup
+                Get Started — $200/month
                 <motion.div animate={{ x: [0, 4, 0] }} transition={{ duration: 1.5, repeat: Infinity }}>
                   <ArrowRight className="w-5 h-5" />
                 </motion.div>
               </motion.button>
 
               <p className="text-center text-sm text-gray-400 dark:text-gray-500 mt-4">
-                Applications reviewed within 24–48 hours
+                Card required at signup · Activates instantly · Cancel anytime
               </p>
             </div>
           </motion.div>
@@ -262,6 +262,31 @@ export default function Pricing() {
               <FeatureRow key={i} {...f} delay={i * 0.05} />
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* ── Square callout ── */}
+      <div className="py-20 bg-gray-50 dark:bg-neutral-800">
+        <div className="max-w-4xl mx-auto px-4 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
+            <div className="inline-block mb-6">
+              <div className="bg-amber-100 dark:bg-amber-900/20 px-6 py-3 rounded-full">
+                <span className="text-amber-700 dark:text-amber-400 font-bold text-sm uppercase tracking-wider">
+                  Powered by Square
+                </span>
+              </div>
+            </div>
+            <h2 className="text-4xl font-black text-gray-900 dark:text-white mb-4">
+              Orders go straight to your Square terminal
+            </h2>
+            <p className="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+              Every customer order placed through LoyalCup fires directly through Square POS — printed on your terminal just like any other order. No new hardware, no new workflow. Your entire Square menu pulls in automatically so you're live fast.
+            </p>
+          </motion.div>
         </div>
       </div>
 
@@ -356,7 +381,7 @@ export default function Pricing() {
             transition={{ delay: 0.2 }}
             className="text-xl text-gray-500 dark:text-gray-400 mb-10 max-w-2xl mx-auto"
           >
-            Join LoyalCup today and lock in your rate at $150/month forever.
+            Join LoyalCup today and lock in your rate at $200/month forever.
             Setup takes under 30 minutes.
           </motion.p>
 
@@ -373,7 +398,7 @@ export default function Pricing() {
               onClick={() => navigate('/shop-application')}
               className="px-10 py-5 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-full text-xl font-bold shadow-2xl flex items-center gap-3 justify-center"
             >
-              Apply Now — It's Free
+              Get Started
               <ArrowRight className="w-5 h-5" />
             </motion.button>
             <motion.button
@@ -387,7 +412,7 @@ export default function Pricing() {
           </motion.div>
 
           <p className="text-sm text-gray-400 dark:text-gray-500 mt-6">
-            No credit card required to apply. Pay only after you're approved and set up.
+            $200/mo · Card required at signup · Cancel anytime from your dashboard
           </p>
         </div>
       </div>

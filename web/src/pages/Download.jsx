@@ -55,7 +55,7 @@ export default function Download() {
               whileTap={{ scale: 0.95 }}
               className="flex items-center gap-3 px-8 py-4 bg-black text-white rounded-2xl shadow-xl hover:bg-neutral-800 transition"
             >
-              {/* Google Play logo SVG inline since lucide doesn't have it */}
+              {/* Google Play logo SVG inline */}
               <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M3.18 23.76c.33.19.7.24 1.06.14l11.34-11.36L12.4 9.36 3.18 23.76zm15.1-13.02L15.1 9l-3.1 3.1 3.1 3.1 3.24-1.84c.92-.52.92-1.86-.06-2.62zM2.26 1.14C2.1 1.42 2 1.74 2 2.1v19.8c0 .36.1.68.26.96L13.7 12 2.26 1.14zm9.52 9.52L3.24.54C2.88.44 2.52.5 2.2.7l11.22 11.22-1.64-1.26z"/>
               </svg>
@@ -73,7 +73,7 @@ export default function Download() {
             ))}
           </div>
           <p className="text-gray-500 dark:text-gray-400 text-sm">
-            Loved by thousands of coffee fans
+            Supporting local coffee shops everywhere
           </p>
         </motion.div>
       </div>
@@ -85,7 +85,7 @@ export default function Download() {
             {
               icon: Coffee,
               title: "Order Ahead",
-              desc: "Browse menus and order from your favorite local shops before you even leave home.",
+              desc: "Browse full menus and order from your favorite local shops before you even leave home.",
               color: "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400",
             },
             {

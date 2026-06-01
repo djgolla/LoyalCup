@@ -15,19 +15,19 @@ export default function Privacy() {
             Privacy Policy
           </h1>
           <p className="text-lg text-gray-600 dark:text-gray-400">
-            Last updated: January 28, 2026
+            Last updated: June 1, 2026
           </p>
         </div>
 
         {/* Content */}
         <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-lg p-8 lg:p-12 space-y-8">
-          
+
           <section>
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
               Introduction
             </h2>
             <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
-              LoyalCup ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application and website (collectively, the "Platform").
+              LoyalCup ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use the LoyalCup mobile application and website (collectively, the "Platform"). By using LoyalCup you agree to the collection and use of information in accordance with this policy.
             </p>
           </section>
 
@@ -40,26 +40,35 @@ export default function Privacy() {
             </div>
             <div className="space-y-4 text-gray-600 dark:text-gray-400">
               <div>
-                <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
-                  Personal Information
-                </h3>
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Account Information</h3>
                 <ul className="list-disc list-inside space-y-1 ml-4">
-                  <li>Name, email address, and phone number</li>
-                  <li>Profile picture or avatar</li>
-                  <li>Payment information (processed securely through third-party providers)</li>
-                  <li>Delivery addresses</li>
+                  <li>Name and email address</li>
+                  <li>Password (stored hashed — we never see it in plain text)</li>
+                  <li>Profile information you choose to provide</li>
                 </ul>
               </div>
-              
               <div>
-                <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
-                  Usage Information
-                </h3>
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Order & Usage Information</h3>
                 <ul className="list-disc list-inside space-y-1 ml-4">
-                  <li>Order history and preferences</li>
-                  <li>Loyalty points and rewards activity</li>
-                  <li>Interaction with shops and menu items</li>
-                  <li>Device information and IP address</li>
+                  <li>Order history and items ordered</li>
+                  <li>Loyalty points earned and redeemed</li>
+                  <li>Shops viewed and favorited</li>
+                  <li>In-app activity and feature usage</li>
+                </ul>
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Payment Information</h3>
+                <ul className="list-disc list-inside space-y-1 ml-4">
+                  <li>Customer orders are processed through <strong>Square</strong> — we never store your card number or payment details. Square handles all PCI-compliant payment processing.</li>
+                  <li>Shop owner subscriptions are billed through <strong>Stripe</strong> — we do not store card data for subscriptions either.</li>
+                </ul>
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Device & Location Information</h3>
+                <ul className="list-disc list-inside space-y-1 ml-4">
+                  <li>Device type and operating system</li>
+                  <li>IP address</li>
+                  <li>Location data (only if you grant permission) — used to show nearby shops</li>
                 </ul>
               </div>
             </div>
@@ -75,13 +84,14 @@ export default function Privacy() {
             <div className="text-gray-600 dark:text-gray-400 space-y-3">
               <p>We use the information we collect to:</p>
               <ul className="list-disc list-inside space-y-2 ml-4">
-                <li>Process your orders and payments</li>
-                <li>Manage your loyalty rewards and points</li>
-                <li>Send order confirmations and updates</li>
-                <li>Improve our Platform and services</li>
+                <li>Process and fulfill your orders</li>
+                <li>Manage your loyalty points and rewards</li>
+                <li>Send order confirmations and status updates</li>
+                <li>Show you nearby shops (with your location permission)</li>
+                <li>Improve the Platform and fix bugs</li>
                 <li>Provide customer support</li>
-                <li>Send promotional communications (with your consent)</li>
-                <li>Detect and prevent fraud</li>
+                <li>Send promotional communications (only with your consent)</li>
+                <li>Detect and prevent fraud or abuse</li>
               </ul>
             </div>
           </section>
@@ -94,7 +104,7 @@ export default function Privacy() {
               </h2>
             </div>
             <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
-              We implement appropriate technical and organizational security measures to protect your personal information against unauthorized access, alteration, disclosure, or destruction. However, no method of transmission over the Internet is 100% secure, and we cannot guarantee absolute security.
+              We use industry-standard security measures including encrypted connections (HTTPS/TLS), hashed passwords, and secure third-party infrastructure (Supabase, Square, Stripe) to protect your data. No method of transmission over the internet is 100% secure, but we take reasonable steps to protect your information.
             </p>
           </section>
 
@@ -105,13 +115,14 @@ export default function Privacy() {
             <div className="text-gray-600 dark:text-gray-400 space-y-3">
               <p>We may share your information with:</p>
               <ul className="list-disc list-inside space-y-2 ml-4">
-                <li><strong>Coffee Shops:</strong> Order details and delivery information</li>
-                <li><strong>Payment Processors:</strong> Secure payment processing</li>
-                <li><strong>Service Providers:</strong> Analytics, hosting, and customer support</li>
+                <li><strong>Coffee Shops:</strong> Your name and order details so they can prepare and fulfill your order</li>
+                <li><strong>Square:</strong> Payment processing for customer orders</li>
+                <li><strong>Stripe:</strong> Subscription billing for shop owners</li>
+                <li><strong>Supabase:</strong> Secure database and authentication infrastructure</li>
                 <li><strong>Legal Requirements:</strong> When required by law or to protect our rights</li>
               </ul>
-              <p className="mt-4">
-                We do not sell your personal information to third parties.
+              <p className="mt-4 font-semibold text-gray-900 dark:text-white">
+                We do not sell your personal information to third parties. Ever.
               </p>
             </div>
           </section>
@@ -123,12 +134,12 @@ export default function Privacy() {
             <div className="text-gray-600 dark:text-gray-400 space-y-3">
               <p>You have the right to:</p>
               <ul className="list-disc list-inside space-y-2 ml-4">
-                <li>Access and update your personal information</li>
+                <li>Access and update your personal information (via Profile / Settings in the app)</li>
                 <li>Request deletion of your account and data</li>
-                <li>Opt-out of marketing communications</li>
-                <li>Export your data in a portable format</li>
-                <li>Lodge a complaint with a supervisory authority</li>
+                <li>Opt-out of marketing communications at any time</li>
+                <li>Revoke location permissions at any time through your device settings</li>
               </ul>
+              <p className="mt-3">To request account deletion or a data export, email us at <strong>support@loyalcupapp.com</strong> with the subject "Delete My Account" or "Data Request."</p>
             </div>
           </section>
 
@@ -137,7 +148,7 @@ export default function Privacy() {
               Cookies and Tracking
             </h2>
             <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
-              We use cookies and similar tracking technologies to enhance your experience, analyze usage patterns, and personalize content. You can control cookies through your browser settings, but disabling them may affect Platform functionality.
+              Our website uses cookies to maintain your session and remember your preferences. The mobile app uses device storage for authentication tokens. We do not use advertising trackers or sell tracking data.
             </p>
           </section>
 
@@ -146,7 +157,7 @@ export default function Privacy() {
               Children's Privacy
             </h2>
             <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
-              Our Platform is not intended for children under 13 years of age. We do not knowingly collect personal information from children. If you believe we have collected information from a child, please contact us immediately.
+              LoyalCup is not intended for children under 13 years of age. We do not knowingly collect personal information from children. If you believe we have collected information from a child, please contact us immediately at support@loyalcupapp.com.
             </p>
           </section>
 
@@ -155,7 +166,7 @@ export default function Privacy() {
               Changes to This Policy
             </h2>
             <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
-              We may update this Privacy Policy from time to time. We will notify you of any material changes by posting the new policy on this page and updating the "Last updated" date.
+              We may update this Privacy Policy from time to time. We will notify you of material changes by posting the updated policy here and updating the "Last updated" date. Continued use of the Platform after changes constitutes acceptance.
             </p>
           </section>
 
@@ -164,11 +175,8 @@ export default function Privacy() {
               Contact Us
             </h2>
             <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
-              If you have questions about this Privacy Policy, please contact us at:
-              <br />
-              <strong>Email:</strong> privacy@loyalcupapp.com
-              <br />
-              <strong>Address:</strong> NO PYSICAL ADDRESS AT THIS TIME
+              If you have questions about this Privacy Policy, contact us at:<br />
+              <strong>Email:</strong> support@loyalcupapp.com
             </p>
           </section>
         </div>

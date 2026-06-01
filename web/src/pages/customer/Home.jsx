@@ -301,7 +301,7 @@ export default function Home() {
             <FeatureCard
               icon={MapPin}
               title="Find Your Spot"
-              description="Discover local coffee shops near you, browse their menus, and order ahead"
+              description="Discover local coffee shops near you, browse their full menus, and order ahead"
               color="bg-gradient-to-br from-amber-500 to-orange-500"
               delay={0.4}
             />
@@ -335,9 +335,9 @@ export default function Home() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
-              { icon: Zap,      color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20',   title: 'Order Ahead',      desc: 'Skip the wait. Your order is ready when you walk in the door.' },
-              { icon: Star,     color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-900/20', title: 'Real Rewards',     desc: 'Points on every purchase. Redeem for free drinks at any shop on LoyalCup.' },
-              { icon: Coffee,   color: 'text-orange-600', bg: 'bg-orange-50 dark:bg-orange-900/20', title: 'Local First',      desc: 'Every shop on LoyalCup is an independent local café. No chains.' },
+              { icon: Zap,    color: 'text-amber-600',  bg: 'bg-amber-50 dark:bg-amber-900/20',   title: 'Order Ahead',  desc: 'Skip the wait. Your order is ready when you walk in the door.' },
+              { icon: Star,   color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-900/20', title: 'Real Rewards', desc: 'Points on every purchase. Redeem for free drinks at any shop you visit.' },
+              { icon: Coffee, color: 'text-orange-600', bg: 'bg-orange-50 dark:bg-orange-900/20', title: 'Local First',  desc: 'Every shop on LoyalCup is an independent local café. No chains.' },
             ].map((item, i) => (
               <motion.div
                 key={i}
@@ -421,18 +421,18 @@ export default function Home() {
             transition={{ delay: 0.6 }}
             className="mt-6 text-sm text-gray-400 dark:text-gray-500"
           >
-            Free on iOS & Android · No account needed to browse
+            Free on iOS & Android
           </motion.p>
         </div>
       </div>
 
-      {/* ── Shop owner strip — small, tasteful, not competing ────────────── */}
+      {/* ── Shop owner strip ─────────────────────────────────────────────── */}
       <div className="border-t border-gray-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 py-10">
         <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div>
             <p className="text-gray-900 dark:text-white font-semibold text-sm">Own a coffee shop?</p>
             <p className="text-gray-500 dark:text-gray-400 text-sm">
-              Join LoyalCup and put your shop in front of thousands of local coffee lovers.
+              Join LoyalCup and put your shop in front of local coffee lovers.
             </p>
           </div>
           <div className="flex items-center gap-3 shrink-0">
