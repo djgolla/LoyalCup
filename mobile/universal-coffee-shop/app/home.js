@@ -12,6 +12,7 @@ import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import WebView from 'react-native-webview';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { supabase } from '../lib/supabase';
@@ -80,19 +81,31 @@ const ShopImg = ({ uri, style, resizeMode = 'cover' }) => {
   return <Image source={{ uri }} style={style} resizeMode={resizeMode} />;
 };
 
-const CardBanner = ({ bannerUrl, logoUrl, open }) => {
+/**
+ * CardBanner
+ * - HAS banner  → full-bleed banner photo, thin dark gradient scrim at bottom, logo badge bottom-left
+ * - NO banner, HAS logo → dark espresso gradient + centered logo in glowing ring
+ * - NO banner, NO logo  → dark espresso gradient + coffee icon + subtle "Add your photo" hint
+ */
+const CardBanner = ({ bannerUrl, logoUrl, shopName, open }) => {
   if (bannerUrl) {
     return (
       <View style={styles.cardBannerWrap}>
         <ShopImg uri={bannerUrl} style={styles.cardBannerImg} resizeMode="cover" />
-        <View style={styles.cardBannerOverlay} />
+        {/* Bottom scrim so logo badge stays readable */}
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.55)']}
+          style={styles.cardBannerScrim}
+          pointerEvents="none"
+        />
         {logoUrl && (
           <View style={styles.logoBadge}>
-            <ShopImg uri={logoUrl} style={styles.logoBadgeImg} resizeMode="contain" />
+            <ShopImg uri={logoUrl} style={styles.logoBadgeImg} resizeMode="cover" />
           </View>
         )}
         {open !== null && (
-          <View style={[styles.openBadge, { backgroundColor: open ? '#00704A' : '#6b7280' }]}>
+          <View style={[styles.openBadge, { backgroundColor: open ? '#00704A' : '#4b5563' }]}>
+            <View style={[styles.openDot, { backgroundColor: open ? '#4ade80' : '#9ca3af' }]} />
             <Text style={styles.openBadgeText}>{open ? 'Open' : 'Closed'}</Text>
           </View>
         )}
@@ -100,19 +113,46 @@ const CardBanner = ({ bannerUrl, logoUrl, open }) => {
     );
   }
 
+  /* ── No banner fallback ── */
   return (
     <View style={styles.cardBannerWrap}>
-      <View style={styles.cardBannerGradient}>
+      <LinearGradient
+        colors={['#1a0a00', '#2d1200', '#1a2e1a']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      {/* Subtle radial-ish highlight in centre */}
+      <LinearGradient
+        colors={['rgba(255,255,255,0.06)', 'transparent']}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+
+      <View style={styles.noBannerContent}>
         {logoUrl ? (
-          <View style={styles.logoCentred}>
-            <ShopImg uri={logoUrl} style={styles.logoCentredImg} resizeMode="contain" />
+          /* Logo in glowing ring */
+          <View style={styles.noBannerGlowRing}>
+            <View style={styles.noBannerLogoCircle}>
+              <ShopImg uri={logoUrl} style={styles.noBannerLogoImg} resizeMode="contain" />
+            </View>
           </View>
         ) : (
-          <Feather name="coffee" size={36} color="rgba(255,255,255,0.6)" />
+          /* Pure placeholder — icon + name initial */
+          <View style={styles.noBannerIconWrap}>
+            <Feather name="coffee" size={32} color="rgba(255,255,255,0.55)" />
+          </View>
         )}
+        {shopName ? (
+          <Text style={styles.noBannerName} numberOfLines={1}>{shopName}</Text>
+        ) : null}
       </View>
+
       {open !== null && (
-        <View style={[styles.openBadge, { backgroundColor: open ? '#00704A' : '#6b7280' }]}>
+        <View style={[styles.openBadge, { backgroundColor: open ? '#00704A' : '#4b5563' }]}>
+          <View style={[styles.openDot, { backgroundColor: open ? '#4ade80' : '#9ca3af' }]} />
           <Text style={styles.openBadgeText}>{open ? 'Open' : 'Closed'}</Text>
         </View>
       )}
@@ -135,7 +175,12 @@ const ShopCard = ({ item, onPress, distanceKm, isFav, onToggleFav }) => {
       )}
 
       <View style={{ position: 'relative' }}>
-        <CardBanner bannerUrl={item.banner_url} logoUrl={item.logo_url} open={open} />
+        <CardBanner
+          bannerUrl={item.banner_url}
+          logoUrl={item.logo_url}
+          shopName={item.name}
+          open={open}
+        />
         <TouchableOpacity
           style={styles.heartButton}
           onPress={(e) => { e.stopPropagation?.(); onToggleFav(item.id); }}
@@ -184,9 +229,9 @@ const ShopCard = ({ item, onPress, distanceKm, isFav, onToggleFav }) => {
 };
 
 export default function HomeScreen() {
-  const router                     = useRouter();
-  const { user }                   = useAuth();
-  const { getItemCount }           = useCart();
+  const router                              = useRouter();
+  const { user }                            = useAuth();
+  const { getItemCount }                    = useCart();
   const { isFavorite, toggle, favoriteIds } = useFavorites();
 
   const [shops,          setShops]          = useState([]);
@@ -200,10 +245,10 @@ export default function HomeScreen() {
   const [distances,      setDistances]      = useState({});
 
   const filters = [
-    { key: 'all',       label: 'All',       icon: 'grid'   },
+    { key: 'all',       label: 'All',       icon: 'grid'    },
     { key: 'nearby',    label: 'Nearby',    icon: 'map-pin' },
-    { key: 'open',      label: 'Open Now',  icon: 'clock'  },
-    { key: 'favorites', label: 'Favorites', icon: 'heart'  },
+    { key: 'open',      label: 'Open Now',  icon: 'clock'   },
+    { key: 'favorites', label: 'Favorites', icon: 'heart'   },
   ];
 
   useEffect(() => {
@@ -327,10 +372,10 @@ export default function HomeScreen() {
   }
 
   const emptyMessage = () => {
-    if (searchQuery) return 'Try a different search';
-    if (selectedFilter === 'open')      return 'No shops appear open right now';
-    if (selectedFilter === 'nearby')    return 'No shops found near you';
-    if (selectedFilter === 'favorites') return "Heart a shop to save it here ♥";
+    if (searchQuery)                        return 'Try a different search';
+    if (selectedFilter === 'open')          return 'No shops appear open right now';
+    if (selectedFilter === 'nearby')        return 'No shops found near you';
+    if (selectedFilter === 'favorites')     return 'Heart a shop to save it here ♥';
     return 'Check back soon!';
   };
 
@@ -470,23 +515,37 @@ const styles = StyleSheet.create({
   resultsCount:         { paddingTop: 4, paddingBottom: 8, fontSize: 12, fontWeight: '600', color: '#999' },
   shopsList:            { paddingHorizontal: 16, paddingBottom: 24 },
 
+  // ── Card ──────────────────────────────────────────────────────
   shopCard:             { backgroundColor: '#FFF', borderRadius: 16, marginBottom: 14, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3 },
   offerRibbon:          { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#f59e0b', paddingHorizontal: 12, paddingVertical: 5 },
   offerRibbonText:      { color: '#fff', fontSize: 11, fontWeight: '700' },
 
-  cardBannerWrap:       { width: '100%', height: 140, position: 'relative' },
+  // ── Banner area ───────────────────────────────────────────────
+  cardBannerWrap:       { width: '100%', height: 150, position: 'relative', overflow: 'hidden' },
   cardBannerImg:        { width: '100%', height: '100%' },
-  cardBannerOverlay:    { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.08)' },
-  cardBannerGradient:   { width: '100%', height: '100%', backgroundColor: '#00704A', justifyContent: 'center', alignItems: 'center' },
-  logoBadge:            { position: 'absolute', bottom: 10, left: 12, width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFF', overflow: 'hidden', borderWidth: 2, borderColor: '#FFF', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3 },
-  logoBadgeImg:         { width: '100%', height: '100%' },
-  logoCentred:          { width: 72, height: 72, borderRadius: 36, backgroundColor: '#FFF', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
-  logoCentredImg:       { width: '100%', height: '100%' },
+  cardBannerScrim:      { position: 'absolute', left: 0, right: 0, bottom: 0, height: 70 },
 
-  openBadge:            { position: 'absolute', top: 10, right: 10, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  // Logo badge (bottom-left when banner present)
+  logoBadge:            { position: 'absolute', bottom: 10, left: 12, width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFF', overflow: 'hidden', borderWidth: 2, borderColor: '#FFF', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 4, elevation: 4 },
+  logoBadgeImg:         { width: '100%', height: '100%' },
+
+  // Open badge (top-right always)
+  openBadge:            { position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, backgroundColor: '#00704A' },
+  openDot:              { width: 6, height: 6, borderRadius: 3 },
   openBadgeText:        { color: '#FFF', fontSize: 11, fontWeight: '700' },
+
+  // ── No-banner fallback ────────────────────────────────────────
+  noBannerContent:      { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 10 },
+  noBannerGlowRing:     { width: 76, height: 76, borderRadius: 38, backgroundColor: 'rgba(255,255,255,0.08)', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.18)' },
+  noBannerLogoCircle:   { width: 62, height: 62, borderRadius: 31, backgroundColor: '#FFF', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
+  noBannerLogoImg:      { width: '100%', height: '100%' },
+  noBannerIconWrap:     { width: 62, height: 62, borderRadius: 31, backgroundColor: 'rgba(255,255,255,0.10)', justifyContent: 'center', alignItems: 'center' },
+  noBannerName:         { color: 'rgba(255,255,255,0.75)', fontSize: 13, fontWeight: '700', letterSpacing: 0.3, maxWidth: 200 },
+
+  // Heart
   heartButton:          { position: 'absolute', top: 10, left: 10, width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center' },
 
+  // ── Card body ─────────────────────────────────────────────────
   shopCardContent:      { padding: 14 },
   shopName:             { fontSize: 17, fontWeight: '800', color: '#000', marginBottom: 3 },
   shopDescription:      { fontSize: 13, color: '#888', lineHeight: 18, marginBottom: 6 },
@@ -495,6 +554,7 @@ const styles = StyleSheet.create({
   shopFooter:           { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   shopBadge:            { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#F5F5F5', borderRadius: 8 },
   shopBadgeText:        { fontSize: 11, fontWeight: '600', color: '#555' },
+
   emptyState:           { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
   emptyTitle:           { fontSize: 20, fontWeight: '700', color: '#000', marginTop: 16, marginBottom: 6 },
   emptySubtitle:        { fontSize: 14, color: '#999', textAlign: 'center', marginBottom: 24, lineHeight: 20 },

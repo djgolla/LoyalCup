@@ -7,6 +7,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import WebView from 'react-native-webview';
 import { useCart } from '../../context/CartContext';
 import { supabase } from '../../lib/supabase';
@@ -65,7 +66,7 @@ const ShopImage = ({ uri, style, resizeMode }) => {
 
 /** Expandable description — 2 lines collapsed, full text expanded */
 const ExpandableDesc = ({ text }) => {
-  const [expanded, setExpanded]     = useState(false);
+  const [expanded,    setExpanded]    = useState(false);
   const [needsExpand, setNeedsExpand] = useState(false);
 
   if (!text) return null;
@@ -94,6 +95,72 @@ const ExpandableDesc = ({ text }) => {
           </Text>
         </TouchableOpacity>
       )}
+    </View>
+  );
+};
+
+/**
+ * ShopHero
+ * - HAS banner → full-bleed photo (220px), dark scrim, logo overlaps bottom edge
+ * - NO banner, HAS logo → dark espresso gradient, large logo in glow ring
+ * - Nothing → dark espresso gradient, coffee icon
+ */
+const LOGO_OVERLAP = 44; // how many px the logo circle hangs below the hero
+
+const ShopHero = ({ bannerUrl, logoUrl, shopName }) => {
+  if (bannerUrl) {
+    return (
+      <View style={styles.heroWrap}>
+        <ShopImage uri={bannerUrl} style={styles.heroBannerImg} resizeMode="cover" />
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.65)']}
+          style={styles.heroBannerScrim}
+          pointerEvents="none"
+        />
+        {/* Logo overlapping the bottom edge */}
+        {logoUrl && (
+          <View style={styles.heroLogoOverlap}>
+            <View style={styles.heroLogoRing}>
+              <ShopImage uri={logoUrl} style={styles.heroLogoImg} resizeMode="contain" />
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  }
+
+  /* No banner */
+  return (
+    <View style={[styles.heroWrap, styles.heroNoBanner]}>
+      <LinearGradient
+        colors={['#1a0a00', '#2d1200', '#1a2e1a']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <LinearGradient
+        colors={['rgba(255,255,255,0.07)', 'transparent']}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+      <View style={styles.heroNoBannerContent}>
+        {logoUrl ? (
+          <View style={styles.heroGlowRing}>
+            <View style={styles.heroLogoCircleNoBanner}>
+              <ShopImage uri={logoUrl} style={styles.heroLogoImgNoBanner} resizeMode="contain" />
+            </View>
+          </View>
+        ) : (
+          <View style={styles.heroIconWrap}>
+            <Feather name="coffee" size={48} color="rgba(255,255,255,0.5)" />
+          </View>
+        )}
+        {shopName ? (
+          <Text style={styles.heroNoBannerName} numberOfLines={1}>{shopName}</Text>
+        ) : null}
+      </View>
     </View>
   );
 };
@@ -206,6 +273,7 @@ export default function ShopDetailScreen() {
   const modsExtraPrice = Object.values(selectedMods).flat().reduce((s, c) => s + (parseFloat(c.price_adjustment) || 0), 0);
   const cartCount      = getItemCount();
   const openStatus     = isOpenNow(shop?.hours);
+  const hasBanner      = !!shop?.banner_url;
 
   const renderMenuItem = (item) => (
     <TouchableOpacity key={item.id} style={styles.menuItem} onPress={() => openModifierModal(item)} activeOpacity={0.85}>
@@ -239,38 +307,38 @@ export default function ShopDetailScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top','bottom']}>
+      {/* Floating header — transparent over hero */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerBtn} onPress={() => router.back()}>
-          <Feather name="arrow-left" size={22} color="#000" />
+          <Feather name="arrow-left" size={22} color="#FFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>{shop.name}</Text>
         <TouchableOpacity style={styles.headerBtn} onPress={() => router.push('/cart')}>
-          <Feather name="shopping-bag" size={22} color="#000" />
+          <Feather name="shopping-bag" size={22} color="#FFF" />
           {cartCount > 0 && <View style={styles.cartBadge}><Text style={styles.cartBadgeText}>{cartCount}</Text></View>}
         </TouchableOpacity>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}>
 
-        {/* Hero band */}
-        <View style={styles.heroBand}>
-          <View style={styles.shopLogoWrap}>
-            {shop.logo_url
-              ? <ShopImage uri={shop.logo_url} style={styles.shopLogo} resizeMode="contain" />
-              : <View style={[styles.shopLogo, styles.shopLogoPlaceholder]}><Feather name="coffee" size={56} color="#00704A" /></View>}
-          </View>
-        </View>
+        {/* ── Hero ── */}
+        <ShopHero
+          bannerUrl={shop.banner_url}
+          logoUrl={shop.logo_url}
+          shopName={shop.name}
+        />
 
-        <View style={styles.shopInfo}>
+        {/* ── Shop Info — extra top padding when banner+logo overlap ── */}
+        <View style={[styles.shopInfo, hasBanner && shop.logo_url && { paddingTop: LOGO_OVERLAP + 16 }]}>
           {openStatus !== null && (
             <View style={[styles.openChip, { backgroundColor: openStatus ? '#dcfce7' : '#f3f4f6' }]}>
               <View style={[styles.openDot, { backgroundColor: openStatus ? '#16a34a' : '#9ca3af' }]} />
-              <Text style={[styles.openChipText, { color: openStatus ? '#16a34a' : '#6b7280' }]}>{openStatus ? 'Open now' : 'Closed'}</Text>
+              <Text style={[styles.openChipText, { color: openStatus ? '#16a34a' : '#6b7280' }]}>
+                {openStatus ? 'Open now' : 'Closed'}
+              </Text>
             </View>
           )}
           <Text style={styles.shopHeadline}>{shop.name}</Text>
 
-          {/* Expandable description */}
           <ExpandableDesc text={shop.description} />
 
           <View style={styles.shopActions}>
@@ -435,94 +503,174 @@ export default function ShopDetailScreen() {
   );
 }
 
+const HERO_HEIGHT    = 220;
+const LOGO_OVERLAP   = 44;
+const LOGO_SIZE      = 100;
+
 const styles = StyleSheet.create({
-  container:             { flex: 1, backgroundColor: '#FAFAFA' },
-  centered:              { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
-  errorText:             { fontSize: 18, fontWeight: '600', color: '#000', marginTop: 12 },
-  btn:                   { marginTop: 16, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#00704A', borderRadius: 10 },
-  btnText:               { color: '#FFF', fontWeight: '700' },
-  header:                { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  headerBtn:             { padding: 8, position: 'relative' },
-  headerTitle:           { fontSize: 18, fontWeight: '700', color: '#000', flex: 1, textAlign: 'center', paddingHorizontal: 12 },
-  cartBadge:             { position: 'absolute', top: 3, right: 3, backgroundColor: '#FF3B30', borderRadius: 9, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 },
-  cartBadgeText:         { color: '#FFF', fontSize: 11, fontWeight: '800' },
-  heroBand:              { backgroundColor: '#E8F5E9', paddingTop: 28, paddingBottom: 26, alignItems: 'center' },
-  shopLogoWrap:          { width: 140, height: 140, borderRadius: 70, backgroundColor: '#FFF', overflow: 'hidden', borderWidth: 4, borderColor: '#FFFFFF', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.18, shadowRadius: 12, elevation: 6, alignItems: 'center', justifyContent: 'center' },
-  shopLogo:              { width: '100%', height: '100%' },
-  shopLogoPlaceholder:   { backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
-  shopInfo:              { backgroundColor: '#FFF', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  shopHeadline:          { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 10, textAlign: 'center' },
-  openChip:              { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, marginBottom: 10 },
-  openDot:               { width: 7, height: 7, borderRadius: 4 },
-  openChipText:          { fontSize: 12, fontWeight: '700' },
-  // Description — 2 lines collapsed, expandable
-  shopDesc:              { fontSize: 14, color: '#555', textAlign: 'center', lineHeight: 21 },
-  shopDescToggle:        { fontSize: 13, color: '#00704A', fontWeight: '600', textAlign: 'center', marginTop: 4 },
-  shopActions:           { flexDirection: 'row', gap: 10 },
-  actionBtn:             { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10, backgroundColor: '#E8F5E9', borderRadius: 20, borderWidth: 1, borderColor: '#00704A22' },
-  actionBtnText:         { fontSize: 14, fontWeight: '600', color: '#00704A' },
-  offersSection:         { paddingTop: 16, paddingBottom: 4 },
-  offersSectionLabel:    { fontSize: 11, fontWeight: '700', color: '#f59e0b', letterSpacing: 1.2, paddingHorizontal: 16, marginBottom: 10 },
-  offerCard:             { backgroundColor: '#fffbeb', borderRadius: 14, padding: 14, borderWidth: 1.5, borderColor: '#fde68a', minWidth: 200, maxWidth: 260 },
-  offerCardTitle:        { fontSize: 15, fontWeight: '800', color: '#92400e', marginBottom: 4 },
-  offerCardDesc:         { fontSize: 12, color: '#b45309', lineHeight: 17, marginBottom: 8 },
-  offerDiscountBadge:    { alignSelf: 'flex-start', backgroundColor: '#f59e0b', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  offerDiscountText:     { color: '#fff', fontSize: 12, fontWeight: '800' },
-  catTabsWrap:           { backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  catTabsContent:        { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
-  catTab:                { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F5F5F5', marginRight: 6 },
-  catTabActive:          { backgroundColor: '#00704A' },
-  catTabText:            { fontSize: 14, fontWeight: '600', color: '#666' },
-  catTabTextActive:      { color: '#FFF' },
-  menuContainer:         { paddingTop: 12 },
-  catSection:            { marginBottom: 28 },
-  catSectionTitle:       { fontSize: 20, fontWeight: '800', color: '#000', paddingHorizontal: 16, marginBottom: 4 },
-  catSectionDesc:        { fontSize: 13, color: '#999', paddingHorizontal: 16, marginBottom: 12 },
-  menuGrid:              { paddingHorizontal: 10, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  menuItem:              { width: (width - 28) / 2, backgroundColor: '#FFF', borderRadius: 14, marginBottom: 12, marginHorizontal: 3, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 6, elevation: 2 },
-  menuItemImage:         { width: '100%', height: 120, backgroundColor: '#F5F5F5' },
-  menuItemContent:       { padding: 10 },
-  menuItemName:          { fontSize: 14, fontWeight: '700', color: '#000', marginBottom: 3 },
-  menuItemDesc:          { fontSize: 12, color: '#999', marginBottom: 10, lineHeight: 16 },
-  menuItemFooter:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  menuItemPrice:         { fontSize: 16, fontWeight: '800', color: '#00704A' },
-  addButton:             { width: 32, height: 32, borderRadius: 16, backgroundColor: '#00704A', justifyContent: 'center', alignItems: 'center' },
-  emptyMenu:             { alignItems: 'center', paddingVertical: 48 },
-  emptyMenuText:         { fontSize: 15, color: '#CCC', marginTop: 12 },
-  floatingCart:          { position: 'absolute', bottom: 20, left: 16, right: 16, backgroundColor: '#00704A', borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 6 },
-  floatingCartInner:     { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, gap: 10 },
-  floatingCartBadge:     { backgroundColor: '#FFF', borderRadius: 11, minWidth: 22, height: 22, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6 },
+  container:  { flex: 1, backgroundColor: '#FAFAFA' },
+  centered:   { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
+  errorText:  { fontSize: 18, fontWeight: '600', color: '#000', marginTop: 12 },
+  btn:        { marginTop: 16, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#00704A', borderRadius: 10 },
+  btnText:    { color: '#FFF', fontWeight: '700' },
+
+  // ── Floating header (sits over hero) ──────────────────────────
+  header: {
+    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 12,
+  },
+  headerBtn: {
+    padding: 8, position: 'relative',
+    backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 20,
+  },
+  cartBadge: {
+    position: 'absolute', top: 3, right: 3,
+    backgroundColor: '#FF3B30', borderRadius: 9, minWidth: 18, height: 18,
+    justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3,
+  },
+  cartBadgeText: { color: '#FFF', fontSize: 11, fontWeight: '800' },
+
+  // ── Hero ──────────────────────────────────────────────────────
+  heroWrap:   { width: '100%', height: HERO_HEIGHT, position: 'relative', overflow: 'visible' },
+  heroNoBanner: { overflow: 'hidden' },
+  heroBannerImg:   { width: '100%', height: '100%' },
+  heroBannerScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 100 },
+
+  // Logo overlapping the bottom edge (banner case)
+  heroLogoOverlap: {
+    position: 'absolute',
+    bottom: -(LOGO_OVERLAP),
+    left: 20,
+    zIndex: 5,
+  },
+  heroLogoRing: {
+    width: LOGO_SIZE,
+    height: LOGO_SIZE,
+    borderRadius: LOGO_SIZE / 2,
+    backgroundColor: '#FFF',
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: '#FFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  heroLogoImg: { width: '100%', height: '100%' },
+
+  // No-banner fallback
+  heroNoBannerContent: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
+  heroGlowRing: {
+    width: 110, height: 110, borderRadius: 55,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.2)',
+  },
+  heroLogoCircleNoBanner: {
+    width: 90, height: 90, borderRadius: 45,
+    backgroundColor: '#FFF', overflow: 'hidden',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  heroLogoImgNoBanner: { width: '100%', height: '100%' },
+  heroIconWrap: {
+    width: 90, height: 90, borderRadius: 45,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  heroNoBannerName: {
+    color: 'rgba(255,255,255,0.8)', fontSize: 16,
+    fontWeight: '800', letterSpacing: 0.3, maxWidth: 260,
+  },
+
+  // ── Shop Info ────────────────────────────────────────────────
+  shopInfo: {
+    backgroundColor: '#FFF', paddingHorizontal: 20,
+    paddingTop: 20, paddingBottom: 20, alignItems: 'center',
+    borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
+  },
+  shopHeadline: { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 10, textAlign: 'center' },
+  openChip:     { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, marginBottom: 10 },
+  openDot:      { width: 7, height: 7, borderRadius: 4 },
+  openChipText: { fontSize: 12, fontWeight: '700' },
+  shopDesc:     { fontSize: 14, color: '#555', textAlign: 'center', lineHeight: 21 },
+  shopDescToggle: { fontSize: 13, color: '#00704A', fontWeight: '600', textAlign: 'center', marginTop: 4 },
+  shopActions:  { flexDirection: 'row', gap: 10 },
+  actionBtn:    { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10, backgroundColor: '#E8F5E9', borderRadius: 20, borderWidth: 1, borderColor: '#00704A22' },
+  actionBtnText: { fontSize: 14, fontWeight: '600', color: '#00704A' },
+
+  // ── Offers ───────────────────────────────────────────────────
+  offersSection:      { paddingTop: 16, paddingBottom: 4 },
+  offersSectionLabel: { fontSize: 11, fontWeight: '700', color: '#f59e0b', letterSpacing: 1.2, paddingHorizontal: 16, marginBottom: 10 },
+  offerCard:          { backgroundColor: '#fffbeb', borderRadius: 14, padding: 14, borderWidth: 1.5, borderColor: '#fde68a', minWidth: 200, maxWidth: 260 },
+  offerCardTitle:     { fontSize: 15, fontWeight: '800', color: '#92400e', marginBottom: 4 },
+  offerCardDesc:      { fontSize: 12, color: '#b45309', lineHeight: 17, marginBottom: 8 },
+  offerDiscountBadge: { alignSelf: 'flex-start', backgroundColor: '#f59e0b', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  offerDiscountText:  { color: '#fff', fontSize: 12, fontWeight: '800' },
+
+  // ── Category tabs ────────────────────────────────────────────
+  catTabsWrap:    { backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  catTabsContent: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
+  catTab:         { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F5F5F5', marginRight: 6 },
+  catTabActive:   { backgroundColor: '#00704A' },
+  catTabText:     { fontSize: 14, fontWeight: '600', color: '#666' },
+  catTabTextActive: { color: '#FFF' },
+
+  // ── Menu ─────────────────────────────────────────────────────
+  menuContainer:  { paddingTop: 12 },
+  catSection:     { marginBottom: 28 },
+  catSectionTitle: { fontSize: 20, fontWeight: '800', color: '#000', paddingHorizontal: 16, marginBottom: 4 },
+  catSectionDesc:  { fontSize: 13, color: '#999', paddingHorizontal: 16, marginBottom: 12 },
+  menuGrid:        { paddingHorizontal: 10, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  menuItem:        { width: (width - 28) / 2, backgroundColor: '#FFF', borderRadius: 14, marginBottom: 12, marginHorizontal: 3, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 6, elevation: 2 },
+  menuItemImage:   { width: '100%', height: 120, backgroundColor: '#F5F5F5' },
+  menuItemContent: { padding: 10 },
+  menuItemName:    { fontSize: 14, fontWeight: '700', color: '#000', marginBottom: 3 },
+  menuItemDesc:    { fontSize: 12, color: '#999', marginBottom: 10, lineHeight: 16 },
+  menuItemFooter:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  menuItemPrice:   { fontSize: 16, fontWeight: '800', color: '#00704A' },
+  addButton:       { width: 32, height: 32, borderRadius: 16, backgroundColor: '#00704A', justifyContent: 'center', alignItems: 'center' },
+  emptyMenu:       { alignItems: 'center', paddingVertical: 48 },
+  emptyMenuText:   { fontSize: 15, color: '#CCC', marginTop: 12 },
+
+  // ── Floating cart ─────────────────────────────────────────────
+  floatingCart:      { position: 'absolute', bottom: 20, left: 16, right: 16, backgroundColor: '#00704A', borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 6 },
+  floatingCartInner: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, gap: 10 },
+  floatingCartBadge: { backgroundColor: '#FFF', borderRadius: 11, minWidth: 22, height: 22, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6 },
   floatingCartBadgeText: { color: '#00704A', fontSize: 13, fontWeight: '800' },
-  floatingCartText:      { color: '#FFF', fontSize: 17, fontWeight: '800', flex: 1 },
-  modalOverlay:          { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  modalSheet:            { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '88%' },
-  modalHandle:           { width: 36, height: 4, backgroundColor: '#E0E0E0', borderRadius: 2, alignSelf: 'center', marginTop: 10, marginBottom: 2 },
-  modalHeader:           { flexDirection: 'row', alignItems: 'flex-start', padding: 20, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  modalTitle:            { fontSize: 20, fontWeight: '800', color: '#000', marginBottom: 2 },
-  modalBasePrice:        { fontSize: 15, color: '#00704A', fontWeight: '600' },
-  modalClose:            { padding: 4 },
-  modalScroll:           { paddingHorizontal: 20, paddingTop: 4 },
-  noModsText:            { color: '#999', fontSize: 14, textAlign: 'center', paddingVertical: 20 },
-  modGroup:              { marginBottom: 22 },
-  modGroupHeader:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  modGroupName:          { fontSize: 15, fontWeight: '700', color: '#000' },
-  modGroupTag:           { backgroundColor: '#F5F5F5', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  modGroupTagText:       { fontSize: 11, color: '#999', fontWeight: '600' },
-  modOption:             { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1.5, borderColor: '#E5E5E5', marginBottom: 8 },
-  modOptionSel:          { borderColor: '#00704A', backgroundColor: '#F0FAF5' },
-  modOptName:            { fontSize: 14, color: '#000', flex: 1 },
-  modOptNameSel:         { color: '#00704A', fontWeight: '600' },
-  modOptRight:           { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  modOptPrice:           { fontSize: 13, color: '#999' },
-  modOptPriceSel:        { color: '#00704A' },
-  modCheck:              { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: '#CCC', justifyContent: 'center', alignItems: 'center' },
-  modCheckSel:           { backgroundColor: '#00704A', borderColor: '#00704A' },
-  qtyRow:                { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 8, marginBottom: 8 },
-  qtyLabel:              { fontSize: 15, fontWeight: '700', color: '#000' },
-  qtyControls:           { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  qtyBtn:                { width: 34, height: 34, borderRadius: 17, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center' },
-  qtyText:               { fontSize: 18, fontWeight: '700', color: '#000', minWidth: 24, textAlign: 'center' },
-  modalFooter:           { padding: 20, paddingBottom: 36, borderTopWidth: 1, borderTopColor: '#F0F0F0' },
-  addToCartBtn:          { backgroundColor: '#00704A', borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
-  addToCartText:         { color: '#FFF', fontSize: 16, fontWeight: '800' },
+  floatingCartText:  { color: '#FFF', fontSize: 17, fontWeight: '800', flex: 1 },
+
+  // ── Modifier modal ────────────────────────────────────────────
+  modalOverlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  modalSheet:     { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '88%' },
+  modalHandle:    { width: 36, height: 4, backgroundColor: '#E0E0E0', borderRadius: 2, alignSelf: 'center', marginTop: 10, marginBottom: 2 },
+  modalHeader:    { flexDirection: 'row', alignItems: 'flex-start', padding: 20, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  modalTitle:     { fontSize: 20, fontWeight: '800', color: '#000', marginBottom: 2 },
+  modalBasePrice: { fontSize: 15, color: '#00704A', fontWeight: '600' },
+  modalClose:     { padding: 4 },
+  modalScroll:    { paddingHorizontal: 20, paddingTop: 4 },
+  noModsText:     { color: '#999', fontSize: 14, textAlign: 'center', paddingVertical: 20 },
+  modGroup:       { marginBottom: 22 },
+  modGroupHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  modGroupName:   { fontSize: 15, fontWeight: '700', color: '#000' },
+  modGroupTag:    { backgroundColor: '#F5F5F5', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  modGroupTagText: { fontSize: 11, color: '#999', fontWeight: '600' },
+  modOption:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1.5, borderColor: '#E5E5E5', marginBottom: 8 },
+  modOptionSel:   { borderColor: '#00704A', backgroundColor: '#F0FAF5' },
+  modOptName:     { fontSize: 14, color: '#000', flex: 1 },
+  modOptNameSel:  { color: '#00704A', fontWeight: '600' },
+  modOptRight:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  modOptPrice:    { fontSize: 13, color: '#999' },
+  modOptPriceSel: { color: '#00704A' },
+  modCheck:       { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: '#CCC', justifyContent: 'center', alignItems: 'center' },
+  modCheckSel:    { backgroundColor: '#00704A', borderColor: '#00704A' },
+  qtyRow:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 8, marginBottom: 8 },
+  qtyLabel:       { fontSize: 15, fontWeight: '700', color: '#000' },
+  qtyControls:    { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  qtyBtn:         { width: 34, height: 34, borderRadius: 17, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center' },
+  qtyText:        { fontSize: 18, fontWeight: '700', color: '#000', minWidth: 24, textAlign: 'center' },
+  modalFooter:    { padding: 20, paddingBottom: 36, borderTopWidth: 1, borderTopColor: '#F0F0F0' },
+  addToCartBtn:   { backgroundColor: '#00704A', borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
+  addToCartText:  { color: '#FFF', fontSize: 16, fontWeight: '800' },
 });
