@@ -9,61 +9,36 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
-// Statuses that represent real completed orders the customer actually placed
 const REAL_ORDER_STATUSES = ['confirmed', 'accepted', 'preparing', 'ready', 'picked_up', 'completed'];
 
 export default function ProfileScreen() {
   const router            = useRouter();
   const { user, signOut } = useAuth();
 
-  const [profile,       setProfile]       = useState(null);
-  const [globalPoints,  setGlobalPoints]  = useState(0);
+  const [profile,      setProfile]      = useState(null);
+  const [globalPoints, setGlobalPoints] = useState(0);
   const [shopBreakdown, setShopBreakdown] = useState([]);
-  const [orderCount,    setOrderCount]    = useState(0);
-  const [loading,       setLoading]       = useState(true);
+  const [orderCount,   setOrderCount]   = useState(0);
+  const [loading,      setLoading]      = useState(true);
 
   useEffect(() => { if (user?.id) loadData(); }, [user?.id]);
 
   const loadData = async () => {
     try {
       const [profileResp, globalPtsResp, shopPtsResp, orderResp] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('full_name, phone, avatar_url')
-          .eq('id', user.id)
-          .single(),
-
-        supabase
-          .from('customer_global_points')
-          .select('current_balance')
-          .eq('customer_id', user.id)
-          .maybeSingle(),
-
-        supabase
-          .from('customer_shop_points')
-          .select('current_balance, shops(name)')
-          .eq('customer_id', user.id)
-          .gt('current_balance', 0)
-          .order('current_balance', { ascending: false })
-          .limit(3),
-
-        // FIX: only count real orders — exclude payment_pending, payment_failed, cancelled
-        supabase
-          .from('orders')
-          .select('id', { count: 'exact', head: true })
-          .eq('customer_id', user.id)
-          .in('status', REAL_ORDER_STATUSES),
+        supabase.from('profiles').select('full_name, phone, avatar_url').eq('id', user.id).single(),
+        supabase.from('customer_global_points').select('current_balance').eq('customer_id', user.id).maybeSingle(),
+        supabase.from('customer_shop_points').select('current_balance, shops(name)').eq('customer_id', user.id).gt('current_balance', 0).order('current_balance', { ascending: false }).limit(3),
+        supabase.from('orders').select('id', { count: 'exact', head: true }).eq('customer_id', user.id).in('status', REAL_ORDER_STATUSES),
       ]);
 
       setProfile(profileResp.data);
       setOrderCount(orderResp.count || 0);
       setGlobalPoints(globalPtsResp.data?.current_balance || 0);
-      setShopBreakdown(
-        (shopPtsResp.data || []).map(b => ({
-          shopName: b.shops?.name || 'Shop',
-          balance:  b.current_balance || 0,
-        }))
-      );
+      setShopBreakdown((shopPtsResp.data || []).map(b => ({
+        shopName: b.shops?.name || 'Shop',
+        balance: b.current_balance || 0,
+      })));
     } catch (e) {
       console.error('[Profile] loadData error:', e);
     } finally {
@@ -97,7 +72,6 @@ export default function ProfileScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
 
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
             <Feather name="arrow-left" size={22} color="#000" />
@@ -106,7 +80,6 @@ export default function ProfileScreen() {
           <View style={{ width: 22 }} />
         </View>
 
-        {/* Avatar + name */}
         <View style={styles.profileSection}>
           {profile?.avatar_url
             ? <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
@@ -116,7 +89,7 @@ export default function ProfileScreen() {
           <Text style={styles.userEmail}>{user?.email}</Text>
           {profile?.phone && <Text style={styles.userPhone}>{profile.phone}</Text>}
 
-          {/* Quick stats */}
+          {/* Stats row — Orders + Points only, bigger and more spread */}
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <Text style={styles.statValue}>{orderCount}</Text>
@@ -127,11 +100,6 @@ export default function ProfileScreen() {
               <Text style={styles.statValue}>{globalPoints.toLocaleString()}</Text>
               <Text style={styles.statLabel}>Points</Text>
             </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{shopBreakdown.length}</Text>
-              <Text style={styles.statLabel}>Shops</Text>
-            </View>
           </View>
         </View>
 
@@ -139,14 +107,14 @@ export default function ProfileScreen() {
         <View style={styles.loyaltyCard}>
           <View style={styles.loyaltyCardHeader}>
             <Feather name="award" size={20} color="#fff" />
-            <Text style={styles.loyaltyCardLabel}>GLOBAL LOYALTY POINTS</Text>
+            <Text style={styles.loyaltyCardLabel}>LOYALTY POINTS</Text>
           </View>
           <Text style={styles.loyaltyCardPoints}>{globalPoints.toLocaleString()}</Text>
           <Text style={styles.loyaltyCardSub}>= ${(globalPoints * 0.01).toFixed(2)} in savings</Text>
 
           {shopBreakdown.length > 0 && (
             <View style={styles.loyaltyBreakdown}>
-              <Text style={styles.loyaltyBreakdownTitle}>SHOP POINTS</Text>
+              <Text style={styles.loyaltyBreakdownTitle}>BY SHOP</Text>
               {shopBreakdown.map((b, i) => (
                 <View key={i} style={styles.loyaltyBreakdownRow}>
                   <Text style={styles.loyaltyBreakdownShop} numberOfLines={1}>{b.shopName}</Text>
@@ -162,13 +130,13 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Menu */}
         <View style={styles.menuSection}>
           {[
             { icon: 'list',        label: 'Order History',  route: '/order-history' },
             { icon: 'award',       label: 'Rewards',        route: '/rewards'       },
             { icon: 'heart',       label: 'Favorite Shops', route: '/favorites'     },
-            { icon: 'help-circle', label: 'Help & Support', route: '/support'       },
+            { icon: 'help-circle', label: 'Help & Support', route: '/help'          },
+            { icon: 'settings',    label: 'Settings',       route: '/settings'      },
           ].map(({ icon, label, route }) => (
             <TouchableOpacity key={route} style={styles.menuRow} onPress={() => router.push(route)}>
               <View style={styles.menuRowLeft}>
@@ -206,11 +174,12 @@ const styles = StyleSheet.create({
   userName:              { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 3 },
   userEmail:             { fontSize: 13, color: '#999', marginBottom: 2 },
   userPhone:             { fontSize: 13, color: '#999', marginBottom: 14 },
-  statsRow:              { flexDirection: 'row', alignItems: 'center', marginTop: 6, backgroundColor: '#F9F9F9', borderRadius: 16, paddingVertical: 14, paddingHorizontal: 24 },
+  // 2-stat row — wider padding, bigger numbers
+  statsRow:              { flexDirection: 'row', alignItems: 'center', marginTop: 6, backgroundColor: '#F9F9F9', borderRadius: 20, paddingVertical: 18, paddingHorizontal: 40, gap: 0 },
   statItem:              { flex: 1, alignItems: 'center' },
-  statValue:             { fontSize: 22, fontWeight: '800', color: '#000' },
-  statLabel:             { fontSize: 11, color: '#999', fontWeight: '600', marginTop: 2 },
-  statDivider:           { width: 1, height: 30, backgroundColor: '#E5E5E5' },
+  statValue:             { fontSize: 28, fontWeight: '900', color: '#000' },
+  statLabel:             { fontSize: 12, color: '#999', fontWeight: '600', marginTop: 3 },
+  statDivider:           { width: 1, height: 36, backgroundColor: '#E5E5E5' },
   loyaltyCard:           { margin: 16, padding: 22, backgroundColor: '#00704A', borderRadius: 20 },
   loyaltyCardHeader:     { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   loyaltyCardLabel:      { color: '#A7F3D0', fontSize: 11, fontWeight: '700', letterSpacing: 1.5 },

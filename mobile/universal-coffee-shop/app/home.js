@@ -1,7 +1,11 @@
 /**
  * Home screen — shop discovery
  * Filters: All · Nearby (device GPS) · Open Now
- * Heart button on each card → writes to customer_favorites via useFavorites hook
+ *
+ * Card image logic:
+ *   - Uses banner_url as the card header image if available (wide, landscape-friendly)
+ *   - Falls back to a green gradient with the logo centred if no banner
+ *   - Logo-only shops get a clean placeholder — no stretched square logo
  */
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -19,7 +23,6 @@ import { supabase } from '../lib/supabase';
 import { useFavorites } from '../hooks/useFavorites';
 
 const deg2rad = (d) => d * (Math.PI / 180);
-
 const haversineKm = (lat1, lon1, lat2, lon2) => {
   const R  = 6371;
   const dL = deg2rad(lat2 - lat1);
@@ -76,10 +79,58 @@ const SvgImage = ({ uri, style, resizeMode = 'cover' }) => {
   );
 };
 
-const ShopImage = ({ uri, style, resizeMode }) => {
+const ShopImg = ({ uri, style, resizeMode = 'cover' }) => {
   if (!uri) return null;
   if (isSvgUrl(uri)) return <SvgImage uri={uri} style={style} resizeMode={resizeMode} />;
   return <Image source={{ uri }} style={style} resizeMode={resizeMode} />;
+};
+
+/**
+ * Card header image:
+ *  - banner_url  → fills the header (proper wide image, looks great)
+ *  - logo only   → green gradient with logo pill centred
+ *  - nothing     → green gradient + coffee icon
+ */
+const CardBanner = ({ bannerUrl, logoUrl, open }) => {
+  if (bannerUrl) {
+    return (
+      <View style={styles.cardBannerWrap}>
+        <ShopImg uri={bannerUrl} style={styles.cardBannerImg} resizeMode="cover" />
+        <View style={styles.cardBannerOverlay} />
+        {/* tiny logo badge over banner */}
+        {logoUrl && (
+          <View style={styles.logoBadge}>
+            <ShopImg uri={logoUrl} style={styles.logoBadgeImg} resizeMode="contain" />
+          </View>
+        )}
+        {open !== null && (
+          <View style={[styles.openBadge, { backgroundColor: open ? '#00704A' : '#6b7280' }]}>
+            <Text style={styles.openBadgeText}>{open ? 'Open' : 'Closed'}</Text>
+          </View>
+        )}
+      </View>
+    );
+  }
+
+  // No banner — show gradient placeholder with logo or icon centred
+  return (
+    <View style={styles.cardBannerWrap}>
+      <View style={styles.cardBannerGradient}>
+        {logoUrl ? (
+          <View style={styles.logoCentred}>
+            <ShopImg uri={logoUrl} style={styles.logoCentredImg} resizeMode="contain" />
+          </View>
+        ) : (
+          <Feather name="coffee" size={36} color="rgba(255,255,255,0.6)" />
+        )}
+      </View>
+      {open !== null && (
+        <View style={[styles.openBadge, { backgroundColor: open ? '#00704A' : '#6b7280' }]}>
+          <Text style={styles.openBadgeText}>{open ? 'Open' : 'Closed'}</Text>
+        </View>
+      )}
+    </View>
+  );
 };
 
 const ShopCard = ({ item, onPress, distanceKm, isFav, onToggleFav }) => {
@@ -96,36 +147,24 @@ const ShopCard = ({ item, onPress, distanceKm, isFav, onToggleFav }) => {
         </View>
       )}
 
-      <View style={styles.shopImageContainer}>
-        {item.logo_url
-          ? <ShopImage uri={item.logo_url} style={styles.shopImage} />
-          : <View style={styles.shopImagePlaceholder}><Feather name="coffee" size={36} color="#00704A" /></View>
-        }
-        {open !== null && (
-          <View style={[styles.openBadge, { backgroundColor: open ? '#00704A' : '#9ca3af' }]}>
-            <Text style={styles.openBadgeText}>{open ? 'Open' : 'Closed'}</Text>
-          </View>
-        )}
-        {/* Heart / favorite button */}
+      <View style={{ position: 'relative' }}>
+        <CardBanner bannerUrl={item.banner_url} logoUrl={item.logo_url} open={open} />
+        {/* Heart */}
         <TouchableOpacity
           style={styles.heartButton}
           onPress={(e) => { e.stopPropagation?.(); onToggleFav(item.id); }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Feather
-            name="heart"
-            size={18}
-            color={isFav ? '#ef4444' : '#fff'}
-            style={isFav ? styles.heartFilled : styles.heartOutline}
-          />
+          <Feather name="heart" size={18} color={isFav ? '#ef4444' : '#fff'} />
         </TouchableOpacity>
       </View>
 
       <View style={styles.shopCardContent}>
         <Text style={styles.shopName} numberOfLines={1}>{item.name}</Text>
-        {item.description && (
-          <Text style={styles.shopDescription} numberOfLines={2}>{item.description}</Text>
-        )}
+        {/* Description — 1 line max, ellipsis */}
+        {item.description ? (
+          <Text style={styles.shopDescription} numberOfLines={1}>{item.description}</Text>
+        ) : null}
         {item.address && (
           <View style={styles.shopDetailRow}>
             <Feather name="map-pin" size={11} color="#999" />
@@ -175,18 +214,16 @@ export default function HomeScreen() {
   const [profile,        setProfile]        = useState(null);
   const [distances,      setDistances]      = useState({});
 
-  // Popular and Featured removed — coming later
   const filters = [
-    { key: 'all',    label: 'All',      icon: 'grid' },
+    { key: 'all',    label: 'All',      icon: 'grid'    },
     { key: 'nearby', label: 'Nearby',   icon: 'map-pin' },
-    { key: 'open',   label: 'Open Now', icon: 'clock' },
+    { key: 'open',   label: 'Open Now', icon: 'clock'   },
   ];
 
   useEffect(() => {
     if (!user?.id) return;
     supabase.from('profiles').select('full_name').eq('id', user.id).single()
-      .then(({ data }) => setProfile(data))
-      .catch(() => {});
+      .then(({ data }) => setProfile(data)).catch(() => {});
   }, [user?.id]);
 
   useEffect(() => {
@@ -197,9 +234,7 @@ export default function HomeScreen() {
           const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
           setUserLocation({ lat: loc.coords.latitude, lon: loc.coords.longitude });
         }
-      } catch {
-        // location optional — silent fail
-      }
+      } catch { /* location optional */ }
     })();
   }, []);
 
@@ -208,7 +243,8 @@ export default function HomeScreen() {
       const { data, error } = await supabase
         .from('shops')
         .select(`
-          id, name, description, address, city, state, logo_url, banner_url,
+          id, name, description, address, city, state,
+          logo_url, banner_url,
           hours, lat, lng, avg_rating, review_count, status,
           shop_offers ( id, title, description, is_active )
         `)
@@ -257,13 +293,8 @@ export default function HomeScreen() {
           setSelectedFilter('all');
           break;
         }
-        // If no shops have coordinates yet, show a helpful message instead of empty list
         if (Object.keys(distances).length === 0) {
-          Alert.alert(
-            'No Location Data',
-            'Shops haven\'t set their location yet. Check back soon!',
-            [{ text: 'OK' }]
-          );
+          Alert.alert('No Location Data', 'Shops haven\'t set their location yet. Check back soon!', [{ text: 'OK' }]);
           setSelectedFilter('all');
           break;
         }
@@ -272,11 +303,9 @@ export default function HomeScreen() {
           .sort((a, b) => (distances[a.id] ?? 999) - (distances[b.id] ?? 999))
           .slice(0, 20);
         break;
-
       case 'open':
         result = result.filter(s => isOpenNow(s) === true);
         break;
-
       default:
         break;
     }
@@ -430,20 +459,32 @@ const styles = StyleSheet.create({
   filterChipTextActive: { color: '#FFF' },
   resultsCount:         { paddingTop: 4, paddingBottom: 8, fontSize: 12, fontWeight: '600', color: '#999' },
   shopsList:            { paddingHorizontal: 16, paddingBottom: 24 },
+
+  // ── Card ──
   shopCard:             { backgroundColor: '#FFF', borderRadius: 16, marginBottom: 14, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3 },
   offerRibbon:          { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#f59e0b', paddingHorizontal: 12, paddingVertical: 5 },
   offerRibbonText:      { color: '#fff', fontSize: 11, fontWeight: '700' },
-  shopImageContainer:   { width: '100%', height: 130, position: 'relative', backgroundColor: '#E8F5E9' },
-  shopImage:            { width: '100%', height: '100%' },
-  shopImagePlaceholder: { width: '100%', height: '100%', backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
+
+  // Card banner
+  cardBannerWrap:       { width: '100%', height: 140, position: 'relative' },
+  cardBannerImg:        { width: '100%', height: '100%' },
+  cardBannerOverlay:    { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.08)' },
+  cardBannerGradient:   { width: '100%', height: '100%', backgroundColor: '#00704A', justifyContent: 'center', alignItems: 'center' },
+  // Logo badge overlaid on banner (bottom-left)
+  logoBadge:            { position: 'absolute', bottom: 10, left: 12, width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFF', overflow: 'hidden', borderWidth: 2, borderColor: '#FFF', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3 },
+  logoBadgeImg:         { width: '100%', height: '100%' },
+  // Logo centred in gradient (no banner case)
+  logoCentred:          { width: 72, height: 72, borderRadius: 36, backgroundColor: '#FFF', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
+  logoCentredImg:       { width: '100%', height: '100%' },
+
   openBadge:            { position: 'absolute', top: 10, right: 10, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   openBadgeText:        { color: '#FFF', fontSize: 11, fontWeight: '700' },
   heartButton:          { position: 'absolute', top: 10, left: 10, width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center' },
-  heartFilled:          { },
-  heartOutline:         { opacity: 0.9 },
+
   shopCardContent:      { padding: 14 },
-  shopName:             { fontSize: 18, fontWeight: '800', color: '#000', marginBottom: 3 },
-  shopDescription:      { fontSize: 13, color: '#666', lineHeight: 18, marginBottom: 8 },
+  shopName:             { fontSize: 17, fontWeight: '800', color: '#000', marginBottom: 3 },
+  // 1 line with ellipsis
+  shopDescription:      { fontSize: 13, color: '#888', lineHeight: 18, marginBottom: 6 },
   shopDetailRow:        { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 10 },
   shopDetailText:       { fontSize: 12, color: '#999', flex: 1 },
   shopFooter:           { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },

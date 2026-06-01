@@ -18,7 +18,7 @@ const DEFAULT_HOURS = {
   sunday:    { open: '10:00', close: '16:00', closed: false },
 };
 
-const DAYS    = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+const DAYS     = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
 const DAY_ABBR = { monday:'Mon', tuesday:'Tue', wednesday:'Wed', thursday:'Thu', friday:'Fri', saturday:'Sat', sunday:'Sun' };
 
 const TIME_OPTIONS = [];
@@ -34,18 +34,15 @@ for (let h = 0; h < 24; h++) {
 /**
  * Geocode a full address string → { lat, lng } using OpenStreetMap Nominatim.
  * Free, no API key required.
- * Returns null if the address can't be resolved.
  */
 async function geocodeAddress(address, city, state, zip) {
   const parts = [address, city, state, zip].filter(Boolean).join(', ');
   if (!parts.trim()) return null;
   try {
-    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(parts)}`;
+    const url  = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(parts)}`;
     const res  = await fetch(url, { headers: { 'User-Agent': 'LoyalCup/1.0' } });
     const data = await res.json();
-    if (data?.length) {
-      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-    }
+    if (data?.length) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
     return null;
   } catch {
     return null;
@@ -54,8 +51,8 @@ async function geocodeAddress(address, city, state, zip) {
 
 export default function ShopSettings() {
   const { shop, shopId, loadShop } = useShop();
-  const [loading,   setLoading]   = useState(false);
-  const [uploading, setUploading] = useState(null);
+  const [loading,    setLoading]   = useState(false);
+  const [uploading,  setUploading] = useState(null);
   const [dragActive, setDragActive] = useState(null);
 
   const [formData, setFormData] = useState({
@@ -73,7 +70,7 @@ export default function ShopSettings() {
     mobile_ordering_enabled: true,
   });
 
-  // Track original address so we only re-geocode when it actually changes
+  // Track original address string so we only re-geocode when it changes
   const [savedAddress, setSavedAddress] = useState('');
 
   useEffect(() => {
@@ -92,7 +89,6 @@ export default function ShopSettings() {
         hours:                   shop.hours                   || DEFAULT_HOURS,
         mobile_ordering_enabled: shop.mobile_ordering_enabled ?? true,
       });
-      // Build a canonical address string to compare later
       setSavedAddress([shop.address, shop.city, shop.state, shop.zip].filter(Boolean).join(', '));
     }
   }, [shop]);
@@ -140,6 +136,7 @@ export default function ShopSettings() {
     setFormData(prev => ({ ...prev, hours: newHours }));
     toast.success('Hours applied to all days');
   };
+
   const applyToWeekdays = (sourceDay) => {
     const source   = formData.hours[sourceDay];
     const newHours = { ...formData.hours };
@@ -153,12 +150,17 @@ export default function ShopSettings() {
     try {
       setLoading(true);
 
-      // Only geocode if the address fields actually changed
       const newAddressStr = [formData.address, formData.city, formData.state, formData.zip]
         .filter(Boolean).join(', ');
 
       let geoUpdate = {};
-      if (newAddressStr && newAddressStr !== savedAddress) {
+
+      // Geocode if:
+      //   1. Address fields changed since last save, OR
+      //   2. Shop has never been geocoded (lat/lng are null) — covers first save after approval
+      const missingCoords = shop?.lat == null && shop?.lng == null;
+
+      if (newAddressStr && (newAddressStr !== savedAddress || missingCoords)) {
         toast.loading('Looking up location coordinates…', { id: 'geo' });
         const coords = await geocodeAddress(
           formData.address, formData.city, formData.state, formData.zip
@@ -168,7 +170,7 @@ export default function ShopSettings() {
           geoUpdate = { lat: coords.lat, lng: coords.lng };
         } else {
           // Non-fatal — save the address text but warn the owner
-          toast.warning('Could not find coordinates for this address. Nearby filter may not include your shop until the address is updated.');
+          toast.warning('Could not find coordinates for this address. The Nearby filter may not include your shop until the address is corrected.');
         }
       }
 
@@ -191,9 +193,7 @@ export default function ShopSettings() {
 
       if (error) throw error;
 
-      // Update saved address so we don't re-geocode on next save unless it changes again
       setSavedAddress(newAddressStr);
-
       toast.success('Settings saved!');
       loadShop();
     } catch {
@@ -248,9 +248,12 @@ export default function ShopSettings() {
         {/* ── Shop Images ── */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
           className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border-2 border-gray-200 dark:border-neutral-800 shadow-lg">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-5 flex items-center gap-2">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
             <ImageIcon className="w-5 h-5 text-amber-600" /> Shop Images
           </h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
+            The <strong>banner</strong> is shown as the card header image in the app — use a wide, landscape photo of your shop or products. The <strong>logo</strong> appears as a small badge on the card and on your shop detail page.
+          </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {[
               { type: 'logo',   label: 'Logo',   field: 'logo_url',   aspect: 'w-32 h-32 mx-auto object-cover rounded-xl' },
@@ -305,6 +308,7 @@ export default function ShopSettings() {
             <div className="md:col-span-2">
               <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">Description</label>
               <textarea value={formData.description} rows="3"
+                placeholder="Tell customers what makes your shop special..."
                 onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
                 className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition resize-none" />
             </div>
@@ -330,7 +334,7 @@ export default function ShopSettings() {
             <MapPin className="w-5 h-5 text-amber-600" /> Location
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
-            Your full address is used to show your shop in the "Nearby" filter on the app. Make sure it's accurate.
+            Your address is used to show your shop in the <strong>Nearby</strong> filter in the app. Make sure it's accurate — coordinates are looked up automatically when you save.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">

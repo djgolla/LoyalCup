@@ -1,341 +1,218 @@
-// Help & Support screen
-// universal-coffee-shop/app/help.js
+/**
+ * Help & Support screen — LoyalCup accurate FAQ + contact
+ */
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ScrollView, TextInput, Alert } from 'react-native';
+import {
+  StyleSheet, Text, View, TouchableOpacity,
+  ScrollView, Linking, LayoutAnimation, Platform, UIManager,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const FAQS = [
+  {
+    category: 'Orders',
+    items: [
+      {
+        q: 'How do I place a mobile order?',
+        a: 'Browse shops on the home screen, tap a shop to open its menu, add items to your cart, then tap "View Cart" and proceed to checkout. Your card is charged only when the order is confirmed.',
+      },
+      {
+        q: 'Can I cancel an order after placing it?',
+        a: 'You can cancel an order while it\'s still in "Pending" or "Confirmed" status — before the shop starts preparing it. Go to Order History, tap the order, and hit Cancel. Once a shop starts preparing your order it can\'t be cancelled through the app — contact the shop directly.',
+      },
+      {
+        q: 'My card was charged but I got an error — what happened?',
+        a: 'This is rare but can happen if your connection drops at the wrong moment. If you were charged and don\'t see an order in your Order History, email us at support@loyalcupapp.com with your order details and we\'ll sort it out immediately.',
+      },
+      {
+        q: 'How do I know when my order is ready?',
+        a: 'You\'ll receive a push notification when the shop marks your order "Ready for pickup". You can also track your order status in real time under Order History.',
+      },
+    ],
+  },
+  {
+    category: 'Loyalty Points',
+    items: [
+      {
+        q: 'How do I earn loyalty points?',
+        a: 'Points are awarded automatically after each completed mobile order. Each shop sets its own earn rate — for example, 10 points per dollar spent. You can see a shop\'s loyalty details on its menu page.',
+      },
+      {
+        q: 'How do I redeem points?',
+        a: 'At checkout, if you have enough points at that shop, you\'ll see a "Redeem Points" option. Toggle it on and select how many points to apply — they\'ll reduce your total. Tap the Rewards tab in your profile to check your balance across all shops.',
+      },
+      {
+        q: 'Do my points expire?',
+        a: 'Point expiration is set by each individual shop. Check the Rewards screen for expiration info specific to each shop you\'ve earned points at.',
+      },
+      {
+        q: 'Why do I have different point balances at different shops?',
+        a: 'Each shop runs its own loyalty program with its own earn rate and rewards. Your points at one shop can only be redeemed at that shop. Your profile shows a combined global total for reference.',
+      },
+    ],
+  },
+  {
+    category: 'Account & App',
+    items: [
+      {
+        q: 'How do I update my name or email?',
+        a: 'Go to Profile → Settings → Edit Profile to update your display name. Email changes aren\'t supported in-app right now — email us at support@loyalcupapp.com and we\'ll help.',
+      },
+      {
+        q: 'I forgot my password — how do I reset it?',
+        a: 'On the login screen tap "Forgot password?" and enter your email. You\'ll receive a reset link. Check your spam folder if it doesn\'t arrive within a few minutes.',
+      },
+      {
+        q: 'Which payment methods are supported?',
+        a: 'LoyalCup accepts all major credit and debit cards (Visa, Mastercard, Amex, Discover) processed securely through Square. Apple Pay and Google Pay support is coming soon.',
+      },
+      {
+        q: 'How do I find shops near me?',
+        a: 'On the home screen tap the "Nearby" filter chip. The app will ask for location permission — grant it and shops within your area will be sorted by distance. Make sure you\'ve allowed location access in your phone\'s Settings if the filter isn\'t working.',
+      },
+    ],
+  },
+  {
+    category: 'Refunds & Issues',
+    items: [
+      {
+        q: 'How do I get a refund?',
+        a: 'Refunds are handled by each shop individually — LoyalCup processes the payment but the shop owner approves refunds. Tap the order in Order History and use "Contact Shop" or reach out to us at support@loyalcupapp.com and we\'ll facilitate it.',
+      },
+      {
+        q: 'My order was wrong or incomplete — what do I do?',
+        a: 'Contact the shop directly first — most issues get resolved on the spot. If the shop isn\'t responsive, email us at support@loyalcupapp.com with your order number and we\'ll step in.',
+      },
+    ],
+  },
+];
+
+const FaqItem = ({ q, a }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <TouchableOpacity
+      style={styles.faqItem}
+      onPress={() => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setOpen(v => !v);
+      }}
+      activeOpacity={0.75}
+    >
+      <View style={styles.faqRow}>
+        <Text style={styles.faqQ}>{q}</Text>
+        <Feather name={open ? 'chevron-up' : 'chevron-down'} size={18} color="#999" />
+      </View>
+      {open && <Text style={styles.faqA}>{a}</Text>}
+    </TouchableOpacity>
+  );
+};
+
 export default function HelpScreen() {
   const router = useRouter();
-  const [expandedFaq, setExpandedFaq] = useState(null);
-  const [contactMessage, setContactMessage] = useState('');
-  const [showContactForm, setShowContactForm] = useState(false);
-
-  const faqs = [
-    {
-      id: '1',
-      question: 'How do I earn loyalty points?',
-      answer: 'You earn loyalty points with every purchase at participating coffee shops. The amount of points varies by shop, but typically you earn 1 point per dollar spent.',
-    },
-    {
-      id: '2',
-      question: 'How do I redeem my rewards?',
-      answer: 'Go to the Rewards section in your profile to view available rewards. When you have enough points, tap on a reward to redeem it. You can then use it at checkout.',
-    },
-    {
-      id: '3',
-      question: 'Can I order ahead for pickup?',
-      answer: 'Yes! Browse a shop\'s menu, add items to your cart, and select "Pickup" at checkout. You\'ll receive a notification when your order is ready.',
-    },
-    {
-      id: '4',
-      question: 'How do I change my payment method?',
-      answer: 'Go to Profile > Settings > Payment Methods to add, remove, or set a default payment method.',
-    },
-    {
-      id: '5',
-      question: 'What if there\'s an issue with my order?',
-      answer: 'Contact the shop directly through the app, or use the contact form below to reach our support team. We\'ll help resolve any issues quickly.',
-    },
-    {
-      id: '6',
-      question: 'How do I find nearby coffee shops?',
-      answer: 'The home screen shows nearby shops based on your location. You can also search for specific shops or browse by distance.',
-    },
-  ];
-
-  const toggleFaq = (id) => {
-    setExpandedFaq(expandedFaq === id ? null : id);
-  };
-
-  const handleSendMessage = () => {
-    if (!contactMessage.trim()) {
-      Alert.alert('Error', 'Please enter a message');
-      return;
-    }
-
-    Alert.alert(
-      'Message Sent',
-      'Thank you for contacting us! We\'ll get back to you within 24 hours.',
-      [
-        {
-          text: 'OK',
-          onPress: () => {
-            setContactMessage('');
-            setShowContactForm(false);
-          }
-        }
-      ]
-    );
-  };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView}>
-        <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => router.back()}>
-            <Feather name="arrow-left" size={24} color="black" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>HELP & SUPPORT</Text>
-          <View style={styles.backButton} />
-        </View>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.headerSide} onPress={() => router.back()}>
+          <Feather name="arrow-left" size={24} color="#000" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Help & Support</Text>
+        <View style={styles.headerSide} />
+      </View>
 
-        <View style={styles.content}>
-          <Text style={styles.sectionTitle}>FREQUENTLY ASKED QUESTIONS</Text>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
-          {faqs.map((faq) => (
-            <TouchableOpacity
-              key={faq.id}
-              style={styles.faqItem}
-              onPress={() => toggleFaq(faq.id)}>
-              <View style={styles.faqHeader}>
-                <Text style={styles.faqQuestion}>{faq.question}</Text>
-                <Feather 
-                  name={expandedFaq === faq.id ? 'chevron-up' : 'chevron-down'} 
-                  size={20} 
-                  color="black" 
-                />
-              </View>
-              {expandedFaq === faq.id && (
-                <Text style={styles.faqAnswer}>{faq.answer}</Text>
-              )}
-            </TouchableOpacity>
-          ))}
-
-          <View style={styles.divider} />
-
-          <Text style={styles.sectionTitle}>CONTACT US</Text>
-
-          <View style={styles.contactOptions}>
-            <TouchableOpacity style={styles.contactOption}>
-              <View style={styles.contactIconContainer}>
-                <Feather name="mail" size={24} color="#000" />
-              </View>
-              <View style={styles.contactInfo}>
-                <Text style={styles.contactLabel}>Email</Text>
-                <Text style={styles.contactValue}>support@loyalcup.com</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.contactOption}>
-              <View style={styles.contactIconContainer}>
-                <Feather name="phone" size={24} color="#000" />
-              </View>
-              <View style={styles.contactInfo}>
-                <Text style={styles.contactLabel}>Phone</Text>
-                <Text style={styles.contactValue}>1-800-LOYAL-CUP</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.contactOption}>
-              <View style={styles.contactIconContainer}>
-                <Feather name="clock" size={24} color="#000" />
-              </View>
-              <View style={styles.contactInfo}>
-                <Text style={styles.contactLabel}>Hours</Text>
-                <Text style={styles.contactValue}>Mon-Fri: 9am - 6pm PST</Text>
-              </View>
-            </TouchableOpacity>
+        {/* FAQ sections */}
+        {FAQS.map(section => (
+          <View key={section.category} style={styles.section}>
+            <Text style={styles.sectionTitle}>{section.category}</Text>
+            <View style={styles.card}>
+              {section.items.map((item, i) => (
+                <FaqItem key={i} q={item.q} a={item.a} />
+              ))}
+            </View>
           </View>
+        ))}
 
-          {!showContactForm ? (
-            <TouchableOpacity 
-              style={styles.contactFormButton}
-              onPress={() => setShowContactForm(true)}>
-              <Feather name="message-circle" size={20} color="#FFF" />
-              <Text style={styles.contactFormButtonText}>SEND US A MESSAGE</Text>
+        {/* Contact */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Contact Us</Text>
+          <View style={styles.card}>
+
+            <TouchableOpacity
+              style={styles.contactRow}
+              onPress={() => Linking.openURL('mailto:support@loyalcupapp.com')}
+            >
+              <View style={styles.contactIcon}>
+                <Feather name="mail" size={20} color="#00704A" />
+              </View>
+              <View style={styles.contactText}>
+                <Text style={styles.contactLabel}>Email Support</Text>
+                <Text style={styles.contactValue}>support@loyalcupapp.com</Text>
+              </View>
+              <Feather name="chevron-right" size={16} color="#CCC" />
             </TouchableOpacity>
-          ) : (
-            <View style={styles.contactForm}>
-              <Text style={styles.formLabel}>Your Message</Text>
-              <TextInput
-                style={styles.messageInput}
-                placeholder="Describe your issue or question..."
-                multiline
-                numberOfLines={6}
-                value={contactMessage}
-                onChangeText={setContactMessage}
-                textAlignVertical="top"
-              />
-              <View style={styles.formButtons}>
-                <TouchableOpacity 
-                  style={styles.cancelButton}
-                  onPress={() => {
-                    setShowContactForm(false);
-                    setContactMessage('');
-                  }}>
-                  <Text style={styles.cancelButtonText}>CANCEL</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.sendButton}
-                  onPress={handleSendMessage}>
-                  <Text style={styles.sendButtonText}>SEND MESSAGE</Text>
-                </TouchableOpacity>
+
+            <View style={styles.contactDivider} />
+
+            <TouchableOpacity
+              style={styles.contactRow}
+              onPress={() => Linking.openURL('https://loyalcupapp.com')}
+            >
+              <View style={styles.contactIcon}>
+                <Feather name="globe" size={20} color="#00704A" />
+              </View>
+              <View style={styles.contactText}>
+                <Text style={styles.contactLabel}>Website</Text>
+                <Text style={styles.contactValue}>loyalcupapp.com</Text>
+              </View>
+              <Feather name="chevron-right" size={16} color="#CCC" />
+            </TouchableOpacity>
+
+            <View style={styles.contactDivider} />
+
+            <View style={styles.contactRow}>
+              <View style={styles.contactIcon}>
+                <Feather name="clock" size={20} color="#00704A" />
+              </View>
+              <View style={styles.contactText}>
+                <Text style={styles.contactLabel}>Response Time</Text>
+                <Text style={styles.contactValue}>Within 24 hours · Mon–Fri</Text>
               </View>
             </View>
-          )}
+          </View>
         </View>
+
+        <Text style={styles.version}>LoyalCup · © 2026</Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 2,
-    borderBottomColor: '#000',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontFamily: 'Anton-Regular',
-  },
-  content: {
-    padding: 20,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontFamily: 'Anton-Regular',
-    color: '#666',
-    marginBottom: 15,
-    letterSpacing: 1,
-  },
-  faqItem: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-    paddingVertical: 15,
-  },
-  faqHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  faqQuestion: {
-    flex: 1,
-    fontSize: 16,
-    fontFamily: 'Anton-Regular',
-    marginRight: 10,
-  },
-  faqAnswer: {
-    marginTop: 10,
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 22,
-  },
-  divider: {
-    height: 2,
-    backgroundColor: '#000',
-    marginVertical: 30,
-  },
-  contactOptions: {
-    marginBottom: 20,
-  },
-  contactOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-  },
-  contactIconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#F0F0F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#000',
-  },
-  contactInfo: {
-    marginLeft: 15,
-  },
-  contactLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 3,
-  },
-  contactValue: {
-    fontSize: 16,
-    fontFamily: 'Anton-Regular',
-  },
-  contactFormButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: '#000',
-    borderRadius: 15,
-    padding: 20,
-    marginTop: 10,
-  },
-  contactFormButtonText: {
-    color: '#FFF',
-    fontFamily: 'Anton-Regular',
-    fontSize: 16,
-  },
-  contactForm: {
-    marginTop: 10,
-  },
-  formLabel: {
-    fontSize: 14,
-    fontFamily: 'Anton-Regular',
-    marginBottom: 10,
-  },
-  messageInput: {
-    borderWidth: 2,
-    borderColor: '#000',
-    borderRadius: 10,
-    padding: 15,
-    fontSize: 16,
-    minHeight: 150,
-    marginBottom: 15,
-  },
-  formButtons: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  cancelButton: {
-    flex: 1,
-    padding: 15,
-    borderWidth: 2,
-    borderColor: '#000',
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    fontFamily: 'Anton-Regular',
-    fontSize: 14,
-  },
-  sendButton: {
-    flex: 1,
-    padding: 15,
-    backgroundColor: '#000',
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  sendButtonText: {
-    color: '#FFF',
-    fontFamily: 'Anton-Regular',
-    fontSize: 14,
-  },
+  container:      { flex: 1, backgroundColor: '#F5F5F5' },
+  header:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  headerSide:     { width: 40, padding: 4 },
+  headerTitle:    { fontSize: 18, fontWeight: '800', color: '#000' },
+  scroll:         { paddingVertical: 20, paddingHorizontal: 16, paddingBottom: 40 },
+  section:        { marginBottom: 24 },
+  sectionTitle:   { fontSize: 11, fontWeight: '700', color: '#999', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10, marginLeft: 4 },
+  card:           { backgroundColor: '#FFF', borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  faqItem:        { paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
+  faqRow:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
+  faqQ:           { fontSize: 15, fontWeight: '600', color: '#000', flex: 1, lineHeight: 21 },
+  faqA:           { marginTop: 10, fontSize: 14, color: '#555', lineHeight: 22 },
+  contactRow:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 14 },
+  contactDivider: { height: 1, backgroundColor: '#F5F5F5', marginLeft: 66 },
+  contactIcon:    { width: 40, height: 40, borderRadius: 20, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
+  contactText:    { flex: 1 },
+  contactLabel:   { fontSize: 12, color: '#999', fontWeight: '600', marginBottom: 2 },
+  contactValue:   { fontSize: 15, fontWeight: '600', color: '#000' },
+  version:        { textAlign: 'center', fontSize: 12, color: '#CCC', marginTop: 8 },
 });

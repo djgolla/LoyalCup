@@ -1,4 +1,4 @@
-# backend/app/routes/billing.py - PASTE THIS ENTIRE FILE
+# backend/app/routes/billing.py
 
 """
 Stripe Billing — Shop owner subscription management.
@@ -9,6 +9,7 @@ IMPORTANT: We ONLY activate shops if:
 2. AND payment was actually collected
 """
 import logging
+import httpx
 import stripe
 from fastapi import APIRouter, HTTPException, Depends, Request, Header
 from fastapi.responses import JSONResponse
@@ -29,6 +30,37 @@ WEBHOOK_SECRET = settings.stripe_webhook_secret
 
 class CreateCheckoutRequest(BaseModel):
     promo_code: Optional[str] = None
+
+
+async def _geocode_shop(shop_id: str, address: str, city: str, state: str, zip_code: str, db) -> None:
+    """
+    Geocode a shop's address via Nominatim and write lat/lng back to the DB.
+    Fully non-fatal — if it fails for any reason the shop still goes live.
+    """
+    parts = [p for p in [address, city, state, zip_code] if p]
+    if not parts:
+        logger.warning(f"[Billing] Shop {shop_id} has no address to geocode")
+        return
+    query = ", ".join(parts)
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.get(
+                "https://nominatim.openstreetmap.org/search",
+                params={"format": "json", "limit": 1, "q": query},
+                headers={"User-Agent": "LoyalCup/1.0"},
+            )
+            data = resp.json()
+        if data:
+            lat = float(data[0]["lat"])
+            lng = float(data[0]["lon"])
+            db.get_service_client().table("shops").update(
+                {"lat": lat, "lng": lng}
+            ).eq("id", shop_id).execute()
+            logger.info(f"[Billing] Shop {shop_id} geocoded → {lat}, {lng}")
+        else:
+            logger.warning(f"[Billing] Nominatim returned no results for shop {shop_id}: '{query}'")
+    except Exception as e:
+        logger.warning(f"[Billing] Geocoding failed for shop {shop_id} (non-fatal): {e}")
 
 
 @router.post("/create-checkout")
@@ -183,6 +215,33 @@ async def stripe_webhook(
                 logger.warning(f"[Billing] Could not promote user role: {e}")
 
         logger.info(f"[Billing] Shop {shop_id} ACTIVATED ✓")
+
+        # ── Geocode the shop's address now that it's going live ───────────────
+        # Fetch the address fields we need (they were entered during onboarding)
+        try:
+            addr_resp = (
+                db.get_service_client()
+                .table("shops")
+                .select("address, city, state, zip, lat, lng")
+                .eq("id", shop_id)
+                .single()
+                .execute()
+            )
+            addr = addr_resp.data or {}
+            # Only geocode if we don't already have coordinates
+            if addr.get("lat") is None and addr.get("lng") is None:
+                await _geocode_shop(
+                    shop_id=shop_id,
+                    address=addr.get("address") or "",
+                    city=addr.get("city") or "",
+                    state=addr.get("state") or "",
+                    zip_code=addr.get("zip") or "",
+                    db=db,
+                )
+            else:
+                logger.info(f"[Billing] Shop {shop_id} already has coordinates, skipping geocode")
+        except Exception as e:
+            logger.warning(f"[Billing] Could not fetch address for geocoding shop {shop_id} (non-fatal): {e}")
 
     elif event_type == "customer.subscription.updated":
         sub = event["data"]["object"]
