@@ -2,7 +2,7 @@
  * Home screen — shop discovery
  * Filters: All · Nearby (device GPS) · Open Now · Favorites
  */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity, ScrollView,
   Image, TextInput, FlatList, ActivityIndicator, RefreshControl, Alert,
@@ -26,6 +26,12 @@ const haversineKm = (lat1, lon1, lat2, lon2) => {
   const a  = Math.sin(dL / 2) ** 2 +
              Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dO / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const kmToDisplay = (km) => {
+  const miles = km * 0.621371;
+  if (miles < 0.1) return `${Math.round(km * 1000 * 3.281)}ft`;
+  return `${miles.toFixed(1)}mi`;
 };
 
 const DAYS_FULL  = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
@@ -81,23 +87,17 @@ const ShopImg = ({ uri, style, resizeMode = 'cover' }) => {
   return <Image source={{ uri }} style={style} resizeMode={resizeMode} />;
 };
 
-/**
- * CardBanner
- * - HAS banner  → full-bleed banner photo, thin dark gradient scrim at bottom, logo badge bottom-left
- * - NO banner, HAS logo → dark espresso gradient + centered logo in glowing ring
- * - NO banner, NO logo  → dark espresso gradient + coffee icon + subtle "Add your photo" hint
- */
 const CardBanner = ({ bannerUrl, logoUrl, shopName, open }) => {
   if (bannerUrl) {
     return (
       <View style={styles.cardBannerWrap}>
         <ShopImg uri={bannerUrl} style={styles.cardBannerImg} resizeMode="cover" />
-        {/* Bottom scrim so logo badge stays readable */}
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.55)']}
-          style={styles.cardBannerScrim}
-          pointerEvents="none"
-        />
+        <View pointerEvents="none" style={styles.cardBannerScrim}>
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.55)']}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
         {logoUrl && (
           <View style={styles.logoBadge}>
             <ShopImg uri={logoUrl} style={styles.logoBadgeImg} resizeMode="cover" />
@@ -113,7 +113,6 @@ const CardBanner = ({ bannerUrl, logoUrl, shopName, open }) => {
     );
   }
 
-  /* ── No banner fallback ── */
   return (
     <View style={styles.cardBannerWrap}>
       <LinearGradient
@@ -122,25 +121,22 @@ const CardBanner = ({ bannerUrl, logoUrl, shopName, open }) => {
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
-      {/* Subtle radial-ish highlight in centre */}
-      <LinearGradient
-        colors={['rgba(255,255,255,0.06)', 'transparent']}
-        start={{ x: 0.5, y: 0 }}
-        end={{ x: 0.5, y: 1 }}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
-
+      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <LinearGradient
+          colors={['rgba(255,255,255,0.06)', 'transparent']}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+      </View>
       <View style={styles.noBannerContent}>
         {logoUrl ? (
-          /* Logo in glowing ring */
           <View style={styles.noBannerGlowRing}>
             <View style={styles.noBannerLogoCircle}>
               <ShopImg uri={logoUrl} style={styles.noBannerLogoImg} resizeMode="contain" />
             </View>
           </View>
         ) : (
-          /* Pure placeholder — icon + name initial */
           <View style={styles.noBannerIconWrap}>
             <Feather name="coffee" size={32} color="rgba(255,255,255,0.55)" />
           </View>
@@ -149,7 +145,6 @@ const CardBanner = ({ bannerUrl, logoUrl, shopName, open }) => {
           <Text style={styles.noBannerName} numberOfLines={1}>{shopName}</Text>
         ) : null}
       </View>
-
       {open !== null && (
         <View style={[styles.openBadge, { backgroundColor: open ? '#00704A' : '#4b5563' }]}>
           <View style={[styles.openDot, { backgroundColor: open ? '#4ade80' : '#9ca3af' }]} />
@@ -211,9 +206,7 @@ const ShopCard = ({ item, onPress, distanceKm, isFav, onToggleFav }) => {
           {distanceKm !== null && distanceKm !== undefined && (
             <View style={styles.shopBadge}>
               <Feather name="navigation" size={11} color="#00704A" />
-              <Text style={styles.shopBadgeText}>
-                {distanceKm < 1 ? `${Math.round(distanceKm * 1000)}m` : `${distanceKm.toFixed(1)}km`}
-              </Text>
+              <Text style={styles.shopBadgeText}>{kmToDisplay(distanceKm)}</Text>
             </View>
           )}
           {(item.review_count || 0) > 0 && (
@@ -372,10 +365,10 @@ export default function HomeScreen() {
   }
 
   const emptyMessage = () => {
-    if (searchQuery)                        return 'Try a different search';
-    if (selectedFilter === 'open')          return 'No shops appear open right now';
-    if (selectedFilter === 'nearby')        return 'No shops found near you';
-    if (selectedFilter === 'favorites')     return 'Heart a shop to save it here ♥';
+    if (searchQuery)                    return 'Try a different search';
+    if (selectedFilter === 'open')      return 'No shops appear open right now';
+    if (selectedFilter === 'nearby')    return 'No shops found near you';
+    if (selectedFilter === 'favorites') return 'Heart a shop to save it here ♥';
     return 'Check back soon!';
   };
 
@@ -520,17 +513,15 @@ const styles = StyleSheet.create({
   offerRibbon:          { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#f59e0b', paddingHorizontal: 12, paddingVertical: 5 },
   offerRibbonText:      { color: '#fff', fontSize: 11, fontWeight: '700' },
 
-  // ── Banner area ───────────────────────────────────────────────
-  cardBannerWrap:       { width: '100%', height: 150, position: 'relative', overflow: 'hidden' },
+  // ── Banner ────────────────────────────────────────────────────
+  cardBannerWrap:       { width: '100%', height: 150, overflow: 'hidden' },
   cardBannerImg:        { width: '100%', height: '100%' },
   cardBannerScrim:      { position: 'absolute', left: 0, right: 0, bottom: 0, height: 70 },
 
-  // Logo badge (bottom-left when banner present)
   logoBadge:            { position: 'absolute', bottom: 10, left: 12, width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFF', overflow: 'hidden', borderWidth: 2, borderColor: '#FFF', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 4, elevation: 4 },
   logoBadgeImg:         { width: '100%', height: '100%' },
 
-  // Open badge (top-right always)
-  openBadge:            { position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, backgroundColor: '#00704A' },
+  openBadge:            { position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20 },
   openDot:              { width: 6, height: 6, borderRadius: 3 },
   openBadgeText:        { color: '#FFF', fontSize: 11, fontWeight: '700' },
 
@@ -542,7 +533,6 @@ const styles = StyleSheet.create({
   noBannerIconWrap:     { width: 62, height: 62, borderRadius: 31, backgroundColor: 'rgba(255,255,255,0.10)', justifyContent: 'center', alignItems: 'center' },
   noBannerName:         { color: 'rgba(255,255,255,0.75)', fontSize: 13, fontWeight: '700', letterSpacing: 0.3, maxWidth: 200 },
 
-  // Heart
   heartButton:          { position: 'absolute', top: 10, left: 10, width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center' },
 
   // ── Card body ─────────────────────────────────────────────────
