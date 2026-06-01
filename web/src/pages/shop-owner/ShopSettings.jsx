@@ -31,10 +31,6 @@ for (let h = 0; h < 24; h++) {
   }
 }
 
-/**
- * Geocode a full address string → { lat, lng } using OpenStreetMap Nominatim.
- * Free, no API key required.
- */
 async function geocodeAddress(address, city, state, zip) {
   const parts = [address, city, state, zip].filter(Boolean).join(', ');
   if (!parts.trim()) return null;
@@ -70,7 +66,6 @@ export default function ShopSettings() {
     mobile_ordering_enabled: true,
   });
 
-  // Track original address string so we only re-geocode when it changes
   const [savedAddress, setSavedAddress] = useState('');
 
   useEffect(() => {
@@ -97,7 +92,7 @@ export default function ShopSettings() {
     if (!file || !shopId) return;
     try {
       setUploading(type);
-      const fileExt = file.name.split('.').pop();
+      const fileExt  = file.name.split('.').pop();
       const fileName = `${shopId}/${type}-${Date.now()}.${fileExt}`;
       const { error: uploadError } = await supabase.storage.from('shop-images').upload(fileName, file);
       if (uploadError) throw uploadError;
@@ -154,10 +149,6 @@ export default function ShopSettings() {
         .filter(Boolean).join(', ');
 
       let geoUpdate = {};
-
-      // Geocode if:
-      //   1. Address fields changed since last save, OR
-      //   2. Shop has never been geocoded (lat/lng are null) — covers first save after approval
       const missingCoords = shop?.lat == null && shop?.lng == null;
 
       if (newAddressStr && (newAddressStr !== savedAddress || missingCoords)) {
@@ -169,7 +160,6 @@ export default function ShopSettings() {
         if (coords) {
           geoUpdate = { lat: coords.lat, lng: coords.lng };
         } else {
-          // Non-fatal — save the address text but warn the owner
           toast.warning('Could not find coordinates for this address. The Nearby filter may not include your shop until the address is corrected.');
         }
       }
@@ -240,7 +230,7 @@ export default function ShopSettings() {
           {!formData.mobile_ordering_enabled && (
             <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-xl text-sm text-red-600 dark:text-red-400 flex items-center gap-2">
               <Power className="w-4 h-4 shrink-0" />
-              Customers will see a "Ordering unavailable" message in the app. Save settings to apply.
+              Customers will see an "Ordering unavailable" message in the app. Save settings to apply.
             </div>
           )}
         </motion.div>
@@ -251,9 +241,30 @@ export default function ShopSettings() {
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
             <ImageIcon className="w-5 h-5 text-amber-600" /> Shop Images
           </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
-            The <strong>banner</strong> is shown as the card header image in the app — use a wide, landscape photo of your shop or products. The <strong>logo</strong> appears as a small badge on the card and on your shop detail page.
-          </p>
+
+          {/* Banner vs Logo explanation */}
+          <div className="mb-5 space-y-3">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Both images are <strong>optional</strong> — your shop goes live either way. But uploading both makes a big difference in how you look to customers.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
+                <p className="font-bold text-amber-800 dark:text-amber-400 mb-1">📸 Banner</p>
+                <p className="text-amber-700 dark:text-amber-500 leading-relaxed">
+                  The wide card header image customers see when scrolling. Think storefront photo or your best drink shot.<br />
+                  <span className="font-semibold">Recommended: 1200×400px (3:1 landscape)</span>
+                </p>
+              </div>
+              <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-xl p-3">
+                <p className="font-bold text-blue-800 dark:text-blue-400 mb-1">🔵 Logo</p>
+                <p className="text-blue-700 dark:text-blue-500 leading-relaxed">
+                  Your brand mark. Shows as a small circle badge on the card and the big circle at the top of your shop page.<br />
+                  <span className="font-semibold">Recommended: 400×400px (square)</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {[
               { type: 'logo',   label: 'Logo',   field: 'logo_url',   aspect: 'w-32 h-32 mx-auto object-cover rounded-xl' },

@@ -1,11 +1,6 @@
 /**
  * Home screen — shop discovery
- * Filters: All · Nearby (device GPS) · Open Now
- *
- * Card image logic:
- *   - Uses banner_url as the card header image if available (wide, landscape-friendly)
- *   - Falls back to a green gradient with the logo centred if no banner
- *   - Logo-only shops get a clean placeholder — no stretched square logo
+ * Filters: All · Nearby (device GPS) · Open Now · Favorites
  */
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -85,19 +80,12 @@ const ShopImg = ({ uri, style, resizeMode = 'cover' }) => {
   return <Image source={{ uri }} style={style} resizeMode={resizeMode} />;
 };
 
-/**
- * Card header image:
- *  - banner_url  → fills the header (proper wide image, looks great)
- *  - logo only   → green gradient with logo pill centred
- *  - nothing     → green gradient + coffee icon
- */
 const CardBanner = ({ bannerUrl, logoUrl, open }) => {
   if (bannerUrl) {
     return (
       <View style={styles.cardBannerWrap}>
         <ShopImg uri={bannerUrl} style={styles.cardBannerImg} resizeMode="cover" />
         <View style={styles.cardBannerOverlay} />
-        {/* tiny logo badge over banner */}
         {logoUrl && (
           <View style={styles.logoBadge}>
             <ShopImg uri={logoUrl} style={styles.logoBadgeImg} resizeMode="contain" />
@@ -112,7 +100,6 @@ const CardBanner = ({ bannerUrl, logoUrl, open }) => {
     );
   }
 
-  // No banner — show gradient placeholder with logo or icon centred
   return (
     <View style={styles.cardBannerWrap}>
       <View style={styles.cardBannerGradient}>
@@ -149,7 +136,6 @@ const ShopCard = ({ item, onPress, distanceKm, isFav, onToggleFav }) => {
 
       <View style={{ position: 'relative' }}>
         <CardBanner bannerUrl={item.banner_url} logoUrl={item.logo_url} open={open} />
-        {/* Heart */}
         <TouchableOpacity
           style={styles.heartButton}
           onPress={(e) => { e.stopPropagation?.(); onToggleFav(item.id); }}
@@ -161,7 +147,6 @@ const ShopCard = ({ item, onPress, distanceKm, isFav, onToggleFav }) => {
 
       <View style={styles.shopCardContent}>
         <Text style={styles.shopName} numberOfLines={1}>{item.name}</Text>
-        {/* Description — 1 line max, ellipsis */}
         {item.description ? (
           <Text style={styles.shopDescription} numberOfLines={1}>{item.description}</Text>
         ) : null}
@@ -199,10 +184,10 @@ const ShopCard = ({ item, onPress, distanceKm, isFav, onToggleFav }) => {
 };
 
 export default function HomeScreen() {
-  const router              = useRouter();
-  const { user }            = useAuth();
-  const { getItemCount }    = useCart();
-  const { isFavorite, toggle } = useFavorites();
+  const router                     = useRouter();
+  const { user }                   = useAuth();
+  const { getItemCount }           = useCart();
+  const { isFavorite, toggle, favoriteIds } = useFavorites();
 
   const [shops,          setShops]          = useState([]);
   const [filteredShops,  setFilteredShops]  = useState([]);
@@ -215,9 +200,10 @@ export default function HomeScreen() {
   const [distances,      setDistances]      = useState({});
 
   const filters = [
-    { key: 'all',    label: 'All',      icon: 'grid'    },
-    { key: 'nearby', label: 'Nearby',   icon: 'map-pin' },
-    { key: 'open',   label: 'Open Now', icon: 'clock'   },
+    { key: 'all',       label: 'All',       icon: 'grid'   },
+    { key: 'nearby',    label: 'Nearby',    icon: 'map-pin' },
+    { key: 'open',      label: 'Open Now',  icon: 'clock'  },
+    { key: 'favorites', label: 'Favorites', icon: 'heart'  },
   ];
 
   useEffect(() => {
@@ -294,7 +280,7 @@ export default function HomeScreen() {
           break;
         }
         if (Object.keys(distances).length === 0) {
-          Alert.alert('No Location Data', 'Shops haven\'t set their location yet. Check back soon!', [{ text: 'OK' }]);
+          Alert.alert('No Location Data', "Shops haven't set their location yet. Check back soon!", [{ text: 'OK' }]);
           setSelectedFilter('all');
           break;
         }
@@ -306,12 +292,20 @@ export default function HomeScreen() {
       case 'open':
         result = result.filter(s => isOpenNow(s) === true);
         break;
+      case 'favorites':
+        if (!user) {
+          Alert.alert('Sign In Required', 'Sign in to see your saved shops.', [{ text: 'OK' }]);
+          setSelectedFilter('all');
+          break;
+        }
+        result = result.filter(s => isFavorite(s.id));
+        break;
       default:
         break;
     }
 
     setFilteredShops(result);
-  }, [searchQuery, selectedFilter, shops, distances, userLocation]);
+  }, [searchQuery, selectedFilter, shops, distances, userLocation, favoriteIds]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -331,6 +325,14 @@ export default function HomeScreen() {
       </SafeAreaView>
     );
   }
+
+  const emptyMessage = () => {
+    if (searchQuery) return 'Try a different search';
+    if (selectedFilter === 'open')      return 'No shops appear open right now';
+    if (selectedFilter === 'nearby')    return 'No shops found near you';
+    if (selectedFilter === 'favorites') return "Heart a shop to save it here ♥";
+    return 'Check back soon!';
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -381,7 +383,17 @@ export default function HomeScreen() {
               style={[styles.filterChip, selectedFilter === f.key && styles.filterChipActive]}
               onPress={() => setSelectedFilter(f.key)}
             >
-              <Feather name={f.icon} size={13} color={selectedFilter === f.key ? '#fff' : '#666'} />
+              <Feather
+                name={f.icon}
+                size={13}
+                color={
+                  selectedFilter === f.key
+                    ? '#fff'
+                    : f.key === 'favorites'
+                    ? '#ef4444'
+                    : '#666'
+                }
+              />
               <Text style={[styles.filterChipText, selectedFilter === f.key && styles.filterChipTextActive]}>
                 {f.label}
               </Text>
@@ -392,17 +404,15 @@ export default function HomeScreen() {
 
       {filteredShops.length === 0 ? (
         <View style={styles.emptyState}>
-          <Feather name="coffee" size={60} color="#DDD" />
-          <Text style={styles.emptyTitle}>No shops found</Text>
-          <Text style={styles.emptySubtitle}>
-            {searchQuery
-              ? 'Try a different search'
-              : selectedFilter === 'open'
-              ? 'No shops appear open right now'
-              : selectedFilter === 'nearby'
-              ? 'No shops found near you'
-              : 'Check back soon!'}
+          <Feather
+            name={selectedFilter === 'favorites' ? 'heart' : 'coffee'}
+            size={60}
+            color="#DDD"
+          />
+          <Text style={styles.emptyTitle}>
+            {selectedFilter === 'favorites' ? 'No favorites yet' : 'No shops found'}
           </Text>
+          <Text style={styles.emptySubtitle}>{emptyMessage()}</Text>
           {(searchQuery || selectedFilter !== 'all') && (
             <TouchableOpacity style={styles.clearButton} onPress={() => { setSearchQuery(''); setSelectedFilter('all'); }}>
               <Text style={styles.clearButtonText}>Show All Shops</Text>
@@ -460,20 +470,16 @@ const styles = StyleSheet.create({
   resultsCount:         { paddingTop: 4, paddingBottom: 8, fontSize: 12, fontWeight: '600', color: '#999' },
   shopsList:            { paddingHorizontal: 16, paddingBottom: 24 },
 
-  // ── Card ──
   shopCard:             { backgroundColor: '#FFF', borderRadius: 16, marginBottom: 14, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3 },
   offerRibbon:          { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#f59e0b', paddingHorizontal: 12, paddingVertical: 5 },
   offerRibbonText:      { color: '#fff', fontSize: 11, fontWeight: '700' },
 
-  // Card banner
   cardBannerWrap:       { width: '100%', height: 140, position: 'relative' },
   cardBannerImg:        { width: '100%', height: '100%' },
   cardBannerOverlay:    { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.08)' },
   cardBannerGradient:   { width: '100%', height: '100%', backgroundColor: '#00704A', justifyContent: 'center', alignItems: 'center' },
-  // Logo badge overlaid on banner (bottom-left)
-  logoBadge:            { position: 'absolute', bottom: 10, left: 12, width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFF', overflow: 'hidden', borderWidth: 2, borderColor: '#FFF', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3 },
+  logoBadge:            { position: 'absolute', bottom: 10, left: 12, width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFF', overflow: 'hidden', borderWidth: 2, borderColor: '#FFF', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3 },
   logoBadgeImg:         { width: '100%', height: '100%' },
-  // Logo centred in gradient (no banner case)
   logoCentred:          { width: 72, height: 72, borderRadius: 36, backgroundColor: '#FFF', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
   logoCentredImg:       { width: '100%', height: '100%' },
 
@@ -483,7 +489,6 @@ const styles = StyleSheet.create({
 
   shopCardContent:      { padding: 14 },
   shopName:             { fontSize: 17, fontWeight: '800', color: '#000', marginBottom: 3 },
-  // 1 line with ellipsis
   shopDescription:      { fontSize: 13, color: '#888', lineHeight: 18, marginBottom: 6 },
   shopDetailRow:        { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 10 },
   shopDetailText:       { fontSize: 12, color: '#999', flex: 1 },
