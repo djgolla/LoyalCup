@@ -9,15 +9,18 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
+// Statuses that represent real completed orders the customer actually placed
+const REAL_ORDER_STATUSES = ['confirmed', 'accepted', 'preparing', 'ready', 'picked_up', 'completed'];
+
 export default function ProfileScreen() {
   const router            = useRouter();
   const { user, signOut } = useAuth();
 
-  const [profile,        setProfile]        = useState(null);
-  const [globalPoints,   setGlobalPoints]   = useState(0);
-  const [shopBreakdown,  setShopBreakdown]  = useState([]);
-  const [orderCount,     setOrderCount]     = useState(0);
-  const [loading,        setLoading]        = useState(true);
+  const [profile,       setProfile]       = useState(null);
+  const [globalPoints,  setGlobalPoints]  = useState(0);
+  const [shopBreakdown, setShopBreakdown] = useState([]);
+  const [orderCount,    setOrderCount]    = useState(0);
+  const [loading,       setLoading]       = useState(true);
 
   useEffect(() => { if (user?.id) loadData(); }, [user?.id]);
 
@@ -30,15 +33,12 @@ export default function ProfileScreen() {
           .eq('id', user.id)
           .single(),
 
-        // FIXED: was querying non-existent 'loyalty_balances' table
-        // Global points live in customer_global_points
         supabase
           .from('customer_global_points')
           .select('current_balance')
           .eq('customer_id', user.id)
           .maybeSingle(),
 
-        // Shop-specific breakdown — shows which shops the customer has points at
         supabase
           .from('customer_shop_points')
           .select('current_balance, shops(name)')
@@ -47,11 +47,12 @@ export default function ProfileScreen() {
           .order('current_balance', { ascending: false })
           .limit(3),
 
+        // FIX: only count real orders — exclude payment_pending, payment_failed, cancelled
         supabase
           .from('orders')
           .select('id', { count: 'exact', head: true })
           .eq('customer_id', user.id)
-          .neq('status', 'cancelled'),
+          .in('status', REAL_ORDER_STATUSES),
       ]);
 
       setProfile(profileResp.data);
@@ -165,9 +166,9 @@ export default function ProfileScreen() {
         <View style={styles.menuSection}>
           {[
             { icon: 'list',        label: 'Order History',  route: '/order-history' },
-            { icon: 'award',       label: 'Rewards',        route: '/rewards' },
-            { icon: 'heart',       label: 'Favorite Shops', route: '/favorites' },
-            { icon: 'help-circle', label: 'Help & Support', route: '/support' },
+            { icon: 'award',       label: 'Rewards',        route: '/rewards'       },
+            { icon: 'heart',       label: 'Favorite Shops', route: '/favorites'     },
+            { icon: 'help-circle', label: 'Help & Support', route: '/support'       },
           ].map(({ icon, label, route }) => (
             <TouchableOpacity key={route} style={styles.menuRow} onPress={() => router.push(route)}>
               <View style={styles.menuRowLeft}>

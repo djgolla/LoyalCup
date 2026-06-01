@@ -1,31 +1,31 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Clock, CheckCircle, XCircle, Package, DollarSign,
-  User, Search, ShoppingBag, Eye, AlertCircle, Coffee, X,
-  ChevronRight, Loader2, Terminal,
+  Clock, CheckCircle, XCircle, Package, Search, ShoppingBag,
+  Eye, AlertCircle, Coffee, X, ChevronRight, Loader2, Terminal,
 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import supabase from '../../lib/supabase';
 import { toast } from 'sonner';
 
-// ─── Status config ────────────────────────────────────────────────────────────
+// ─── Status config ─────────────────────────────────────────────────────────
 const STATUS_CONFIG = {
-  // 'confirmed' = paid via Square mobile app, waiting to be made
-  confirmed: { color: 'from-emerald-500 to-green-500',   bg: 'bg-emerald-100 dark:bg-emerald-900/20',  text: 'text-emerald-700 dark:text-emerald-400', icon: Terminal,     label: 'New Order' },
-  pending:   { color: 'from-yellow-500 to-amber-500',    bg: 'bg-yellow-100 dark:bg-yellow-900/20',    text: 'text-yellow-700 dark:text-yellow-400',   icon: Clock,        label: 'Pending' },
-  accepted:  { color: 'from-blue-500 to-blue-600',       bg: 'bg-blue-100 dark:bg-blue-900/20',        text: 'text-blue-700 dark:text-blue-400',       icon: Package,      label: 'Accepted' },
-  preparing: { color: 'from-purple-500 to-purple-600',   bg: 'bg-purple-100 dark:bg-purple-900/20',    text: 'text-purple-700 dark:text-purple-400',   icon: Coffee,       label: 'Preparing' },
-  ready:     { color: 'from-green-500 to-green-600',     bg: 'bg-green-100 dark:bg-green-900/20',      text: 'text-green-700 dark:text-green-400',     icon: CheckCircle,  label: 'Ready' },
-  picked_up: { color: 'from-teal-500 to-teal-600',       bg: 'bg-teal-100 dark:bg-teal-900/20',        text: 'text-teal-700 dark:text-teal-400',       icon: CheckCircle,  label: 'Picked Up' },
-  completed: { color: 'from-gray-500 to-gray-600',       bg: 'bg-gray-100 dark:bg-gray-800',           text: 'text-gray-600 dark:text-gray-400',       icon: CheckCircle,  label: 'Completed' },
-  cancelled: { color: 'from-red-500 to-red-600',         bg: 'bg-red-100 dark:bg-red-900/20',          text: 'text-red-700 dark:text-red-400',         icon: XCircle,      label: 'Cancelled' },
+  confirmed: { color: 'from-emerald-500 to-green-500',  bg: 'bg-emerald-100 dark:bg-emerald-900/20', text: 'text-emerald-700 dark:text-emerald-400', icon: Terminal,    label: 'New Order'  },
+  pending:   { color: 'from-yellow-500 to-amber-500',   bg: 'bg-yellow-100 dark:bg-yellow-900/20',   text: 'text-yellow-700 dark:text-yellow-400',  icon: Clock,        label: 'Pending'    },
+  accepted:  { color: 'from-blue-500 to-blue-600',      bg: 'bg-blue-100 dark:bg-blue-900/20',       text: 'text-blue-700 dark:text-blue-400',      icon: Package,      label: 'Accepted'   },
+  preparing: { color: 'from-purple-500 to-purple-600',  bg: 'bg-purple-100 dark:bg-purple-900/20',   text: 'text-purple-700 dark:text-purple-400',  icon: Coffee,       label: 'Preparing'  },
+  ready:     { color: 'from-green-500 to-green-600',    bg: 'bg-green-100 dark:bg-green-900/20',     text: 'text-green-700 dark:text-green-400',    icon: CheckCircle,  label: 'Ready'      },
+  picked_up: { color: 'from-teal-500 to-teal-600',      bg: 'bg-teal-100 dark:bg-teal-900/20',       text: 'text-teal-700 dark:text-teal-400',      icon: CheckCircle,  label: 'Picked Up'  },
+  completed: { color: 'from-gray-500 to-gray-600',      bg: 'bg-gray-100 dark:bg-gray-800',          text: 'text-gray-600 dark:text-gray-400',      icon: CheckCircle,  label: 'Completed'  },
+  cancelled: { color: 'from-red-500 to-red-600',        bg: 'bg-red-100 dark:bg-red-900/20',         text: 'text-red-700 dark:text-red-400',        icon: XCircle,      label: 'Cancelled'  },
 };
 
-// Valid next statuses (matches backend VALID_TRANSITIONS)
+// Statuses that are real visible orders — exclude payment lifecycle statuses
+const VISIBLE_STATUSES = ['confirmed', 'pending', 'accepted', 'preparing', 'ready', 'picked_up', 'completed', 'cancelled'];
+
 const NEXT_STATUSES = {
-  confirmed:  ['accepted', 'cancelled'],   // new paid mobile order
-  pending:    ['accepted', 'cancelled'],   // legacy cash order
+  confirmed:  ['accepted', 'cancelled'],
+  pending:    ['accepted', 'cancelled'],
   accepted:   ['preparing', 'cancelled'],
   preparing:  ['ready', 'cancelled'],
   ready:      ['picked_up'],
@@ -34,24 +34,22 @@ const NEXT_STATUSES = {
   cancelled:  [],
 };
 
-// Button labels for status actions
 const STATUS_ACTION_LABELS = {
-  accepted:  { label: 'Accept Order',    color: 'bg-blue-500 hover:bg-blue-600' },
+  accepted:  { label: 'Accept Order',    color: 'bg-blue-500 hover:bg-blue-600'     },
   preparing: { label: 'Start Preparing', color: 'bg-purple-500 hover:bg-purple-600' },
-  ready:     { label: 'Mark Ready',      color: 'bg-green-500 hover:bg-green-600' },
-  picked_up: { label: 'Mark Picked Up',  color: 'bg-teal-500 hover:bg-teal-600' },
-  completed: { label: 'Complete Order',  color: 'bg-gray-600 hover:bg-gray-700' },
-  cancelled: { label: 'Cancel Order',    color: 'bg-red-500 hover:bg-red-600' },
+  ready:     { label: 'Mark Ready',      color: 'bg-green-500 hover:bg-green-600'   },
+  picked_up: { label: 'Mark Picked Up',  color: 'bg-teal-500 hover:bg-teal-600'     },
+  completed: { label: 'Complete Order',  color: 'bg-gray-600 hover:bg-gray-700'     },
+  cancelled: { label: 'Cancel Order',    color: 'bg-red-500 hover:bg-red-600'       },
 };
 
-const shortId = (id) => id?.slice(0, 8).toUpperCase() || '—';
-
-const formatOrderDate = (dateStr) => {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  const isToday = d.toDateString() === new Date().toDateString();
-  if (isToday) return `Today ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const shortId      = (id) => id?.slice(0, 8).toUpperCase() || '—';
+const formatDate   = (d) => {
+  if (!d) return '';
+  const date    = new Date(d);
+  const isToday = date.toDateString() === new Date().toDateString();
+  if (isToday) return `Today ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 };
 
 const normalizeItems = (order) => {
@@ -67,7 +65,7 @@ const normalizeItems = (order) => {
   }));
 };
 
-// ─── Order card ───────────────────────────────────────────────────────────────
+// ─── Order card ─────────────────────────────────────────────────────────────
 const OrderCard = ({ order, onViewDetails, delay }) => {
   const config     = STATUS_CONFIG[order.status] || STATUS_CONFIG.confirmed;
   const StatusIcon = config.icon;
@@ -82,10 +80,12 @@ const OrderCard = ({ order, onViewDetails, delay }) => {
       transition={{ duration: 0.3, delay }}
       whileHover={{ y: -3 }}
       className={`bg-white dark:bg-neutral-900 rounded-2xl p-5 border-2 shadow-sm hover:shadow-lg transition-all cursor-pointer
-        ${isNew ? 'border-emerald-400 dark:border-emerald-700 ring-2 ring-emerald-200 dark:ring-emerald-900' : 'border-gray-200 dark:border-neutral-800 hover:border-amber-500'}`}
+        ${isNew
+          ? 'border-emerald-400 dark:border-emerald-700 ring-2 ring-emerald-200 dark:ring-emerald-900'
+          : 'border-gray-200 dark:border-neutral-800 hover:border-amber-500'
+        }`}
       onClick={() => onViewDetails(order)}
     >
-      {/* New order pulse dot */}
       {isNew && (
         <div className="flex items-center gap-2 mb-3">
           <span className="relative flex h-2.5 w-2.5">
@@ -104,10 +104,8 @@ const OrderCard = ({ order, onViewDetails, delay }) => {
             <ShoppingBag className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white leading-tight">
-              #{shortId(order.id)}
-            </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400">{formatOrderDate(order.created_at)}</p>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white leading-tight">#{shortId(order.id)}</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{formatDate(order.created_at)}</p>
           </div>
         </div>
         <div className={`px-3 py-1.5 ${config.bg} rounded-full flex items-center gap-1.5`}>
@@ -156,10 +154,13 @@ const OrderDetailsModal = ({ order: initialOrder, onClose, onStatusUpdated }) =>
 
   if (!order) return null;
 
-  const items       = normalizeItems(order);
-  const config      = STATUS_CONFIG[order.status] || STATUS_CONFIG.confirmed;
-  const StatusIcon  = config.icon;
+  const items        = normalizeItems(order);
+  const config       = STATUS_CONFIG[order.status] || STATUS_CONFIG.confirmed;
+  const StatusIcon   = config.icon;
   const nextStatuses = NEXT_STATUSES[order.status] || [];
+
+  // FIX: discount_amount is stored in dollars in metadata, not derived from points count
+  const discountAmount = parseFloat(order.metadata?.discount_amount || 0);
 
   const handleStatusChange = async (newStatus) => {
     setUpdating(true);
@@ -171,9 +172,9 @@ const OrderDetailsModal = ({ order: initialOrder, onClose, onStatusUpdated }) =>
       const res = await fetch(
         `${import.meta.env.VITE_API_URL}/api/v1/shops/${order.shop_id}/orders/${order.id}/status`,
         {
-          method: 'PUT',
+          method:  'PUT',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ status: newStatus }),
+          body:    JSON.stringify({ status: newStatus }),
         }
       );
       if (!res.ok) {
@@ -207,7 +208,7 @@ const OrderDetailsModal = ({ order: initialOrder, onClose, onStatusUpdated }) =>
         <div className="p-5 border-b border-gray-200 dark:border-neutral-800 flex items-center justify-between shrink-0">
           <div>
             <h2 className="text-xl font-black text-gray-900 dark:text-white">Order #{shortId(order.id)}</h2>
-            <p className="text-sm text-gray-500">{formatOrderDate(order.created_at)}</p>
+            <p className="text-sm text-gray-500">{formatDate(order.created_at)}</p>
           </div>
           <div className="flex items-center gap-3">
             <div className={`px-3 py-1.5 ${config.bg} rounded-full flex items-center gap-1.5`}>
@@ -312,7 +313,7 @@ const OrderDetailsModal = ({ order: initialOrder, onClose, onStatusUpdated }) =>
             )}
           </div>
 
-          {/* Totals */}
+          {/* Totals — FIX: discount_amount is in dollars in metadata */}
           <div className="bg-gray-50 dark:bg-neutral-800 rounded-xl p-4 space-y-2">
             <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
               <span>Subtotal</span>
@@ -322,10 +323,15 @@ const OrderDetailsModal = ({ order: initialOrder, onClose, onStatusUpdated }) =>
               <span>Tax (Square)</span>
               <span>${parseFloat(order.tax || 0).toFixed(2)}</span>
             </div>
-            {order.metadata?.loyalty_points_redeemed > 0 && (
+            {discountAmount > 0 && (
               <div className="flex justify-between text-sm text-green-600 dark:text-green-400">
-                <span>Loyalty discount</span>
-                <span>-${(order.metadata.loyalty_points_redeemed / 100).toFixed(2)}</span>
+                <span>
+                  Loyalty discount
+                  {order.metadata?.loyalty_points_redeemed > 0
+                    ? ` (${order.metadata.loyalty_points_redeemed} pts)`
+                    : ''}
+                </span>
+                <span>-${discountAmount.toFixed(2)}</span>
               </div>
             )}
             <div className="flex justify-between font-black text-lg text-gray-900 dark:text-white pt-2 border-t border-gray-200 dark:border-neutral-700">
@@ -341,12 +347,12 @@ const OrderDetailsModal = ({ order: initialOrder, onClose, onStatusUpdated }) =>
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function Orders() {
-  const { shopId } = useShop();
-  const [orders,        setOrders]        = useState([]);
-  const [loading,       setLoading]       = useState(true);
-  const [filterStatus,  setFilterStatus]  = useState('all');
-  const [searchQuery,   setSearchQuery]   = useState('');
-  const [selectedOrder, setSelectedOrder] = useState(null);
+  const { shopId }                            = useShop();
+  const [orders,        setOrders]            = useState([]);
+  const [loading,       setLoading]           = useState(true);
+  const [filterStatus,  setFilterStatus]      = useState('all');
+  const [searchQuery,   setSearchQuery]       = useState('');
+  const [selectedOrder, setSelectedOrder]     = useState(null);
 
   const loadOrders = useCallback(async () => {
     if (!shopId) return;
@@ -361,12 +367,14 @@ export default function Orders() {
           )
         `)
         .eq('shop_id', shopId)
+        // FIX: never show payment lifecycle ghost orders to the barista
+        .in('status', VISIBLE_STATUSES)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
       setOrders(data || []);
-    } catch (error) {
-      console.error('Failed to load orders:', error);
+    } catch (err) {
+      console.error('Failed to load orders:', err);
       toast.error('Failed to load orders');
     } finally {
       setLoading(false);
@@ -377,19 +385,18 @@ export default function Orders() {
     if (!shopId) return;
     loadOrders();
 
-    // Real-time subscription — new orders appear instantly
     const channel = supabase
       .channel(`shop-orders-${shopId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'orders', filter: `shop_id=eq.${shopId}` },
         (payload) => {
-          if (payload.eventType === 'INSERT') {
-            // New order — reload to get joined items
+          // Only ping if the new/updated status is something the barista cares about
+          if (VISIBLE_STATUSES.includes(payload.new?.status)) {
             loadOrders();
-            toast.success('🔔 New order received!', { duration: 6000 });
-          } else {
-            loadOrders();
+            if (payload.eventType === 'INSERT') {
+              toast.success('🔔 New order received!', { duration: 6000 });
+            }
           }
         }
       )
@@ -406,18 +413,19 @@ export default function Orders() {
   const filteredOrders = orders.filter(order => {
     const matchesStatus = filterStatus === 'all' || order.status === filterStatus;
     if (!searchQuery) return matchesStatus;
-    const q = searchQuery.toLowerCase();
-    return matchesStatus && (
-      order.id.toLowerCase().includes(q) ||
-      order.customer_name?.toLowerCase().includes(q)
-    );
+    return matchesStatus && order.id.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
   const statusCounts = orders.reduce((acc, o) => {
     acc[o.status] = (acc[o.status] || 0) + 1;
     return acc;
   }, {});
-  const activeCount = (statusCounts.confirmed || 0) + (statusCounts.pending || 0) + (statusCounts.accepted || 0) + (statusCounts.preparing || 0);
+
+  const activeCount =
+    (statusCounts.confirmed || 0) +
+    (statusCounts.pending   || 0) +
+    (statusCounts.accepted  || 0) +
+    (statusCounts.preparing || 0);
 
   if (loading) {
     return (
@@ -433,7 +441,9 @@ export default function Orders() {
         <h1 className="text-4xl font-black text-gray-900 dark:text-white mb-1">Orders</h1>
         <p className="text-gray-500 dark:text-gray-400">
           {activeCount > 0 ? (
-            <span className="text-amber-600 font-semibold">{activeCount} active order{activeCount !== 1 ? 's' : ''}</span>
+            <span className="text-amber-600 font-semibold">
+              {activeCount} active order{activeCount !== 1 ? 's' : ''}
+            </span>
           ) : 'All caught up!'}
           {' · '}{orders.length} total
         </p>
