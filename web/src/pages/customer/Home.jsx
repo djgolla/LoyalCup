@@ -301,7 +301,7 @@ export default function Home() {
             <FeatureCard
               icon={MapPin}
               title="Find Your Spot"
-              description="Discover local coffee shops near you, browse their full menus, and order ahead"
+              description="Discover local coffee shops near you, browse their full menu, and order ahead"
               color="bg-gradient-to-br from-amber-500 to-orange-500"
               delay={0.4}
             />
@@ -440,7 +440,7 @@ export default function Home() {
               onClick={() => navigate('/shop-application')}
               className="px-5 py-2.5 bg-amber-600 text-white text-sm font-semibold rounded-xl hover:bg-amber-700 transition"
             >
-              Apply to join
+              List your shop
             </button>
             <button
               onClick={() => navigate('/login')}
