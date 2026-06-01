@@ -55,19 +55,24 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
 )
 
+# Production allows only the real web origins. Localhost origins are added
+# ONLY outside production so local dev still works without weakening prod CORS.
 CORS_ORIGINS = [
     "https://loyalcupapp.com",
     "https://www.loyalcupapp.com",
-    "http://localhost:5173",
-    "http://localhost:3000",
 ]
+if settings.environment.lower() != "production":
+    CORS_ORIGINS += [
+        "http://localhost:5173",
+        "http://localhost:3000",
+    ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 if settings.rate_limit_enabled:
@@ -136,7 +141,6 @@ async def health_check():
         "checks": {},
     }
     try:
-        # FIXED: use get_service_client() — supabase is a SupabaseClient wrapper, not a raw client
         db = get_supabase()
         db.get_service_client().table("profiles").select("id").limit(1).execute()
         health_status["checks"]["database"] = "healthy"

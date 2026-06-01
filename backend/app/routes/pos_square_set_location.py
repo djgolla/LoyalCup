@@ -2,13 +2,16 @@
 POST /api/v1/pos/square/set-location
 
 Sets the active Square location for a shop's POS connection.
-Requires the shop owner to be authenticated.
+Requires the shop owner (or an admin) to be authenticated.
+
+Authorization role is resolved from profiles.role (DB), never from the
+editable JWT user_metadata.
 """
 import logging
-from fastapi import APIRouter, Request, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from app.database import get_supabase
-from app.utils.security import require_auth
+from app.utils.security import require_auth, get_user_role
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -25,13 +28,15 @@ async def set_square_location(
     db=Depends(get_supabase),
     user: dict = Depends(require_auth()),
 ):
-    user_id = user.get("sub", "")
-    user_role = (user.get("user_metadata") or {}).get("role", "")
+    user_id   = user.get("sub", "")
+    user_role = get_user_role(user_id)  # ← DB lookup, NOT user_metadata
 
-    # Verify the caller owns this shop
+    svc = db.get_service_client()       # FIXED: was db.service_client (AttributeError)
+
+    # Verify the caller owns this shop (admins bypass the ownership check)
     if user_role != "admin":
         shop_check = (
-            db.service_client.table("shops")
+            svc.table("shops")
             .select("id")
             .eq("id", body.shop_id)
             .eq("owner_id", user_id)
@@ -43,7 +48,7 @@ async def set_square_location(
 
     # Check POS connection exists
     conn_check = (
-        db.service_client.table("pos_connections")
+        svc.table("pos_connections")
         .select("id, status")
         .eq("shop_id", body.shop_id)
         .eq("provider", "square")
@@ -64,14 +69,14 @@ async def set_square_location(
 
     # Update location
     try:
-        db.service_client.table("pos_connections").update({
+        svc.table("pos_connections").update({
             "location_id": body.location_id,
         }).eq("shop_id", body.shop_id).eq("provider", "square").execute()
 
         logger.info(f"[Set Location] shop={body.shop_id} location={body.location_id}")
     except Exception as e:
         logger.error(f"[Set Location] DB error: {e}")
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database error while setting location")
 
     return {
         "success":     True,

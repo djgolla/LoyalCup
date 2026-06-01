@@ -3,6 +3,18 @@ from pydantic_settings import BaseSettings
 from pydantic import Field, ValidationError, field_validator
 
 
+# Default placeholder values. These are SAFE for local development but MUST
+# never be used in production — the guard below refuses to boot if any of the
+# security-critical secrets are still set to a placeholder while running in
+# a production environment.
+PLACEHOLDER_VALUES = {
+    "placeholder-jwt-secret-change-in-production",
+    "placeholder-service-key",
+    "placeholder-anon-key",
+    "https://placeholder.supabase.co",
+}
+
+
 class Settings(BaseSettings):
     supabase_url: str = Field(default="https://placeholder.supabase.co")
     supabase_anon_key: str = Field(default="placeholder-anon-key")
@@ -66,3 +78,26 @@ except ValidationError as e:
     print("FATAL: .env CONFIGURATION INVALID")
     print(e)
     raise SystemExit(2)
+
+
+# ---------------------------------------------------------------------------
+# Production safety guard: never boot with placeholder secrets in production.
+# A missing env var would otherwise silently fall back to a publicly-known
+# placeholder (e.g. the JWT secret), allowing anyone to forge admin tokens.
+# ---------------------------------------------------------------------------
+if settings.environment.lower() == "production":
+    missing = []
+    if settings.jwt_secret in PLACEHOLDER_VALUES:
+        missing.append("JWT_SECRET")
+    if settings.supabase_service_role_key in PLACEHOLDER_VALUES:
+        missing.append("SUPABASE_SERVICE_ROLE_KEY")
+    if settings.supabase_anon_key in PLACEHOLDER_VALUES:
+        missing.append("SUPABASE_ANON_KEY")
+    if settings.supabase_url in PLACEHOLDER_VALUES:
+        missing.append("SUPABASE_URL")
+
+    if missing:
+        print("FATAL: placeholder secrets detected in PRODUCTION environment:")
+        print("  -> " + ", ".join(missing))
+        print("Set real values in the environment before starting the server.")
+        raise SystemExit(2)

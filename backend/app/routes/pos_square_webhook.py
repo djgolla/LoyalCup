@@ -1,6 +1,9 @@
 """
 Square Webhook Handler
 Receives order state change events from Square and syncs status into LoyalCup orders.
+
+Signature verification fails CLOSED in production: if no signing key is
+configured, webhook requests are rejected rather than blindly trusted.
 """
 import base64
 import hashlib
@@ -10,6 +13,8 @@ import logging
 import os
 from datetime import datetime
 from fastapi import APIRouter, Request, HTTPException
+
+from app.config import settings
 from app.database import get_supabase
 
 router = APIRouter()
@@ -26,9 +31,24 @@ SQUARE_STATE_MAP = {
 
 
 def _verify_square_signature(body: bytes, signature: str, url: str) -> bool:
+    """
+    Verify the Square webhook HMAC-SHA256 signature.
+
+    Fail CLOSED in production: if no signing key is set we reject the request.
+    Only in non-production environments do we allow unsigned requests through
+    (for local development against the Square sandbox).
+    """
     if not SQUARE_WEBHOOK_SIG_KEY:
-        logger.warning("[SquareWebhook] No signature key set — skipping verification (dev mode)")
+        if settings.environment == "production":
+            logger.error(
+                "[SquareWebhook] No SQUARE_WEBHOOK_SIGNATURE_KEY set in production — rejecting"
+            )
+            return False
+        logger.warning(
+            "[SquareWebhook] No signature key set — skipping verification (non-production only)"
+        )
         return True
+
     combined = url + body.decode("utf-8")
     expected = hmac.new(
         SQUARE_WEBHOOK_SIG_KEY.encode("utf-8"),
@@ -95,7 +115,7 @@ async def _sync_by_square_order_id(square_order_id: str, state: str):
     try:
         db   = get_supabase()
         resp = (
-            db.get_service_client()  # FIXED: was db.service_client
+            db.get_service_client()
             .table("orders")
             .select("id, status")
             .eq("metadata->>square_order_id", square_order_id)
@@ -103,7 +123,9 @@ async def _sync_by_square_order_id(square_order_id: str, state: str):
             .execute()
         )
         if resp.data:
-            await _update_order_status(resp.data[0]["id"], loyalcup_status, source="square_fulfillment_webhook")
+            await _update_order_status(
+                resp.data[0]["id"], loyalcup_status, source="square_fulfillment_webhook"
+            )
     except Exception as e:
         logger.exception(f"[SquareWebhook] _sync_by_square_order_id failed: {e}")
 
@@ -112,7 +134,7 @@ async def _update_order_status(order_id: str, new_status: str, source: str = "we
     STATUS_ORDER = ["pending", "accepted", "preparing", "ready", "picked_up", "completed", "cancelled"]
     try:
         db   = get_supabase()
-        svc  = db.get_service_client()  # FIXED: was db.service_client
+        svc  = db.get_service_client()
 
         resp = (
             svc.table("orders")
@@ -131,7 +153,7 @@ async def _update_order_status(order_id: str, new_status: str, source: str = "we
             logger.debug(f"[SquareWebhook] Order {order_id} already terminal ({current}) — skipping")
             return
 
-        current_idx = STATUS_ORDER.index(current)  if current  in STATUS_ORDER else -1
+        current_idx = STATUS_ORDER.index(current)    if current    in STATUS_ORDER else -1
         new_idx     = STATUS_ORDER.index(new_status) if new_status in STATUS_ORDER else -1
 
         if new_idx <= current_idx:
@@ -147,3 +169,7 @@ async def _update_order_status(order_id: str, new_status: str, source: str = "we
 
     except Exception as e:
         logger.exception(f"[SquareWebhook] Failed to update order {order_id}: {e}")
+
+
+def register(app):
+    app.include_router(router)

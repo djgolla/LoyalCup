@@ -5,15 +5,14 @@ Uses the token manager to auto-refresh expired Square tokens,
 and surfaces a `needs_reauth` flag so the frontend can prompt
 the shop owner to reconnect if refresh also fails.
 
-Self-healing: if the DB row is marked `reauth_required` but the
-stored tokens are actually still valid (e.g. row got stuck after a
-transient Square 401), we try Square once. If Square accepts the
-token, we flip the row back to `connected` automatically.
+Authorization: the user's role is resolved from profiles.role (DB),
+never from the editable JWT user_metadata. Admins may read any shop;
+everyone else must own the shop.
 """
 import logging
 from fastapi import APIRouter, Request, HTTPException, Depends
 from app.database import get_supabase
-from app.utils.security import require_auth
+from app.utils.security import require_auth, get_user_role
 from app.integrations.square.adapter import SquareAdapter
 from app.integrations.square.token_manager import (
     with_square_retry,
@@ -44,7 +43,7 @@ async def pos_status(
         raise HTTPException(status_code=400, detail="Missing shop_id")
 
     user_id   = user.get("sub", "")
-    user_role = (user.get("user_metadata") or {}).get("role", "")
+    user_role = get_user_role(user_id)  # ← DB lookup, NOT user_metadata
 
     svc = db.get_service_client()
 
