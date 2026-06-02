@@ -7,7 +7,6 @@ import {
 } from 'lucide-react';
 import supabase from '../../lib/supabase';
 
-// ─── Floating coffee deco ────────────────────────────────────────────────────
 const FloatingCoffee = ({ delay = 0, style = {} }) => (
   <motion.div
     initial={{ y: 0 }}
@@ -20,7 +19,6 @@ const FloatingCoffee = ({ delay = 0, style = {} }) => (
   </motion.div>
 );
 
-// ─── Animated counter ────────────────────────────────────────────────────────
 const CountUpNumber = ({ end, duration = 2 }) => {
   const [count, setCount] = useState(0);
   const ref = useRef(null);
@@ -39,7 +37,6 @@ const CountUpNumber = ({ end, duration = 2 }) => {
   return <span ref={ref}>{count.toLocaleString()}</span>;
 };
 
-// ─── Stat card ───────────────────────────────────────────────────────────────
 const StatCard = ({ num, label, suffix, loading, delay }) => (
   <motion.div
     initial={{ opacity: 0, scale: 0.5 }}
@@ -67,7 +64,6 @@ const StatCard = ({ num, label, suffix, loading, delay }) => (
   </motion.div>
 );
 
-// ─── Feature card ─────────────────────────────────────────────────────────────
 const FeatureCard = ({ icon: Icon, title, description, color, delay }) => {
   const controls = useAnimation();
   const ref = useRef(null);
@@ -101,7 +97,6 @@ const FeatureCard = ({ icon: Icon, title, description, color, delay }) => {
   );
 };
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
 export default function Home() {
   const navigate = useNavigate();
   const { scrollY } = useScroll();
@@ -114,18 +109,23 @@ export default function Home() {
   useEffect(() => {
     (async () => {
       try {
-        const [shopsRes, ordersRes, usersRes] = await Promise.all([
+        // Use RPC functions for order/user counts — these bypass RLS safely.
+        // Active shop count is public via RLS so direct query is fine.
+        const [shopsRes, orderRes, userRes] = await Promise.all([
           supabase.from('shops').select('*', { count: 'exact', head: true }).eq('status', 'active'),
-          supabase.from('orders').select('*', { count: 'exact', head: true }),
-          supabase.from('profiles').select('*', { count: 'exact', head: true }),
+          supabase.rpc('get_order_count'),
+          supabase.rpc('get_user_count'),
         ]);
         setStats({
-          shopCount:  shopsRes.count  ?? 0,
-          orderCount: ordersRes.count ?? 0,
-          userCount:  usersRes.count  ?? 0,
+          shopCount:  shopsRes.count ?? 0,
+          orderCount: orderRes.data  ?? 0,
+          userCount:  userRes.data   ?? 0,
         });
-      } catch { /* silently fallback */ }
-      finally { setStatsLoading(false); }
+      } catch {
+        // If RPCs don't exist yet, silently show 0s — no crash
+      } finally {
+        setStatsLoading(false);
+      }
     })();
   }, []);
 
@@ -148,9 +148,9 @@ export default function Home() {
 
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
       <div className="relative bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 dark:from-neutral-900 dark:via-neutral-800 dark:to-neutral-900 py-32 overflow-hidden">
-        <FloatingCoffee delay={0} style={{ top: '10%',   left:  '5%'  }} />
-        <FloatingCoffee delay={1} style={{ top: '20%',   right: '8%'  }} />
-        <FloatingCoffee delay={2} style={{ bottom: '15%', left: '15%' }} />
+        <FloatingCoffee delay={0} style={{ top: '10%',    left:  '5%'  }} />
+        <FloatingCoffee delay={1} style={{ top: '20%',    right: '8%'  }} />
+        <FloatingCoffee delay={2} style={{ bottom: '15%', left:  '15%' }} />
 
         <motion.div
           style={{ opacity: heroOpacity, scale: heroScale }}
@@ -162,7 +162,6 @@ export default function Home() {
             transition={{ duration: 0.8 }}
             className="text-center mb-12"
           >
-            {/* Badge */}
             <motion.div
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -180,7 +179,6 @@ export default function Home() {
               </div>
             </motion.div>
 
-            {/* Headline */}
             <motion.h1
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
@@ -198,7 +196,6 @@ export default function Home() {
               </motion.span>
             </motion.h1>
 
-            {/* Sub */}
             <motion.p
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
@@ -208,7 +205,6 @@ export default function Home() {
               Order ahead, earn rewards, and support your favorite local coffee shops — all in one place.
             </motion.p>
 
-            {/* CTA */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}

@@ -1,624 +1,453 @@
-import React, { useState, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { motion, useScroll, useTransform, useInView, useAnimation } from 'framer-motion';
 import {
-  StyleSheet, Text, View, TouchableOpacity, ScrollView,
-  Image, Dimensions, RefreshControl, ActivityIndicator,
-  Linking, Alert, Modal, LayoutAnimation, Platform, UIManager,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
-import WebView from 'react-native-webview';
-import { useCart } from '../../context/CartContext';
-import { supabase } from '../../lib/supabase';
+  Coffee, Gift, Smartphone, ArrowRight,
+  Sparkles, Download, Star, MapPin, Zap
+} from 'lucide-react';
+import supabase from '../../lib/supabase';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+const FloatingCoffee = ({ delay = 0, style = {} }) => (
+  <motion.div
+    initial={{ y: 0 }}
+    animate={{ y: [-20, 20, -20] }}
+    transition={{ duration: 4, delay, repeat: Infinity, ease: 'easeInOut' }}
+    className="absolute text-6xl opacity-20 pointer-events-none select-none"
+    style={style}
+  >
+    ☕
+  </motion.div>
+);
 
-const { width } = Dimensions.get('window');
-
-const HERO_HEIGHT  = 220;
-const LOGO_OVERLAP = 44;
-const LOGO_SIZE    = 100;
-
-const DAYS_FULL  = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
-const DAYS_SHORT = ['sun','mon','tue','wed','thu','fri','sat'];
-
-const isOpenNow = (hours) => {
-  if (!hours) return null;
-  try {
-    const now = new Date();
-    const idx = now.getDay();
-    const h   = hours[DAYS_FULL[idx]] || hours[DAYS_SHORT[idx]];
-    if (!h || h.closed) return false;
-    const [oH, oM] = (h.open  || '00:00').split(':').map(Number);
-    const [cH, cM] = (h.close || '23:59').split(':').map(Number);
-    const cur = now.getHours() * 60 + now.getMinutes();
-    return cur >= oH * 60 + oM && cur <= cH * 60 + cM;
-  } catch { return null; }
+const CountUpNumber = ({ end, duration = 2 }) => {
+  const [count, setCount] = useState(0);
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true });
+  useEffect(() => {
+    if (!isInView) return;
+    let start = 0;
+    const increment = end / (duration * 60);
+    const timer = setInterval(() => {
+      start += increment;
+      if (start >= end) { setCount(end); clearInterval(timer); }
+      else setCount(Math.floor(start));
+    }, 1000 / 60);
+    return () => clearInterval(timer);
+  }, [isInView, end, duration]);
+  return <span ref={ref}>{count.toLocaleString()}</span>;
 };
 
-const isSvgUrl = (url) => typeof url === 'string' && url.split('?')[0].toLowerCase().endsWith('.svg');
-
-const SvgImage = ({ uri, style, resizeMode = 'cover' }) => {
-  const objectFit = resizeMode === 'contain' ? 'contain' : 'cover';
-  const html = `<!DOCTYPE html><html><head>
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <style>
-      html,body{margin:0;padding:0;background:transparent;height:100%;width:100%;overflow:hidden}
-      img{width:100%;height:100%;object-fit:${objectFit};display:block}
-    </style></head>
-    <body><img src="${uri}" /></body></html>`;
-  return (
-    <WebView
-      style={[style, { backgroundColor: 'transparent' }]}
-      originWhitelist={['*']}
-      source={{ html, baseUrl: 'https://loyalcupapp.com' }}
-      scrollEnabled={false}
-      androidLayerType="software"
-      pointerEvents="none"
-    />
-  );
-};
-
-const ShopImage = ({ uri, style, resizeMode }) => {
-  if (!uri) return null;
-  if (isSvgUrl(uri)) return <SvgImage uri={uri} style={style} resizeMode={resizeMode} />;
-  return <Image source={{ uri }} style={style} resizeMode={resizeMode} />;
-};
-
-const ExpandableDesc = ({ text }) => {
-  const [expanded,    setExpanded]    = useState(false);
-  const [needsExpand, setNeedsExpand] = useState(false);
-  if (!text) return null;
-  return (
-    <View style={{ marginBottom: 14, paddingHorizontal: 8 }}>
-      <Text
-        style={styles.shopDesc}
-        numberOfLines={expanded ? undefined : 2}
-        onTextLayout={(e) => {
-          if (!needsExpand && e.nativeEvent.lines.length > 2) setNeedsExpand(true);
-        }}
-      >
-        {text}
-      </Text>
-      {(needsExpand || expanded) && (
-        <TouchableOpacity
-          onPress={() => {
-            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-            setExpanded(v => !v);
-          }}
-          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+const StatCard = ({ num, label, suffix, loading, delay }) => (
+  <motion.div
+    initial={{ opacity: 0, scale: 0.5 }}
+    whileInView={{ opacity: 1, scale: 1 }}
+    viewport={{ once: true }}
+    transition={{ duration: 0.5, delay }}
+    className="text-center"
+  >
+    {loading ? (
+      <div className="flex flex-col items-center gap-2">
+        <div className="h-12 w-24 bg-gray-200 dark:bg-neutral-700 rounded-xl animate-pulse mx-auto" />
+        <div className="h-4 w-20 bg-gray-200 dark:bg-neutral-700 rounded-lg animate-pulse mx-auto" />
+      </div>
+    ) : (
+      <>
+        <motion.div
+          className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-600 to-orange-600 mb-2"
+          whileHover={{ scale: 1.1 }}
         >
-          <Text style={styles.shopDescToggle}>
-            {expanded ? 'Show less ▲' : 'Read more ▼'}
-          </Text>
-        </TouchableOpacity>
-      )}
-    </View>
+          <CountUpNumber end={num} />{suffix}
+        </motion.div>
+        <div className="text-gray-600 dark:text-gray-400 font-medium">{label}</div>
+      </>
+    )}
+  </motion.div>
+);
+
+const FeatureCard = ({ icon: Icon, title, description, color, delay }) => {
+  const controls = useAnimation();
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true });
+  useEffect(() => { if (isInView) controls.start('visible'); }, [isInView, controls]);
+  return (
+    <motion.div
+      ref={ref}
+      initial="hidden"
+      animate={controls}
+      variants={{
+        hidden:  { opacity: 0, y: 50 },
+        visible: { opacity: 1, y: 0, transition: { duration: 0.6, delay } },
+      }}
+      whileHover={{ y: -10, transition: { duration: 0.2 } }}
+      className="relative group"
+    >
+      <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 to-orange-500/20 rounded-3xl blur-xl group-hover:blur-2xl transition-all duration-300 opacity-0 group-hover:opacity-100" />
+      <div className="relative bg-white dark:bg-neutral-900 rounded-3xl p-8 shadow-xl border border-gray-100 dark:border-neutral-800 hover:border-amber-500/50 transition-all duration-300">
+        <motion.div
+          whileHover={{ rotate: 360, scale: 1.1 }}
+          transition={{ duration: 0.6 }}
+          className={`w-20 h-20 ${color} rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg`}
+        >
+          <Icon className="w-10 h-10 text-white" />
+        </motion.div>
+        <h3 className="text-2xl font-bold mb-3 text-gray-900 dark:text-white text-center">{title}</h3>
+        <p className="text-gray-600 dark:text-gray-400 text-lg text-center leading-relaxed">{description}</p>
+      </div>
+    </motion.div>
   );
 };
 
-/**
- * ShopHero
- * - HAS banner → full-bleed photo, dark scrim. Logo rendered separately below in shopInfo.
- * - NO banner, HAS logo → dark espresso gradient, large logo in glow ring
- * - Nothing → dark espresso gradient, coffee icon
- */
-const ShopHero = ({ bannerUrl, logoUrl, shopName }) => {
-  if (bannerUrl) {
-    return (
-      <View style={styles.heroWrap}>
-        <ShopImage uri={bannerUrl} style={styles.heroBannerImg} resizeMode="cover" />
-        <View pointerEvents="none" style={styles.heroBannerScrim}>
-          <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.65)']}
-            style={StyleSheet.absoluteFill}
-          />
-        </View>
-      </View>
-    );
-  }
+export default function Home() {
+  const navigate = useNavigate();
+  const { scrollY } = useScroll();
+  const heroOpacity = useTransform(scrollY, [0, 300], [1, 0]);
+  const heroScale   = useTransform(scrollY, [0, 300], [1, 0.9]);
+
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [stats, setStats] = useState({ shopCount: 0, orderCount: 0, userCount: 0 });
+
+  useEffect(() => {
+    (async () => {
+      try {
+        // Use RPC functions for order/user counts — these bypass RLS safely.
+        // Active shop count is public via RLS so direct query is fine.
+        const [shopsRes, orderRes, userRes] = await Promise.all([
+          supabase.from('shops').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+          supabase.rpc('get_order_count'),
+          supabase.rpc('get_user_count'),
+        ]);
+        setStats({
+          shopCount:  shopsRes.count ?? 0,
+          orderCount: orderRes.data  ?? 0,
+          userCount:  userRes.data   ?? 0,
+        });
+      } catch {
+        // If RPCs don't exist yet, silently show 0s — no crash
+      } finally {
+        setStatsLoading(false);
+      }
+    })();
+  }, []);
+
+  const handleDownloadApp = () => {
+    const ua = navigator.userAgent.toLowerCase();
+    if (/iphone|ipad|ipod/.test(ua))  window.open('https://apps.apple.com/app/loyalcup', '_blank');
+    else if (/android/.test(ua))       window.open('https://play.google.com/store/apps/details?id=com.loyalcup', '_blank');
+    else                               navigate('/download');
+  };
+
+  const statsRow = [
+    { num: stats.shopCount,  label: 'Local Shops',     suffix: '+' },
+    { num: stats.userCount,  label: 'Happy Customers', suffix: '+' },
+    { num: stats.orderCount, label: 'Orders Placed',   suffix: '+' },
+    { num: 4.8,              label: 'Average Rating',  suffix: '★' },
+  ];
 
   return (
-    <View style={styles.heroWrap}>
-      <LinearGradient
-        colors={['#1a0a00', '#2d1200', '#1a2e1a']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        <LinearGradient
-          colors={['rgba(255,255,255,0.07)', 'transparent']}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-      </View>
-      <View style={styles.heroNoBannerContent}>
-        {logoUrl ? (
-          <View style={styles.heroGlowRing}>
-            <View style={styles.heroLogoCircleNoBanner}>
-              <ShopImage uri={logoUrl} style={styles.heroLogoImgNoBanner} resizeMode="contain" />
-            </View>
-          </View>
-        ) : (
-          <View style={styles.heroIconWrap}>
-            <Feather name="coffee" size={48} color="rgba(255,255,255,0.5)" />
-          </View>
-        )}
-        {shopName ? (
-          <Text style={styles.heroNoBannerName} numberOfLines={1}>{shopName}</Text>
-        ) : null}
-      </View>
-    </View>
-  );
-};
+    <div className="min-h-screen overflow-hidden">
 
-export default function ShopDetailScreen() {
-  const router                    = useRouter();
-  const { id }                    = useLocalSearchParams();
-  const { addItem, getItemCount } = useCart();
+      {/* ── Hero ─────────────────────────────────────────────────────────── */}
+      <div className="relative bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 dark:from-neutral-900 dark:via-neutral-800 dark:to-neutral-900 py-32 overflow-hidden">
+        <FloatingCoffee delay={0} style={{ top: '10%',    left:  '5%'  }} />
+        <FloatingCoffee delay={1} style={{ top: '20%',    right: '8%'  }} />
+        <FloatingCoffee delay={2} style={{ bottom: '15%', left:  '15%' }} />
 
-  const [shop,             setShop]             = useState(null);
-  const [categories,       setCategories]       = useState([]);
-  const [menuItems,        setMenuItems]        = useState([]);
-  const [modifierGroups,   setModifierGroups]   = useState([]);
-  const [offers,           setOffers]           = useState([]);
-  const [loading,          setLoading]          = useState(true);
-  const [refreshing,       setRefreshing]       = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState('all');
+        <motion.div
+          style={{ opacity: heroOpacity, scale: heroScale }}
+          className="max-w-7xl mx-auto px-4 relative z-10"
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="text-center mb-12"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              className="inline-block mb-8"
+            >
+              <div className="flex items-center gap-3 bg-white dark:bg-neutral-800 px-8 py-4 rounded-full shadow-2xl backdrop-blur-sm border border-amber-200 dark:border-amber-900">
+                <motion.div animate={{ rotate: 360 }} transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}>
+                  <Coffee className="w-6 h-6 text-amber-700" />
+                </motion.div>
+                <span className="text-sm font-bold text-gray-900 dark:text-white tracking-wide uppercase">
+                  Supporting Local Coffee Shops
+                </span>
+                <Sparkles className="w-5 h-5 text-amber-600" />
+              </div>
+            </motion.div>
 
-  const [modalVisible, setModalVisible] = useState(false);
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [selectedMods, setSelectedMods] = useState({});
-  const [quantity,     setQuantity]     = useState(1);
+            <motion.h1
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.3 }}
+              className="text-6xl lg:text-8xl font-black text-gray-900 dark:text-white mb-8 leading-tight"
+            >
+              Discover Local Coffee.{' '}
+              <motion.span
+                className="text-transparent bg-clip-text bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 inline-block"
+                animate={{ backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
+                transition={{ duration: 5, repeat: Infinity }}
+                style={{ backgroundSize: '200% 200%' }}
+              >
+                Stay Loyal.
+              </motion.span>
+            </motion.h1>
 
-  useEffect(() => { loadShopData(); }, [id]);
+            <motion.p
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.4 }}
+              className="text-2xl lg:text-3xl text-gray-700 dark:text-gray-300 mb-12 max-w-4xl mx-auto font-light leading-relaxed"
+            >
+              Order ahead, earn rewards, and support your favorite local coffee shops — all in one place.
+            </motion.p>
 
-  const loadShopData = async () => {
-    try {
-      const [shopResp, catResp, itemResp, modGroupResp, modOptResp, offersResp] = await Promise.all([
-        supabase.from('shops').select('*').eq('id', id).single(),
-        supabase.from('categories').select('*').eq('shop_id', id).order('display_order', { ascending: true }),
-        supabase.from('menu_items').select('*').eq('shop_id', id).eq('is_available', true).order('display_order', { ascending: true }),
-        supabase.from('modifier_groups').select('*').eq('shop_id', id).eq('is_active', true),
-        supabase.from('modifier_options').select('*').eq('shop_id', id).eq('is_active', true),
-        supabase.from('shop_offers').select('*').eq('shop_id', id).eq('is_active', true).gte('expires_at', new Date().toISOString()),
-      ]);
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.5 }}
+              className="flex flex-col sm:flex-row gap-4 justify-center mb-8"
+            >
+              <motion.button
+                whileHover={{ scale: 1.05, boxShadow: '0 20px 60px rgba(245,158,11,0.4)' }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleDownloadApp}
+                className="group relative px-10 py-5 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-full text-xl font-bold shadow-2xl overflow-hidden"
+              >
+                <motion.div
+                  className="absolute inset-0 bg-gradient-to-r from-orange-600 to-amber-600"
+                  initial={{ x: '100%' }} whileHover={{ x: 0 }} transition={{ duration: 0.3 }}
+                />
+                <span className="relative flex items-center justify-center gap-3">
+                  <Smartphone className="w-6 h-6" />
+                  Download App
+                  <motion.div animate={{ x: [0, 5, 0] }} transition={{ duration: 1.5, repeat: Infinity }}>
+                    <ArrowRight className="w-6 h-6" />
+                  </motion.div>
+                </span>
+              </motion.button>
+            </motion.div>
 
-      if (shopResp.error) throw shopResp.error;
+            <motion.p
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }}
+              className="text-gray-500 dark:text-gray-400 text-sm"
+            >
+              Available free on iOS and Android
+            </motion.p>
+          </motion.div>
+        </motion.div>
 
-      const options = modOptResp.data || [];
-      const groups  = (modGroupResp.data || []).map(g => ({
-        ...g,
-        modifier_options: options.filter(o => o.modifier_group_id === g.id),
-      }));
+        <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-white dark:from-neutral-900 to-transparent" />
+      </div>
 
-      setShop(shopResp.data);
-      setCategories(catResp.data || []);
-      setMenuItems(itemResp.data || []);
-      setModifierGroups(groups);
-      setOffers(offersResp.data || []);
-    } catch (e) {
-      console.error('[ShopDetail] loadShopData error:', e);
-    } finally {
-      setLoading(false);
-    }
-  };
+      {/* ── Live Stats ───────────────────────────────────────────────────── */}
+      <div className="py-20 bg-white dark:bg-neutral-900">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            {statsRow.map((stat, i) => (
+              <StatCard
+                key={i}
+                num={stat.num}
+                label={stat.label}
+                suffix={stat.suffix}
+                loading={statsLoading && i < 3}
+                delay={i * 0.1}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
 
-  const handleRefresh = async () => { setRefreshing(true); await loadShopData(); setRefreshing(false); };
+      {/* ── How It Works ─────────────────────────────────────────────────── */}
+      <div className="py-32 bg-gradient-to-b from-white to-gray-50 dark:from-neutral-900 dark:to-neutral-800 relative overflow-hidden">
+        <div className="max-w-7xl mx-auto px-4 relative z-10">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8 }}
+            className="text-center mb-20"
+          >
+            <div className="inline-block mb-6">
+              <div className="bg-amber-100 dark:bg-amber-900/20 px-6 py-3 rounded-full">
+                <span className="text-amber-700 dark:text-amber-400 font-bold text-sm uppercase tracking-wider">
+                  Simple Process
+                </span>
+              </div>
+            </div>
+            <h2 className="text-5xl lg:text-6xl font-black text-gray-900 dark:text-white mb-6">
+              How It Works
+            </h2>
+            <p className="text-2xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
+              Get your coffee fix in three simple steps
+            </p>
+          </motion.div>
 
-  const openModifierModal = (item) => {
-    setSelectedItem(item);
-    setSelectedMods({});
-    setQuantity(1);
-    setModalVisible(true);
-  };
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+            <FeatureCard
+              icon={Smartphone}
+              title="Download the App"
+              description="Get the LoyalCup app on iOS or Android and create your account in seconds"
+              color="bg-gradient-to-br from-blue-500 to-cyan-500"
+              delay={0.2}
+            />
+            <FeatureCard
+              icon={MapPin}
+              title="Find Your Spot"
+              description="Discover local coffee shops near you, browse their full menu, and order ahead"
+              color="bg-gradient-to-br from-amber-500 to-orange-500"
+              delay={0.4}
+            />
+            <FeatureCard
+              icon={Gift}
+              title="Earn Every Visit"
+              description="Rack up loyalty points with every order and redeem them for free drinks"
+              color="bg-gradient-to-br from-purple-500 to-pink-500"
+              delay={0.6}
+            />
+          </div>
+        </div>
+      </div>
 
-  const toggleMod = (groupId, option, isRadio) => {
-    setSelectedMods(prev => {
-      if (isRadio) return { ...prev, [groupId]: [option] };
-      const cur    = prev[groupId] || [];
-      const exists = cur.find(o => o.id === option.id);
-      return { ...prev, [groupId]: exists ? cur.filter(o => o.id !== option.id) : [...cur, option] };
-    });
-  };
+      {/* ── Why people love it ───────────────────────────────────────────── */}
+      <div className="py-24 bg-white dark:bg-neutral-900">
+        <div className="max-w-5xl mx-auto px-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <h2 className="text-4xl lg:text-5xl font-black text-gray-900 dark:text-white mb-4">
+              Everything you want from your local café
+            </h2>
+            <p className="text-xl text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">
+              Skip the line, earn perks, and support the places that make your neighborhood great
+            </p>
+          </motion.div>
 
-  const getItemModGroups = (item) => {
-    if (!item?.modifier_group_ids?.length) return [];
-    return modifierGroups.filter(g => item.modifier_group_ids.includes(g.id));
-  };
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[
+              { icon: Zap,    color: 'text-amber-600',  bg: 'bg-amber-50 dark:bg-amber-900/20',   title: 'Order Ahead',  desc: 'Skip the wait. Your order is ready when you walk in the door.' },
+              { icon: Star,   color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-900/20', title: 'Real Rewards', desc: 'Points on every purchase. Redeem for free drinks at any shop you visit.' },
+              { icon: Coffee, color: 'text-orange-600', bg: 'bg-orange-50 dark:bg-orange-900/20', title: 'Local First',  desc: 'Every shop on LoyalCup is an independent local café. No chains.' },
+            ].map((item, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.15 }}
+                className="flex flex-col gap-4 p-6 rounded-2xl border border-gray-100 dark:border-neutral-800 bg-gray-50 dark:bg-neutral-800/50"
+              >
+                <div className={`w-12 h-12 ${item.bg} rounded-xl flex items-center justify-center`}>
+                  <item.icon className={`w-6 h-6 ${item.color}`} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 dark:text-white text-lg mb-1">{item.title}</h3>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed">{item.desc}</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </div>
 
-  const handleAddToCart = () => {
-    if (!selectedItem) return;
-    const customizations = Object.values(selectedMods).flat();
-    const extraPrice     = customizations.reduce((s, c) => s + (parseFloat(c.price_adjustment) || 0), 0);
-    const unitPrice      = parseFloat(selectedItem.base_price) + extraPrice;
-    addItem({
-      id:             `${id}:${selectedItem.id}`,
-      name:           selectedItem.name,
-      price:          unitPrice,
-      quantity,
-      shopId:         id,
-      shopName:       shop?.name,
-      image_url:      selectedItem.image_url,
-      customizations,
-    });
-    setModalVisible(false);
-  };
+      {/* ── Final Download CTA ───────────────────────────────────────────── */}
+      <div className="py-32 bg-gradient-to-b from-gray-50 to-white dark:from-neutral-800 dark:to-neutral-900">
+        <div className="max-w-5xl mx-auto px-4 text-center">
+          <motion.div
+            initial={{ scale: 0 }}
+            whileInView={{ scale: 1 }}
+            viewport={{ once: true }}
+            transition={{ type: 'spring', duration: 0.8 }}
+          >
+            <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 2, repeat: Infinity }}>
+              <Smartphone className="w-24 h-24 text-amber-700 mx-auto mb-8" />
+            </motion.div>
+          </motion.div>
 
-  const handleCall       = () => { if (!shop?.phone)   { Alert.alert('No phone on file'); return; } Linking.openURL(`tel:${shop.phone.replace(/[^0-9]/g,'')}`); };
-  const handleDirections = () => { if (!shop?.address) { Alert.alert('No address on file'); return; } Linking.openURL(`https://maps.apple.com/?q=${encodeURIComponent(shop.address)}`); };
+          <motion.h2
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-5xl lg:text-6xl font-black text-gray-900 dark:text-white mb-8"
+          >
+            Ready to find your new favorite coffee spot?
+          </motion.h2>
 
-  const filteredItems   = selectedCategory === 'all' ? menuItems : menuItems.filter(i => i.category_id === selectedCategory);
-  const itemsByCategory = menuItems.reduce((acc, item) => {
-    const k = item.category_id || 'uncategorized';
-    if (!acc[k]) acc[k] = [];
-    acc[k].push(item);
-    return acc;
-  }, {});
+          <motion.p
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.2 }}
+            className="text-2xl text-gray-600 dark:text-gray-400 mb-12"
+          >
+            Download the app and join other coffee lovers supporting local businesses
+          </motion.p>
 
-  const modItemGroups  = selectedItem ? getItemModGroups(selectedItem) : [];
-  const modsExtraPrice = Object.values(selectedMods).flat().reduce((s, c) => s + (parseFloat(c.price_adjustment) || 0), 0);
-  const cartCount      = getItemCount();
-  const openStatus     = isOpenNow(shop?.hours);
+          <motion.button
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.4 }}
+            whileHover={{ scale: 1.1, rotate: 2 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleDownloadApp}
+            className="group relative bg-gradient-to-r from-amber-600 to-orange-600 text-white px-12 py-6 rounded-full text-xl font-bold shadow-2xl hover:shadow-3xl transition-all overflow-hidden"
+          >
+            <motion.div
+              className="absolute inset-0 bg-gradient-to-r from-orange-600 to-amber-600"
+              initial={{ x: '-100%' }} whileHover={{ x: 0 }} transition={{ duration: 0.3 }}
+            />
+            <span className="relative flex items-center gap-3">
+              <Download className="w-6 h-6" />
+              Download LoyalCup
+              <ArrowRight className="w-6 h-6" />
+            </span>
+          </motion.button>
 
-  const renderMenuItem = (item) => (
-    <TouchableOpacity key={item.id} style={styles.menuItem} onPress={() => openModifierModal(item)} activeOpacity={0.85}>
-      {item.image_url && <ShopImage uri={item.image_url} style={styles.menuItemImage} />}
-      <View style={styles.menuItemContent}>
-        <Text style={styles.menuItemName} numberOfLines={2}>{item.name}</Text>
-        {item.description && <Text style={styles.menuItemDesc} numberOfLines={2}>{item.description}</Text>}
-        <View style={styles.menuItemFooter}>
-          <Text style={styles.menuItemPrice}>${parseFloat(item.base_price).toFixed(2)}</Text>
-          <View style={styles.addButton}><Feather name="plus" size={18} color="#FFF" /></View>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+          <motion.p
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.6 }}
+            className="mt-6 text-sm text-gray-400 dark:text-gray-500"
+          >
+            Free on iOS & Android
+          </motion.p>
+        </div>
+      </div>
 
-  if (loading) return (
-    <SafeAreaView style={styles.container} edges={['top','bottom']}>
-      <View style={styles.centered}><ActivityIndicator size="large" color="#00704A" /></View>
-    </SafeAreaView>
-  );
+      {/* ── Shop owner strip ─────────────────────────────────────────────── */}
+      <div className="border-t border-gray-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 py-10">
+        <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div>
+            <p className="text-gray-900 dark:text-white font-semibold text-sm">Own a coffee shop?</p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">
+              Join LoyalCup and put your shop in front of local coffee lovers.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              onClick={() => navigate('/shop-application')}
+              className="px-5 py-2.5 bg-amber-600 text-white text-sm font-semibold rounded-xl hover:bg-amber-700 transition"
+            >
+              List your shop
+            </button>
+            <button
+              onClick={() => navigate('/login')}
+              className="px-5 py-2.5 text-gray-600 dark:text-gray-400 text-sm font-medium hover:text-amber-700 dark:hover:text-amber-400 transition"
+            >
+              Sign in →
+            </button>
+          </div>
+        </div>
+      </div>
 
-  if (!shop) return (
-    <SafeAreaView style={styles.container} edges={['top','bottom']}>
-      <View style={styles.centered}>
-        <Feather name="alert-circle" size={48} color="#FF3B30" />
-        <Text style={styles.errorText}>Shop not found</Text>
-        <TouchableOpacity style={styles.btn} onPress={() => router.back()}><Text style={styles.btnText}>Go Back</Text></TouchableOpacity>
-      </View>
-    </SafeAreaView>
-  );
-
-  const hasBannerAndLogo = !!shop.banner_url && !!shop.logo_url;
-
-  return (
-    <SafeAreaView style={styles.container} edges={['top','bottom']}>
-      {/* Floating header over hero */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.headerBtn} onPress={() => router.back()}>
-          <Feather name="arrow-left" size={22} color="#FFF" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.headerBtn} onPress={() => router.push('/cart')}>
-          <Feather name="shopping-bag" size={22} color="#FFF" />
-          {cartCount > 0 && <View style={styles.cartBadge}><Text style={styles.cartBadgeText}>{cartCount}</Text></View>}
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}>
-
-        {/* ── Hero ── */}
-        <ShopHero
-          bannerUrl={shop.banner_url}
-          logoUrl={shop.logo_url}
-          shopName={shop.name}
-        />
-
-        {/* ── Shop Info ── */}
-        <View style={styles.shopInfo}>
-          {/* Logo overlapping hero — only when banner present, rendered here to avoid overflow:visible */}
-          {hasBannerAndLogo && (
-            <View style={styles.heroLogoOverlap}>
-              <View style={styles.heroLogoRing}>
-                <ShopImage uri={shop.logo_url} style={styles.heroLogoImg} resizeMode="contain" />
-              </View>
-            </View>
-          )}
-
-          {openStatus !== null && (
-            <View style={[styles.openChip, { backgroundColor: openStatus ? '#dcfce7' : '#f3f4f6' }]}>
-              <View style={[styles.openDot, { backgroundColor: openStatus ? '#16a34a' : '#9ca3af' }]} />
-              <Text style={[styles.openChipText, { color: openStatus ? '#16a34a' : '#6b7280' }]}>
-                {openStatus ? 'Open now' : 'Closed'}
-              </Text>
-            </View>
-          )}
-          <Text style={styles.shopHeadline}>{shop.name}</Text>
-
-          <ExpandableDesc text={shop.description} />
-
-          <View style={styles.shopActions}>
-            {shop.phone   && <TouchableOpacity style={styles.actionBtn} onPress={handleCall}><Feather name="phone" size={16} color="#00704A" /><Text style={styles.actionBtnText}>Call</Text></TouchableOpacity>}
-            {shop.address && <TouchableOpacity style={styles.actionBtn} onPress={handleDirections}><Feather name="navigation" size={16} color="#00704A" /><Text style={styles.actionBtnText}>Directions</Text></TouchableOpacity>}
-          </View>
-        </View>
-
-        {offers.length > 0 && (
-          <View style={styles.offersSection}>
-            <Text style={styles.offersSectionLabel}>🏷️ CURRENT OFFERS</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingHorizontal: 16 }}>
-              {offers.map(offer => (
-                <View key={offer.id} style={styles.offerCard}>
-                  <Text style={styles.offerCardTitle}>{offer.title}</Text>
-                  {offer.description && <Text style={styles.offerCardDesc}>{offer.description}</Text>}
-                  {offer.discount_value && (
-                    <View style={styles.offerDiscountBadge}>
-                      <Text style={styles.offerDiscountText}>
-                        {offer.discount_type === 'percent' ? `${offer.discount_value}% off` : `$${offer.discount_value} off`}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {categories.length > 0 && (
-          <View style={styles.catTabsWrap}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catTabsContent}>
-              <TouchableOpacity style={[styles.catTab, selectedCategory === 'all' && styles.catTabActive]} onPress={() => setSelectedCategory('all')}>
-                <Text style={[styles.catTabText, selectedCategory === 'all' && styles.catTabTextActive]}>All</Text>
-              </TouchableOpacity>
-              {categories.map(cat => (
-                <TouchableOpacity key={cat.id} style={[styles.catTab, selectedCategory === cat.id && styles.catTabActive]} onPress={() => setSelectedCategory(cat.id)}>
-                  <Text style={[styles.catTabText, selectedCategory === cat.id && styles.catTabTextActive]}>{cat.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        <View style={styles.menuContainer}>
-          {selectedCategory === 'all'
-            ? (
-              <>
-                {categories.map(cat => {
-                  const items = itemsByCategory[cat.id] || [];
-                  if (!items.length) return null;
-                  return (
-                    <View key={cat.id} style={styles.catSection}>
-                      <Text style={styles.catSectionTitle}>{cat.name}</Text>
-                      {cat.description && <Text style={styles.catSectionDesc}>{cat.description}</Text>}
-                      <View style={styles.menuGrid}>{items.map(renderMenuItem)}</View>
-                    </View>
-                  );
-                })}
-                {itemsByCategory.uncategorized?.length > 0 && (
-                  <View style={styles.catSection}>
-                    <Text style={styles.catSectionTitle}>{categories.length ? 'Other items' : 'Menu'}</Text>
-                    <View style={styles.menuGrid}>{itemsByCategory.uncategorized.map(renderMenuItem)}</View>
-                  </View>
-                )}
-              </>
-            )
-            : filteredItems.length === 0
-              ? <View style={styles.emptyMenu}><Feather name="coffee" size={48} color="#DDD" /><Text style={styles.emptyMenuText}>No items here</Text></View>
-              : <View style={styles.menuGrid}>{filteredItems.map(renderMenuItem)}</View>
-          }
-        </View>
-
-        <View style={{ height: 120 }} />
-      </ScrollView>
-
-      {cartCount > 0 && (
-        <TouchableOpacity style={styles.floatingCart} onPress={() => router.push('/cart')}>
-          <View style={styles.floatingCartInner}>
-            <View style={styles.floatingCartBadge}><Text style={styles.floatingCartBadgeText}>{cartCount}</Text></View>
-            <Text style={styles.floatingCartText}>View Cart</Text>
-            <Feather name="arrow-right" size={18} color="#FFF" />
-          </View>
-        </TouchableOpacity>
-      )}
-
-      <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHandle} />
-            <View style={styles.modalHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.modalTitle}>{selectedItem?.name}</Text>
-                <Text style={styles.modalBasePrice}>${parseFloat(selectedItem?.base_price || 0).toFixed(2)}</Text>
-              </View>
-              <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.modalClose}>
-                <Feather name="x" size={22} color="#000" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-              {modItemGroups.length === 0
-                ? <Text style={styles.noModsText}>No customizations available.</Text>
-                : modItemGroups.map(group => {
-                    const isRadio  = group.max_selections === 1;
-                    const selected = selectedMods[group.id] || [];
-                    return (
-                      <View key={group.id} style={styles.modGroup}>
-                        <View style={styles.modGroupHeader}>
-                          <Text style={styles.modGroupName}>{group.name}</Text>
-                          <View style={styles.modGroupTag}>
-                            <Text style={styles.modGroupTagText}>
-                              {isRadio ? 'Pick one' : group.max_selections ? `Pick up to ${group.max_selections}` : 'Pick any'}
-                            </Text>
-                          </View>
-                        </View>
-                        {(group.modifier_options || []).map(opt => {
-                          const sel = selected.some(o => o.id === opt.id);
-                          return (
-                            <TouchableOpacity key={opt.id} style={[styles.modOption, sel && styles.modOptionSel]} onPress={() => toggleMod(group.id, opt, isRadio)}>
-                              <Text style={[styles.modOptName, sel && styles.modOptNameSel]}>{opt.name}</Text>
-                              <View style={styles.modOptRight}>
-                                {(opt.price_adjustment || 0) > 0 && (
-                                  <Text style={[styles.modOptPrice, sel && styles.modOptPriceSel]}>+${parseFloat(opt.price_adjustment).toFixed(2)}</Text>
-                                )}
-                                <View style={[styles.modCheck, sel && styles.modCheckSel]}>
-                                  {sel && <Feather name="check" size={11} color="#FFF" />}
-                                </View>
-                              </View>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                    );
-                  })
-              }
-              <View style={styles.qtyRow}>
-                <Text style={styles.qtyLabel}>Quantity</Text>
-                <View style={styles.qtyControls}>
-                  <TouchableOpacity style={styles.qtyBtn} onPress={() => setQuantity(q => Math.max(1, q - 1))}>
-                    <Feather name="minus" size={16} color="#000" />
-                  </TouchableOpacity>
-                  <Text style={styles.qtyText}>{quantity}</Text>
-                  <TouchableOpacity style={styles.qtyBtn} onPress={() => setQuantity(q => q + 1)}>
-                    <Feather name="plus" size={16} color="#000" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-              <TouchableOpacity style={styles.addToCartBtn} onPress={handleAddToCart}>
-                <Text style={styles.addToCartText}>
-                  Add to Cart — ${((parseFloat(selectedItem?.base_price || 0) + modsExtraPrice) * quantity).toFixed(2)}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+    </div>
   );
 }
-
-const styles = StyleSheet.create({
-  container:  { flex: 1, backgroundColor: '#FAFAFA' },
-  centered:   { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
-  errorText:  { fontSize: 18, fontWeight: '600', color: '#000', marginTop: 12 },
-  btn:        { marginTop: 16, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#00704A', borderRadius: 10 },
-  btnText:    { color: '#FFF', fontWeight: '700' },
-
-  // ── Floating header ───────────────────────────────────────────
-  header:    { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
-  headerBtn: { padding: 8, position: 'relative', backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 20 },
-  cartBadge: { position: 'absolute', top: 3, right: 3, backgroundColor: '#FF3B30', borderRadius: 9, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 },
-  cartBadgeText: { color: '#FFF', fontSize: 11, fontWeight: '800' },
-
-  // ── Hero ──────────────────────────────────────────────────────
-  heroWrap:        { width: '100%', height: HERO_HEIGHT, overflow: 'hidden' },
-  heroBannerImg:   { width: '100%', height: '100%' },
-  heroBannerScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 100 },
-
-  // No-banner fallback
-  heroNoBannerContent:    { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
-  heroGlowRing:           { width: 110, height: 110, borderRadius: 55, backgroundColor: 'rgba(255,255,255,0.08)', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.2)' },
-  heroLogoCircleNoBanner: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#FFF', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
-  heroLogoImgNoBanner:    { width: '100%', height: '100%' },
-  heroIconWrap:           { width: 90, height: 90, borderRadius: 45, backgroundColor: 'rgba(255,255,255,0.10)', justifyContent: 'center', alignItems: 'center' },
-  heroNoBannerName:       { color: 'rgba(255,255,255,0.8)', fontSize: 16, fontWeight: '800', letterSpacing: 0.3, maxWidth: 260 },
-
-  // ── Shop Info ────────────────────────────────────────────────
-  shopInfo:      { backgroundColor: '#FFF', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  shopHeadline:  { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 10, textAlign: 'center' },
-  openChip:      { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, marginBottom: 10 },
-  openDot:       { width: 7, height: 7, borderRadius: 4 },
-  openChipText:  { fontSize: 12, fontWeight: '700' },
-  shopDesc:      { fontSize: 14, color: '#555', textAlign: 'center', lineHeight: 21 },
-  shopDescToggle: { fontSize: 13, color: '#00704A', fontWeight: '600', textAlign: 'center', marginTop: 4 },
-  shopActions:   { flexDirection: 'row', gap: 10 },
-  actionBtn:     { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 18, paddingVertical: 10, backgroundColor: '#E8F5E9', borderRadius: 20, borderWidth: 1, borderColor: '#00704A22' },
-  actionBtnText: { fontSize: 14, fontWeight: '600', color: '#00704A' },
-
-  // Logo overlap (rendered inside shopInfo with negative top margin)
-  heroLogoOverlap: { marginTop: -LOGO_OVERLAP, marginBottom: 10, alignSelf: 'flex-start', marginLeft: 4 },
-  heroLogoRing:    { width: LOGO_SIZE, height: LOGO_SIZE, borderRadius: LOGO_SIZE / 2, backgroundColor: '#FFF', overflow: 'hidden', borderWidth: 3, borderColor: '#FFF', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10, elevation: 8 },
-  heroLogoImg:     { width: '100%', height: '100%' },
-
-  // ── Offers ───────────────────────────────────────────────────
-  offersSection:      { paddingTop: 16, paddingBottom: 4 },
-  offersSectionLabel: { fontSize: 11, fontWeight: '700', color: '#f59e0b', letterSpacing: 1.2, paddingHorizontal: 16, marginBottom: 10 },
-  offerCard:          { backgroundColor: '#fffbeb', borderRadius: 14, padding: 14, borderWidth: 1.5, borderColor: '#fde68a', minWidth: 200, maxWidth: 260 },
-  offerCardTitle:     { fontSize: 15, fontWeight: '800', color: '#92400e', marginBottom: 4 },
-  offerCardDesc:      { fontSize: 12, color: '#b45309', lineHeight: 17, marginBottom: 8 },
-  offerDiscountBadge: { alignSelf: 'flex-start', backgroundColor: '#f59e0b', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  offerDiscountText:  { color: '#fff', fontSize: 12, fontWeight: '800' },
-
-  // ── Category tabs ─────────────────────────────────────────────
-  catTabsWrap:      { backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  catTabsContent:   { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
-  catTab:           { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F5F5F5', marginRight: 6 },
-  catTabActive:     { backgroundColor: '#00704A' },
-  catTabText:       { fontSize: 14, fontWeight: '600', color: '#666' },
-  catTabTextActive: { color: '#FFF' },
-
-  // ── Menu ──────────────────────────────────────────────────────
-  menuContainer:   { paddingTop: 12 },
-  catSection:      { marginBottom: 28 },
-  catSectionTitle: { fontSize: 20, fontWeight: '800', color: '#000', paddingHorizontal: 16, marginBottom: 4 },
-  catSectionDesc:  { fontSize: 13, color: '#999', paddingHorizontal: 16, marginBottom: 12 },
-  menuGrid:        { paddingHorizontal: 10, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  menuItem:        { width: (width - 28) / 2, backgroundColor: '#FFF', borderRadius: 14, marginBottom: 12, marginHorizontal: 3, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.07, shadowRadius: 6, elevation: 2 },
-  menuItemImage:   { width: '100%', height: 120, backgroundColor: '#F5F5F5' },
-  menuItemContent: { padding: 10 },
-  menuItemName:    { fontSize: 14, fontWeight: '700', color: '#000', marginBottom: 3 },
-  menuItemDesc:    { fontSize: 12, color: '#999', marginBottom: 10, lineHeight: 16 },
-  menuItemFooter:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  menuItemPrice:   { fontSize: 16, fontWeight: '800', color: '#00704A' },
-  addButton:       { width: 32, height: 32, borderRadius: 16, backgroundColor: '#00704A', justifyContent: 'center', alignItems: 'center' },
-  emptyMenu:       { alignItems: 'center', paddingVertical: 48 },
-  emptyMenuText:   { fontSize: 15, color: '#CCC', marginTop: 12 },
-
-  // ── Floating cart ─────────────────────────────────────────────
-  floatingCart:          { position: 'absolute', bottom: 20, left: 16, right: 16, backgroundColor: '#00704A', borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 6 },
-  floatingCartInner:     { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, gap: 10 },
-  floatingCartBadge:     { backgroundColor: '#FFF', borderRadius: 11, minWidth: 22, height: 22, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6 },
-  floatingCartBadgeText: { color: '#00704A', fontSize: 13, fontWeight: '800' },
-  floatingCartText:      { color: '#FFF', fontSize: 17, fontWeight: '800', flex: 1 },
-
-  // ── Modal ─────────────────────────────────────────────────────
-  modalOverlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  modalSheet:      { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '88%' },
-  modalHandle:     { width: 36, height: 4, backgroundColor: '#E0E0E0', borderRadius: 2, alignSelf: 'center', marginTop: 10, marginBottom: 2 },
-  modalHeader:     { flexDirection: 'row', alignItems: 'flex-start', padding: 20, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  modalTitle:      { fontSize: 20, fontWeight: '800', color: '#000', marginBottom: 2 },
-  modalBasePrice:  { fontSize: 15, color: '#00704A', fontWeight: '600' },
-  modalClose:      { padding: 4 },
-  modalScroll:     { paddingHorizontal: 20, paddingTop: 4 },
-  noModsText:      { color: '#999', fontSize: 14, textAlign: 'center', paddingVertical: 20 },
-  modGroup:        { marginBottom: 22 },
-  modGroupHeader:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  modGroupName:    { fontSize: 15, fontWeight: '700', color: '#000' },
-  modGroupTag:     { backgroundColor: '#F5F5F5', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  modGroupTagText: { fontSize: 11, color: '#999', fontWeight: '600' },
-  modOption:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1.5, borderColor: '#E5E5E5', marginBottom: 8 },
-  modOptionSel:    { borderColor: '#00704A', backgroundColor: '#F0FAF5' },
-  modOptName:      { fontSize: 14, color: '#000', flex: 1 },
-  modOptNameSel:   { color: '#00704A', fontWeight: '600' },
-  modOptRight:     { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  modOptPrice:     { fontSize: 13, color: '#999' },
-  modOptPriceSel:  { color: '#00704A' },
-  modCheck:        { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: '#CCC', justifyContent: 'center', alignItems: 'center' },
-  modCheckSel:     { backgroundColor: '#00704A', borderColor: '#00704A' },
-  qtyRow:          { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, borderTopWidth: 1, borderTopColor: '#F0F0F0', marginTop: 8, marginBottom: 8 },
-  qtyLabel:        { fontSize: 15, fontWeight: '700', color: '#000' },
-  qtyControls:     { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  qtyBtn:          { width: 34, height: 34, borderRadius: 17, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center' },
-  qtyText:         { fontSize: 18, fontWeight: '700', color: '#000', minWidth: 24, textAlign: 'center' },
-  modalFooter:     { padding: 20, paddingBottom: 36, borderTopWidth: 1, borderTopColor: '#F0F0F0' },
-  addToCartBtn:    { backgroundColor: '#00704A', borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
-  addToCartText:   { color: '#FFF', fontSize: 16, fontWeight: '800' },
-});
