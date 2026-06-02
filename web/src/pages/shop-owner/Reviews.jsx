@@ -41,7 +41,7 @@ export default function Reviews() {
     try {
       const { data, error } = await supabase
         .from('reviews')
-        .select('*, customer:profiles(full_name, avatar_url)')
+        .select('*, customer:profiles!reviews_user_id_fkey(full_name, avatar_url)')
         .eq('shop_id', shopId)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -163,9 +163,9 @@ export default function Reviews() {
                 </div>
                 <StarRow rating={review.rating} size={15} />
               </div>
-              {review.comment && (
+              {review.body && (
                 <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed mt-2 pl-12">
-                  {review.comment}
+                  {review.body}
                 </p>
               )}
             </motion.div>
