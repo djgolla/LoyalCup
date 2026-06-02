@@ -211,8 +211,28 @@ export default function ConnectSquarePage() {
         </button>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">POS Integration</h1>
         <p className="text-gray-500 dark:text-gray-400 mt-1">
-          Square is <strong>required</strong> to accept mobile orders. Orders go directly to your Square terminal.
+          Square is <strong>required</strong> to accept mobile orders. Orders go directly into your Square account.
         </p>
+      </div>
+
+      {/* How orders reach you (auto-print / MOBILE) */}
+      <div className="mb-6 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-5">
+        <div className="flex items-start gap-3">
+          <span className="text-blue-500 text-xl shrink-0">🖨️</span>
+          <div className="flex-1">
+            <h3 className="font-bold text-blue-800 dark:text-blue-300 mb-1">How mobile orders reach you</h3>
+            <p className="text-sm text-blue-700 dark:text-blue-400 mb-3">
+              Every paid LoyalCup order drops straight into your <strong>Square Orders</strong>, clearly marked{" "}
+              <strong>“MOBILE”</strong> on the ticket — exactly like a normal Square order. Your baristas just make it
+              and hand it over. There are no status buttons to tap and no extra screen to watch.
+            </p>
+            <div className="bg-white dark:bg-neutral-800 border border-blue-200 dark:border-blue-700 rounded-lg p-3 text-sm text-blue-800 dark:text-blue-300">
+              <p className="font-semibold mb-1">✅ One-time setup: turn on auto-print</p>
+              In your Square printer/hardware settings, enable <strong>automatic printing for online orders</strong>.
+              Then every LoyalCup order prints at your counter the moment it's placed.
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* REAUTH REQUIRED BANNER */}
@@ -333,7 +353,7 @@ export default function ConnectSquarePage() {
                 key={loc.id}
                 onClick={() => handleSetLocation(loc.id)}
                 disabled={settingLocation}
-                className="w-full flex items-center justify-between text-left px-4 py-3 bg-white dark:bg-neutral-800 rounded-lg border border-amber-200 dark:border-amber-700 hover:border-amber-400 disabled:opacity-60 transition"
+                className="w-full flex items-center justify-between text-left px-4 py-3 bg-white dark:bg-neutral-800 rounded-lg border border-amber-200 dark:border-amber-700 hover:border-amber-400 transition disabled:opacity-60"
               >
                 <span className="font-medium text-gray-900 dark:text-white">{loc.name}</span>
                 <span className="text-xs text-gray-400 font-mono">{loc.id}</span>
@@ -416,6 +436,17 @@ export default function ConnectSquarePage() {
                 )}
               </div>
 
+              {/* Auto-print reminder when fully live */}
+              {posStatus?.location_id && (
+                <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl text-sm text-blue-700 dark:text-blue-400">
+                  <span className="shrink-0">🖨️</span>
+                  <span>
+                    You're live! Make sure <strong>auto-print for online orders</strong> is on in Square so every
+                    “MOBILE” ticket prints automatically at your counter.
+                  </span>
+                </div>
+              )}
+
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={handleSync}
@@ -476,7 +507,7 @@ export default function ConnectSquarePage() {
                 {[
                   "Auto-import your full Square menu (categories, items, modifiers, prices)",
                   "Keep your LoyalCup menu in sync with Square",
-                  "Customers pay through the app — orders appear on your Square terminal",
+                  "Customers pay in the app — orders drop into Square marked “MOBILE” and print at your counter",
                   "Override any item names or prices in LoyalCup without touching Square",
                 ].map((benefit) => (
                   <li key={benefit} className="flex items-start gap-2">

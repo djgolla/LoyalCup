@@ -9,7 +9,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
-const REAL_ORDER_STATUSES = ['confirmed', 'accepted', 'preparing', 'ready', 'picked_up', 'completed'];
+const REAL_ORDER_STATUSES = ['confirmed', 'pending', 'completed'];
 
 export default function ProfileScreen() {
   const router            = useRouter();
