@@ -224,7 +224,7 @@ export default function SettingsScreen() {
         {/* ── Support ── */}
         <Text style={[styles.sectionTitle, { marginTop: 28 }]}>Support</Text>
 
-        <TouchableOpacity style={styles.settingItem} onPress={() => router.push('/support')}>
+        <TouchableOpacity style={styles.settingItem} onPress={() => router.push('/help')}>
           <View style={styles.settingLeft}>
             <View style={styles.iconContainer}><Feather name="help-circle" size={20} color="#00704A" /></View>
             <Text style={styles.settingLabel}>Help & Support</Text>
