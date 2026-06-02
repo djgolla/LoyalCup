@@ -1,6 +1,6 @@
 """
 Reviews — customers review shops after completing an order.
-Real schema: reviews.user_id, reviews.body (NOT customer_id, NOT comment)
+Real schema: reviews.user_id, reviews.body, reviews.order_id
 """
 import logging
 from typing import Optional
@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 
 class CreateReviewRequest(BaseModel):
     shop_id:  str
-    order_id: Optional[str] = None
+    order_id: str  # REQUIRED now — can only review completed orders
     rating:   int = Field(..., ge=1, le=5)
-    body:     Optional[str] = None  # real column is "body"
+    body:     Optional[str] = None
 
 
 class UpdateReviewRequest(BaseModel):
@@ -27,52 +27,79 @@ class UpdateReviewRequest(BaseModel):
 
 
 @router.post("/reviews")
-async def create_review(body: CreateReviewRequest, user: dict = Depends(require_auth())):
+async def create_review(req: CreateReviewRequest, user: dict = Depends(require_auth())):
+    """
+    Submit a review for a completed order.
+    - order_id is required and must belong to this customer
+    - order must be in 'completed' status
+    - Points awarded 30min after order placed (automatic via trigger)
+    """
     user_id = user.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     db = get_supabase()
 
-    if body.order_id:
+    # Verify order belongs to customer AND is completed
+    try:
         order_resp = (
             db.get_service_client()
             .table("orders")
-            .select("id, status, customer_id, shop_id")
-            .eq("id", body.order_id)
+            .select("id, status, customer_id, shop_id, created_at")
+            .eq("id", req.order_id)
             .single()
             .execute()
         )
-        if not order_resp.data:
-            raise HTTPException(status_code=404, detail="Order not found")
-        order = order_resp.data
-        if order["customer_id"] != user_id:
-            raise HTTPException(status_code=403, detail="Not your order")
-        if order["status"] not in ("picked_up", "completed"):
-            raise HTTPException(status_code=400, detail="Can only review completed orders")
-        if order["shop_id"] != body.shop_id:
-            raise HTTPException(status_code=400, detail="Order does not match shop")
+    except Exception as e:
+        logger.error(f"[Reviews] Order lookup error: {e}")
+        raise HTTPException(status_code=500, detail="Database error")
 
+    if not order_resp.data:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    order = order_resp.data
+    
+    # Check customer owns order
+    if order["customer_id"] != user_id:
+        raise HTTPException(status_code=403, detail="This is not your order")
+
+    # Check shop matches
+    if order["shop_id"] != req.shop_id:
+        raise HTTPException(status_code=400, detail="Order does not match this shop")
+
+    # Check order is completed (auto-completed 30min after ready_at, OR manually marked)
+    if order["status"] != "completed":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Can only review completed orders. This order is {order['status']}"
+        )
+
+    # Attempt insert
     try:
         resp = (
             db.get_service_client()
             .table("reviews")
             .insert({
-                "shop_id":  body.shop_id,
-                "user_id":  user_id,       # real column: user_id
-                "order_id": body.order_id,
-                "rating":   body.rating,
-                "body":     body.body,     # real column: body
+                "shop_id":  req.shop_id,
+                "user_id":  user_id,
+                "order_id": req.order_id,
+                "rating":   req.rating,
+                "body":     req.body,
             })
             .select()
             .single()
             .execute()
         )
+        logger.info(f"[Reviews] Review created by {user_id} for shop {req.shop_id}")
         return {"review": resp.data}
     except Exception as e:
-        if "unique" in str(e).lower():
+        error_str = str(e).lower()
+        if "unique" in error_str or "already" in error_str:
             raise HTTPException(status_code=409, detail="You already reviewed this order")
-        raise HTTPException(status_code=500, detail=str(e))
+        if "permission" in error_str or "policy" in error_str:
+            raise HTTPException(status_code=403, detail="Not authorized to create review")
+        logger.error(f"[Reviews] Insert failed: {e}")
+        raise HTTPException(status_code=500, detail="Could not save review")
 
 
 @router.get("/shops/{shop_id}/reviews")
@@ -81,20 +108,24 @@ async def get_shop_reviews(
     limit:  int = Query(20, le=100),
     offset: int = Query(0, ge=0),
 ):
+    """
+    Get all reviews for a shop (public — no auth required).
+    Includes reviewer profile (name, avatar) and shop aggregate ratings.
+    """
     db = get_supabase()
     try:
-        # join on user_id to get reviewer profile
+        # Get reviews with reviewer profile
         resp = (
             db.get_service_client()
             .table("reviews")
-            .select("*, reviewer:profiles!reviews_user_id_fkey(full_name, avatar_url)")
+            .select("id, rating, body, created_at, user_id, reviewer:profiles!reviews_user_id_fkey(full_name, avatar_url)")
             .eq("shop_id", shop_id)
             .order("created_at", desc=True)
             .range(offset, offset + limit - 1)
             .execute()
         )
 
-        # use shops table avg_rating + review_count (denormalized columns)
+        # Get shop aggregate stats
         shop_resp = (
             db.get_service_client()
             .table("shops")
@@ -111,47 +142,127 @@ async def get_shop_reviews(
             "avg_rating":   shop_data.get("avg_rating"),
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[Reviews] get_shop_reviews error: {e}")
+        raise HTTPException(status_code=500, detail="Could not fetch reviews")
 
 
 @router.get("/reviews/my")
-async def get_my_reviews(user: dict = Depends(require_auth()), limit: int = Query(20, le=100)):
+async def get_my_reviews(
+    user: dict = Depends(require_auth()),
+    limit: int = Query(20, le=100)
+):
+    """
+    Get all reviews submitted by the authenticated user.
+    """
     user_id = user.get("sub")
     db = get_supabase()
     try:
         resp = (
             db.get_service_client()
             .table("reviews")
-            .select("*, shops(name, logo_url)")
-            .eq("user_id", user_id)   # real column: user_id
+            .select("id, shop_id, order_id, rating, body, created_at, shops(name, logo_url)")
+            .eq("user_id", user_id)
             .order("created_at", desc=True)
             .limit(limit)
             .execute()
         )
         return {"reviews": resp.data or []}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[Reviews] get_my_reviews error: {e}")
+        raise HTTPException(status_code=500, detail="Could not fetch your reviews")
+
+
+@router.put("/reviews/{review_id}")
+async def update_review(
+    review_id: str,
+    req: UpdateReviewRequest,
+    user: dict = Depends(require_auth())
+):
+    """
+    Update your own review (rating and/or body).
+    """
+    user_id = user.get("sub")
+    db = get_supabase()
+
+    # Verify ownership
+    try:
+        review_resp = (
+            db.get_service_client()
+            .table("reviews")
+            .select("id, user_id")
+            .eq("id", review_id)
+            .single()
+            .execute()
+        )
+    except Exception as e:
+        logger.error(f"[Reviews] Review lookup error: {e}")
+        raise HTTPException(status_code=500, detail="Database error")
+
+    if not review_resp.data:
+        raise HTTPException(status_code=404, detail="Review not found")
+
+    if review_resp.data["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Not your review")
+
+    # Update only the provided fields
+    update_data = {}
+    if req.rating is not None:
+        update_data["rating"] = req.rating
+    if req.body is not None:
+        update_data["body"] = req.body
+
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    try:
+        resp = (
+            db.get_service_client()
+            .table("reviews")
+            .update(update_data)
+            .eq("id", review_id)
+            .select()
+            .single()
+            .execute()
+        )
+        logger.info(f"[Reviews] Review updated: {review_id}")
+        return {"review": resp.data}
+    except Exception as e:
+        logger.error(f"[Reviews] Update failed: {e}")
+        raise HTTPException(status_code=500, detail="Could not update review")
 
 
 @router.delete("/reviews/{review_id}")
 async def delete_review(review_id: str, user: dict = Depends(require_auth())):
-    user_id   = user.get("sub")
-    user_role = user.get("user_metadata", {}).get("role", "customer")
+    """
+    Delete your own review.
+    """
+    user_id = user.get("sub")
     db = get_supabase()
 
-    review_resp = (
-        db.get_service_client()
-        .table("reviews")
-        .select("id, user_id")
-        .eq("id", review_id)
-        .single()
-        .execute()
-    )
+    # Verify ownership
+    try:
+        review_resp = (
+            db.get_service_client()
+            .table("reviews")
+            .select("id, user_id")
+            .eq("id", review_id)
+            .single()
+            .execute()
+        )
+    except Exception as e:
+        logger.error(f"[Reviews] Review lookup error: {e}")
+        raise HTTPException(status_code=500, detail="Database error")
+
     if not review_resp.data:
         raise HTTPException(status_code=404, detail="Review not found")
 
-    if review_resp.data["user_id"] != user_id and user_role != "admin":
-        raise HTTPException(status_code=403, detail="Not authorized")
+    if review_resp.data["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Not your review")
 
-    db.get_service_client().table("reviews").delete().eq("id", review_id).execute()
-    return {"deleted": True}
+    try:
+        db.get_service_client().table("reviews").delete().eq("id", review_id).execute()
+        logger.info(f"[Reviews] Review deleted: {review_id}")
+        return {"deleted": True}
+    except Exception as e:
+        logger.error(f"[Reviews] Delete failed: {e}")
+        raise HTTPException(status_code=500, detail="Could not delete review")
