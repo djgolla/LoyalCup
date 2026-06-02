@@ -76,7 +76,7 @@ async def create_review(req: CreateReviewRequest, user: dict = Depends(require_a
 
     # Attempt insert
     try:
-        resp = (
+        insert_resp = (
             db.get_service_client()
             .table("reviews")
             .insert({
@@ -86,12 +86,11 @@ async def create_review(req: CreateReviewRequest, user: dict = Depends(require_a
                 "rating":   req.rating,
                 "body":     req.body,
             })
-            .select()
-            .single()
             .execute()
         )
-        logger.info(f"[Reviews] Review created by {user_id} for shop {req.shop_id}")
-        return {"review": resp.data}
+
+        review = insert_resp.data[0] if insert_resp.data else None
+        return {"review": review}
     except Exception as e:
         error_str = str(e).lower()
         if "unique" in error_str or "already" in error_str:
