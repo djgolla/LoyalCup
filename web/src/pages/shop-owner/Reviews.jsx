@@ -41,7 +41,7 @@ export default function Reviews() {
     try {
       const { data, error } = await supabase
         .from('reviews')
-        .select('*, customer:profiles!reviews_user_id_fkey(full_name, avatar_url)')
+        .select('*')
         .eq('shop_id', shopId)
         .order('created_at', { ascending: false });
       if (error) throw error;
