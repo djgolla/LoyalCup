@@ -182,7 +182,7 @@ export default function ShopDetailScreen() {
       const [shopResp, catResp, itemResp, modGroupResp, modOptResp, offersResp] = await Promise.all([
         supabase.from('shops').select('*').eq('id', id).single(),
         supabase.from('menu_categories').select('*').eq('shop_id', id).order('display_order', { ascending: true }),
-        supabase.from('menu_items').select('*').eq('shop_id', id).eq('is_available', true).eq('is_active', true).order('display_order', { ascending: true }),
+        supabase.from('menu_items').select('*').eq('shop_id', id).eq('is_available', true).order('display_order', { ascending: true }),
         supabase.from('modifier_groups').select('*').eq('shop_id', id).eq('is_active', true),
         supabase.from('modifier_options').select('*').eq('shop_id', id).eq('is_active', true),
         supabase.from('shop_offers').select('*').eq('shop_id', id).eq('is_active', true).gte('expires_at', new Date().toISOString()),
