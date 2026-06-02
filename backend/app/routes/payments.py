@@ -5,14 +5,15 @@ Safe atomic flow:
   1. Validate cart + shop
   2. Validate loyalty redemption upfront (no writes)
   3. CREATE order in DB with status=payment_pending   ← before any charge
-  4. Charge Square
+  4. Create Square order (PICKUP, marked MOBILE) + charge card
      - on failure → mark order payment_failed, raise 402 (card never charged)
   5. Mark order confirmed
   6. Save order items
-  7. Deduct redeemed points
-  8. Award earned points
+  7. Deduct redeemed points / award earned points
+  8. Send ONE push notification with the shop's prep-time ETA
 
-This guarantees a customer can never be charged without an order row existing.
+A customer can never be charged without an order row existing, and an order is
+never reported as placed unless Square accepted it.
 """
 import logging
 from typing import List, Optional
@@ -20,8 +21,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, validator
 
 from app.services.square_order_service import process_payment
+from app.services.notification_service import send_order_placed_push
 from app.services.loyalty_service import (
-    get_shop_config,
     get_balance,
     compute_redemption,
     award_points_for_order,
@@ -91,20 +92,23 @@ async def create_payment(
 
     db = get_supabase()
 
-    # ── Validate nonce ────────────────────────────────────────────────────────
     if not request.payment_nonce or not request.payment_nonce.strip():
         raise HTTPException(status_code=400, detail="Payment nonce required")
 
-    # ── Validate shop ─────────────────────────────────────────────────────────
+    # ── Validate shop (also read prep time + name for the ETA push) ──────────
     shop_resp = (
         db.get_service_client().table("shops")
-        .select("id, status, name").eq("id", request.shop_id).limit(1).execute()
+        .select("id, status, name, avg_prep_time_minutes")
+        .eq("id", request.shop_id).limit(1).execute()
     )
     if not shop_resp.data:
         raise HTTPException(status_code=404, detail="Shop not found")
     shop = shop_resp.data[0]
     if shop.get("status") != "active":
         raise HTTPException(status_code=400, detail="This shop is not currently accepting orders")
+
+    prep_minutes = int(shop.get("avg_prep_time_minutes") or 10)
+    shop_name    = shop.get("name", "the shop")
 
     items_data       = [item.dict(exclude={"base_price"}) for item in request.items]
     subtotal_dollars = sum(item["unit_price"] * item.get("quantity", 1) for item in items_data)
@@ -125,7 +129,6 @@ async def create_payment(
         loyalty_discount_cents = preview["discount_cents"]
 
     # ── STEP 1: Create order in DB BEFORE charging ────────────────────────────
-    # If this fails, nothing has been charged. Safe to raise immediately.
     try:
         pending_resp = (
             db.get_service_client().table("orders").insert({
@@ -149,8 +152,7 @@ async def create_payment(
         logger.exception(f"[Payment] Failed to create pending order (before charge): {e}")
         raise HTTPException(status_code=500, detail="Could not create order. Card was not charged.")
 
-    # ── STEP 2: Charge Square ─────────────────────────────────────────────────
-    # If this fails we mark the order payment_failed and raise — no charge happened.
+    # ── STEP 2: Create Square order (MOBILE/PICKUP) + charge ─────────────────
     try:
         payment_result = await process_payment(
             db=db,
@@ -162,19 +164,14 @@ async def create_payment(
             customer_note=request.customer_note,
         )
     except Exception as e:
-        # Mark the pre-created order as payment_failed so it's traceable
         try:
             db.get_service_client().table("orders").update({
                 "status":   "payment_failed",
-                "metadata": {
-                    **(order.get("metadata") or {}),
-                    "failure_reason": str(e),
-                },
+                "metadata": {**(order.get("metadata") or {}), "failure_reason": str(e)},
             }).eq("id", order_id).execute()
         except Exception as mark_err:
             logger.error(f"[Payment] Could not mark order payment_failed order={order_id}: {mark_err}")
-
-        logger.error(f"[Payment] Square charge failed order={order_id}: {e}")
+        logger.error(f"[Payment] Square order/charge failed order={order_id}: {e}")
         raise HTTPException(status_code=402, detail=str(e))
 
     charged_cents     = payment_result["charged_cents"]
@@ -185,7 +182,7 @@ async def create_payment(
     charged_dollars   = charged_cents / 100
     tax_dollars       = tax_cents / 100
 
-    # ── STEP 3: Confirm order now that charge succeeded ───────────────────────
+    # ── STEP 3: Confirm order now that it reached Square ──────────────────────
     order_metadata = {
         "square_order_id":         square_order_id,
         "square_payment_id":       square_payment_id,
@@ -210,14 +207,10 @@ async def create_payment(
         )
         order = confirmed_resp.data
     except Exception as e:
-        # Charge succeeded but we couldn't update the status — log loudly.
-        # Order exists in DB as payment_pending; support can reconcile via square_payment_id.
         logger.error(
             f"[Payment] CHARGE SUCCEEDED but order confirm update failed! "
             f"order={order_id} square_payment={square_payment_id} error={e}"
         )
-        # Still return success to the customer — the money moved, the order exists.
-        # Don't raise here; a 500 would make the app show "payment failed" on a successful charge.
 
     # ── STEP 4: Save order items ──────────────────────────────────────────────
     try:
@@ -234,7 +227,6 @@ async def create_payment(
         ]).execute()
     except Exception as e:
         logger.error(f"[Payment] order_items insert failed order={order_id}: {e}")
-        # Non-fatal — order is confirmed and charged, items can be reconciled
 
     # ── STEP 5: Deduct redeemed points ────────────────────────────────────────
     if request.loyalty_points_to_redeem > 0:
@@ -260,16 +252,27 @@ async def create_payment(
             order_total=charged_dollars,
         )
         points_awarded = award_result.get("points", 0)
-
         if points_awarded > 0:
             db.get_service_client().table("orders").update({
-                "metadata": {
-                    **order_metadata,
-                    "loyalty_points_earned": points_awarded,
-                }
+                "metadata": {**order_metadata, "loyalty_points_earned": points_awarded}
             }).eq("id", order_id).execute()
     except Exception as e:
         logger.warning(f"[Payment] Points award failed order={order_id}: {e}")
+
+    # ── STEP 7: One ETA push notification (fire and forget) ──────────────────
+    try:
+        profile = (
+            db.get_service_client().table("profiles")
+            .select("push_token").eq("id", customer_id).single().execute().data or {}
+        )
+        await send_order_placed_push(
+            push_token=profile.get("push_token"),
+            shop_name=shop_name,
+            prep_minutes=prep_minutes,
+            order_id=order_id,
+        )
+    except Exception as e:
+        logger.warning(f"[Payment] ETA push failed order={order_id}: {e}")
 
     logger.info(
         f"[Payment] SUCCESS order={order_id} square_payment={square_payment_id} "
@@ -285,5 +288,6 @@ async def create_payment(
         "currency":        currency,
         "status":          "confirmed",
         "points_earned":   points_awarded,
-        "message":         "Payment successful! Your order is being prepared.",
+        "prep_minutes":    prep_minutes,
+        "message":         f"Order placed! {shop_name} will have it ready in about {prep_minutes} minutes.",
     }

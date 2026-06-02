@@ -1,14 +1,17 @@
 /**
  * Order History screen
- * - Active orders (confirmed/accepted/preparing/ready) pinned at top with live polling
- * - Completed/cancelled orders below
- * - Tap any order → tracking screen
- * - Reorder CTA on completed orders
+ * - Recent orders pinned at top (sent to the shop — pick up soon)
+ * - Past orders below
+ * - Tap any order → confirmation screen
+ * - Reorder CTA on past orders
+ *
+ * There is no live status tracking. Orders go straight to the shop's Square POS
+ * and the customer is shown an ETA based on the shop's average prep time.
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity, FlatList,
-  ActivityIndicator, RefreshControl, Image, SectionList,
+  ActivityIndicator, RefreshControl, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -16,20 +19,11 @@ import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { useCart } from '../context/CartContext';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-const ACTIVE_STATUSES    = ['confirmed', 'accepted', 'preparing', 'ready'];
-const COMPLETED_STATUSES = ['completed', 'cancelled', 'picked_up'];
-
-const STATUS_CONFIG = {
-  confirmed: { label: 'Confirmed',   color: '#2563eb', bg: '#eff6ff' },
-  accepted:  { label: 'Accepted',    color: '#2563eb', bg: '#eff6ff' },
-  preparing: { label: 'Preparing',   color: '#d97706', bg: '#fffbeb' },
-  ready:     { label: 'Ready! 🎉',   color: '#059669', bg: '#ecfdf5' },
-  completed: { label: 'Completed',   color: '#6b7280', bg: '#f9fafb' },
-  cancelled: { label: 'Cancelled',   color: '#dc2626', bg: '#fef2f2' },
-  picked_up: { label: 'Picked Up',   color: '#7c3aed', bg: '#f5f3ff' },
-};
+// "Active" = just placed (still relevant for pickup). Past = done/cancelled.
+const ACTIVE_STATUSES    = ['confirmed', 'pending'];
+const COMPLETED_STATUSES = ['completed', 'cancelled'];
 
 const shortId   = (id) => id?.slice(0, 8)?.toUpperCase() || '—';
 const formatDate = (d) => {
@@ -53,25 +47,25 @@ const normalizeItems = (order) =>
     customizations: oi.customizations || [],
   }));
 
-// ── Order Card ────────────────────────────────────────────────────────────────
+// ── Order Card ───────────────────────────────────────────────────────────────
 
 const OrderCard = ({ order, onPress, onReorder, isActive }) => {
   const items     = normalizeItems(order);
   const shopName  = order.shops?.name || 'Shop';
   const shopLogo  = order.shops?.logo_url;
-  const cfg       = STATUS_CONFIG[order.status] || STATUS_CONFIG.confirmed;
-  const isReady   = order.status === 'ready';
+  const prep      = order.shops?.avg_prep_time_minutes || 10;
+  const isCancelled = order.status === 'cancelled';
 
   return (
     <TouchableOpacity
-      style={[styles.card, isActive && styles.cardActive, isReady && styles.cardReady]}
+      style={[styles.card, isActive && styles.cardActive]}
       onPress={onPress}
       activeOpacity={0.75}
     >
-      {/* Ready banner */}
-      {isReady && (
-        <View style={styles.readyBanner}>
-          <Text style={styles.readyBannerText}>🎉 Ready for pickup! Head to the counter.</Text>
+      {/* ETA banner for active orders */}
+      {isActive && (
+        <View style={styles.etaBanner}>
+          <Text style={styles.etaBannerText}>☕ Ready in about {prep} min — head over and pick it up!</Text>
         </View>
       )}
 
@@ -82,8 +76,10 @@ const OrderCard = ({ order, onPress, onReorder, isActive }) => {
           : <View style={styles.shopLogoPlaceholder}><Feather name="coffee" size={13} color="#00704A" /></View>
         }
         <Text style={styles.shopName} numberOfLines={1}>{shopName}</Text>
-        <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
-          <Text style={[styles.statusText, { color: cfg.color }]}>{cfg.label}</Text>
+        <View style={[styles.statusBadge, { backgroundColor: isCancelled ? '#fef2f2' : isActive ? '#fffbeb' : '#f9fafb' }]}>
+          <Text style={[styles.statusText, { color: isCancelled ? '#dc2626' : isActive ? '#d97706' : '#6b7280' }]}>
+            {isCancelled ? 'Cancelled' : isActive ? 'Placed' : 'Completed'}
+          </Text>
         </View>
       </View>
 
@@ -125,16 +121,16 @@ const OrderCard = ({ order, onPress, onReorder, isActive }) => {
   );
 };
 
-// ── Main Screen ───────────────────────────────────────────────────────────────
+// ── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function OrderHistoryScreen() {
   const router = useRouter();
-  const { addItem, clearCart } = useCart();
+  const { addItem } = useCart();
 
-  const [activeOrders,    setActiveOrders]    = useState([]);
-  const [pastOrders,      setPastOrders]      = useState([]);
-  const [loading,         setLoading]         = useState(true);
-  const [refreshing,      setRefreshing]      = useState(false);
+  const [activeOrders, setActiveOrders] = useState([]);
+  const [pastOrders,   setPastOrders]   = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [refreshing,   setRefreshing]   = useState(false);
 
   const loadOrders = useCallback(async () => {
     try {
@@ -145,7 +141,7 @@ export default function OrderHistoryScreen() {
         .from('orders')
         .select(`
           id, status, total, subtotal, created_at, shop_id, metadata,
-          shops ( name, logo_url ),
+          shops ( name, logo_url, avg_prep_time_minutes ),
           order_items (
             quantity, unit_price, menu_item_id, customizations,
             menu_items ( name, image_url, id )
@@ -169,28 +165,6 @@ export default function OrderHistoryScreen() {
 
   useEffect(() => {
     loadOrders();
-    // Poll active orders every 8s while any are in-flight
-    const interval = setInterval(() => {
-      if (activeOrders.length > 0) loadOrders();
-    }, 8000);
-    return () => clearInterval(interval);
-  }, [loadOrders]);
-
-  // Real-time channel for own orders
-  useEffect(() => {
-    let channel;
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      channel = supabase
-        .channel(`my-orders-${user.id}`)
-        .on('postgres_changes', {
-          event: 'UPDATE', schema: 'public', table: 'orders',
-          filter: `customer_id=eq.${user.id}`,
-        }, () => loadOrders())
-        .subscribe();
-    })();
-    return () => { if (channel) supabase.removeChannel(channel); };
   }, [loadOrders]);
 
   const handleRefresh = async () => { setRefreshing(true); await loadOrders(); setRefreshing(false); };
@@ -245,21 +219,20 @@ export default function OrderHistoryScreen() {
         </View>
       ) : (
         <FlatList
-          data={[]} // dummy — we use ListHeaderComponent for everything
+          data={[]}
           renderItem={null}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#00704A" />}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 40 }}
           ListHeaderComponent={
             <>
-              {/* Active Orders */}
               {activeOrders.length > 0 && (
                 <View style={styles.section}>
                   <View style={styles.sectionHeaderRow}>
-                    <Text style={styles.sectionLabel}>IN PROGRESS</Text>
+                    <Text style={styles.sectionLabel}>READY SOON</Text>
                     <View style={styles.activePulse}>
                       <View style={styles.activeDot} />
-                      <Text style={styles.activeCount}>{activeOrders.length} active</Text>
+                      <Text style={styles.activeCount}>{activeOrders.length} to pick up</Text>
                     </View>
                   </View>
                   {activeOrders.map(order => (
@@ -274,7 +247,6 @@ export default function OrderHistoryScreen() {
                 </View>
               )}
 
-              {/* Past Orders */}
               {pastOrders.length > 0 && (
                 <View style={styles.section}>
                   <Text style={styles.sectionLabel}>PAST ORDERS</Text>
@@ -300,19 +272,18 @@ export default function OrderHistoryScreen() {
 const styles = StyleSheet.create({
   container:          { flex: 1, backgroundColor: '#FAFAFA' },
   centered:           { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header:             { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  header:             { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#EEE' },
   headerTitle:        { fontSize: 20, fontWeight: '800', color: '#000' },
   section:            { paddingHorizontal: 16, paddingTop: 20 },
   sectionHeaderRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   sectionLabel:       { fontSize: 11, fontWeight: '800', color: '#9ca3af', letterSpacing: 1.2 },
   activePulse:        { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  activeDot:          { width: 7, height: 7, borderRadius: 4, backgroundColor: '#059669' },
-  activeCount:        { fontSize: 11, fontWeight: '700', color: '#059669' },
-  card:               { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1.5, borderColor: '#F0F0F0', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
+  activeDot:          { width: 7, height: 7, borderRadius: 4, backgroundColor: '#d97706' },
+  activeCount:        { fontSize: 11, fontWeight: '700', color: '#d97706' },
+  card:               { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1.5, borderColor: '#F0F0F0', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 1 },
   cardActive:         { borderColor: '#d97706', borderWidth: 1.5 },
-  cardReady:          { borderColor: '#059669', borderWidth: 2 },
-  readyBanner:        { backgroundColor: '#059669', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 12, alignItems: 'center' },
-  readyBannerText:    { color: '#FFF', fontWeight: '800', fontSize: 13 },
+  etaBanner:          { backgroundColor: '#d97706', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 12, alignItems: 'center' },
+  etaBannerText:      { color: '#FFF', fontWeight: '800', fontSize: 13 },
   shopRow:            { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   shopLogo:           { width: 26, height: 26, borderRadius: 13, marginRight: 8 },
   shopLogoPlaceholder:{ width: 26, height: 26, borderRadius: 13, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center', marginRight: 8 },

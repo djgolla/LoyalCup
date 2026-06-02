@@ -1,10 +1,12 @@
 /**
  * orderService — all order mutations go through the FastAPI backend.
  * Reads hit Supabase directly for speed.
- * Real-time status uses Supabase channels.
  *
- * createOrder   → POST /api/v1/payments/create  (card charge + order creation, atomic)
- * createCashOrder → POST /api/v1/orders         (no charge, cash/in-person)
+ * There is no order-status tracking. Orders are sent straight to the shop's
+ * Square POS and the customer is shown an ETA. No realtime status subscription.
+ *
+ * createOrder     → POST /api/v1/payments/create  (card charge + order creation, atomic)
+ * createCashOrder → POST /api/v1/orders           (no charge, cash/in-person)
  */
 import { supabase } from '../lib/supabase';
 import { apiClient } from './apiClient';
@@ -13,8 +15,8 @@ export const orderService = {
   /**
    * Create + pay for an order via backend using a Square card nonce.
    * MUST go to /api/v1/payments/create — NOT the cash/manual orders endpoint.
-   * The backend creates the DB record before charging the card, so a failed
-   * charge never leaves the customer charged without an order.
+   * The backend creates the DB record before charging the card, and only
+   * confirms the order once Square has accepted it.
    *
    * items: [{ menu_item_id, quantity, unit_price, base_price, customizations }]
    */
@@ -77,7 +79,7 @@ export const orderService = {
       .from('orders')
       .select(`
         *,
-        shops (name, logo_url, address),
+        shops (name, logo_url, address, avg_prep_time_minutes),
         order_items (
           *,
           menu_items (name, description, image_url)
@@ -99,7 +101,7 @@ export const orderService = {
       .from('orders')
       .select(`
         *,
-        shops (name, logo_url),
+        shops (name, logo_url, avg_prep_time_minutes),
         order_items (quantity, unit_price, menu_items(name, image_url))
       `)
       .eq('customer_id', user.id)
@@ -114,7 +116,7 @@ export const orderService = {
     return data || [];
   },
 
-  /** Cancel a confirmed/pending order (only allowed before it's accepted) */
+  /** Cancel a newly placed order (only allowed right after placing). */
   cancelOrder: async (orderId) => {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
@@ -122,19 +124,5 @@ export const orderService = {
 
     const response = await apiClient.post(`/api/v1/orders/${orderId}/cancel`, {}, token);
     return response.order;
-  },
-
-  /** Real-time subscription to a single order's status changes */
-  subscribeToOrder: (orderId, callback) => {
-    const channel = supabase
-      .channel(`order:${orderId}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` },
-        (payload) => callback(payload.new)
-      )
-      .subscribe();
-
-    return () => supabase.removeChannel(channel);
   },
 };

@@ -1,8 +1,10 @@
-// order tracking screen — real-time status, review prompt, Square POS aware
-import React, { useState, useEffect, useRef } from 'react';
+// Order confirmation screen — ETA based, no live status tracking.
+// Orders go straight to the shop's Square POS; the customer is told roughly
+// when it'll be ready. No progress tracker / realtime / polling.
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity,
-  ScrollView, ActivityIndicator, Image, Alert, Animated, TextInput,
+  ScrollView, ActivityIndicator, Image, Alert, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -10,27 +12,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { apiClient } from '../../services/apiClient';
 
-const ORDER_STATUSES = [
-  { key: 'pending',   label: 'Order Placed',     icon: 'clock',        color: '#6b7280' },
-  { key: 'confirmed', label: 'Payment Confirmed', icon: 'credit-card',  color: '#2563eb' },
-  { key: 'accepted',  label: 'Accepted',          icon: 'thumbs-up',    color: '#2563eb' },
-  { key: 'preparing', label: 'Preparing',         icon: 'coffee',       color: '#d97706' },
-  { key: 'ready',     label: 'Ready for Pickup',  icon: 'package',      color: '#059669' },
-  { key: 'completed', label: 'Completed',         icon: 'check-circle', color: '#7c3aed' },
-];
-
-const STATUS_MSGS = {
-  pending:   'Your order is being processed...',
-  confirmed: 'Payment confirmed! Waiting for the barista...',
-  accepted:  'The barista has your order! ☕',
-  preparing: 'Brewing in progress...',
-  ready:     '🎉 Head to the counter — it\'s ready!',
-  completed: 'Enjoy! Come back soon 🙌',
-  picked_up: 'Order picked up. Enjoy! 🙌',
-  cancelled: 'This order was cancelled.',
-};
-
-const shortId   = (id) => id?.slice(0, 8)?.toUpperCase() || '—';
+const shortId    = (id) => id?.slice(0, 8)?.toUpperCase() || '—';
 const formatDate = (d) => {
   if (!d) return '';
   return new Date(d).toLocaleDateString('en-US', {
@@ -53,9 +35,7 @@ const normalizeItems = (order) => {
   }));
 };
 
-// ── Review Modal ──────────────────────────────────────────────────────────────
-// FIX Bug 1: routes through POST /api/v1/reviews so it hits the real schema
-// (user_id + body columns, validated server-side)
+// ── Review Modal ─────────────────────────────────────────────────────────────
 function ReviewModal({ orderId, shopId, onClose, onSubmitted }) {
   const [rating,     setRating]     = useState(5);
   const [body,       setBody]       = useState('');
@@ -67,7 +47,6 @@ function ReviewModal({ orderId, shopId, onClose, onSubmitted }) {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) { Alert.alert('Sign in required'); return; }
 
-      // Route through the API — uses real schema: user_id + body
       await apiClient.post('/api/v1/reviews', {
         shop_id:  shopId,
         order_id: orderId,
@@ -78,7 +57,6 @@ function ReviewModal({ orderId, shopId, onClose, onSubmitted }) {
       onSubmitted();
     } catch (e) {
       const msg = e.message || 'Could not submit review';
-      // 409 = already reviewed this order
       if (msg.includes('409') || msg.toLowerCase().includes('already')) {
         Alert.alert('Already Reviewed', 'You already left a review for this order.');
         onClose();
@@ -132,28 +110,14 @@ function ReviewModal({ orderId, shopId, onClose, onSubmitted }) {
   );
 }
 
-// ── Main Screen ───────────────────────────────────────────────────────────────
-export default function OrderTrackingScreen() {
+// ── Main Screen ──────────────────────────────────────────────────────────────
+export default function OrderConfirmationScreen() {
   const router = useRouter();
   const { id }  = useLocalSearchParams();
   const [order,      setOrder]      = useState(null);
   const [loading,    setLoading]    = useState(true);
   const [showReview, setShowReview] = useState(false);
   const [reviewed,   setReviewed]   = useState(false);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    if (order?.status === 'ready') {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.06, duration: 600, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1.0,  duration: 600, useNativeDriver: true }),
-        ])
-      ).start();
-    } else {
-      pulseAnim.setValue(1);
-    }
-  }, [order?.status]);
 
   const loadOrder = async () => {
     try {
@@ -162,7 +126,7 @@ export default function OrderTrackingScreen() {
       const data = await apiClient.get(`/api/v1/orders/${id}`, session.access_token);
       setOrder(data.order || data);
     } catch (err) {
-      console.error('[OrderTracking] loadOrder error:', err);
+      console.error('[OrderConfirmation] loadOrder error:', err);
     } finally {
       setLoading(false);
     }
@@ -171,31 +135,7 @@ export default function OrderTrackingScreen() {
   useEffect(() => {
     if (!id) return;
     loadOrder();
-    // Poll every 15s as fallback — realtime handles most updates
-    const interval = setInterval(loadOrder, 15000);
-    return () => clearInterval(interval);
   }, [id]);
-
-  // Realtime subscription for instant status updates
-  useEffect(() => {
-    if (!id) return;
-    const channel = supabase
-      .channel(`order-tracking-${id}`)
-      .on('postgres_changes', {
-        event:  'UPDATE',
-        schema: 'public',
-        table:  'orders',
-        filter: `id=eq.${id}`,
-      }, (payload) => {
-        setOrder(prev => prev ? { ...prev, ...payload.new } : payload.new);
-        if (['completed', 'picked_up'].includes(payload.new?.status) && !reviewed) {
-          setTimeout(() => setShowReview(true), 1200);
-        }
-      })
-      .subscribe();
-
-    return () => supabase.removeChannel(channel);
-  }, [id, reviewed]);
 
   if (loading) {
     return (
@@ -204,7 +144,7 @@ export default function OrderTrackingScreen() {
           <TouchableOpacity style={styles.headerBtn} onPress={() => router.back()}>
             <Feather name="arrow-left" size={22} color="#000" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Order Tracking</Text>
+          <Text style={styles.headerTitle}>Order</Text>
           <View style={styles.headerBtn} />
         </View>
         <View style={styles.centered}>
@@ -222,7 +162,7 @@ export default function OrderTrackingScreen() {
           <TouchableOpacity style={styles.headerBtn} onPress={() => router.back()}>
             <Feather name="arrow-left" size={22} color="#000" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Order Tracking</Text>
+          <Text style={styles.headerTitle}>Order</Text>
           <View style={styles.headerBtn} />
         </View>
         <View style={styles.centered}>
@@ -236,20 +176,17 @@ export default function OrderTrackingScreen() {
     );
   }
 
-  const items            = normalizeItems(order);
-  const shopName         = order.shops?.name || 'Shop';
-  const shopLogo         = order.shops?.logo_url;
-  const currentStatus    = order.status || 'pending';
-  const currentStatusIdx = ORDER_STATUSES.findIndex(s => s.key === currentStatus);
-  const isCancelled      = currentStatus === 'cancelled';
-  const isCompleted      = ['completed', 'picked_up'].includes(currentStatus);
-  const isReady          = currentStatus === 'ready';
+  const items        = normalizeItems(order);
+  const shopName     = order.shops?.name || 'Shop';
+  const shopLogo     = order.shops?.logo_url;
+  const status       = order.status || 'pending';
+  const isCancelled  = status === 'cancelled';
+  const isActive     = status === 'pending' || status === 'confirmed';
+  const prepMinutes  = order.metadata?.prep_minutes || order.shops?.avg_prep_time_minutes || 10;
 
-  // FIX Bug 2: discount_amount is in metadata, not top-level
-  const discountAmount     = parseFloat(order.metadata?.discount_amount || order.discount_amount || 0);
-  // FIX Bug 3: points earned also stored in metadata by payments.py
-  const pointsEarned       = order.metadata?.loyalty_points_earned || 0;
-  const pointsRedeemed     = order.metadata?.loyalty_points_redeemed || 0;
+  const discountAmount = parseFloat(order.metadata?.discount_amount || order.discount_amount || 0);
+  const pointsEarned   = order.metadata?.loyalty_points_earned || 0;
+  const pointsRedeemed = order.metadata?.loyalty_points_redeemed || 0;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -265,13 +202,17 @@ export default function OrderTrackingScreen() {
 
       <ScrollView contentContainerStyle={{ paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
 
-        {isReady && (
-          <Animated.View style={[styles.readyBanner, { transform: [{ scale: pulseAnim }] }]}>
-            <Text style={styles.readyBannerText}>🎉 Your order is ready! Head to the counter.</Text>
-          </Animated.View>
+        {/* ETA banner for active orders */}
+        {isActive && (
+          <View style={styles.etaBanner}>
+            <Text style={styles.etaBannerTitle}>Order sent to {shopName}! ☕</Text>
+            <Text style={styles.etaBannerText}>
+              It'll be ready in about {prepMinutes} minutes. Head over and pick it up.
+            </Text>
+          </View>
         )}
 
-        {/* Shop + status */}
+        {/* Shop + summary */}
         <View style={styles.card}>
           <View style={styles.shopRow}>
             {shopLogo
@@ -282,54 +223,12 @@ export default function OrderTrackingScreen() {
               <Text style={styles.shopName}>{shopName}</Text>
               <Text style={styles.orderMeta}>{formatDate(order.created_at)}</Text>
             </View>
-            <View style={[
-              styles.statusBadge,
-              { backgroundColor: isCancelled ? '#fee2e2' : isCompleted ? '#ede9fe' : '#fef3c7' }
-            ]}>
-              <Text style={[
-                styles.statusBadgeText,
-                { color: isCancelled ? '#dc2626' : isCompleted ? '#7c3aed' : '#d97706' }
-              ]}>
-                {currentStatus.toUpperCase().replace('_', ' ')}
-              </Text>
-            </View>
           </View>
-          <Text style={styles.statusMsg}>{STATUS_MSGS[currentStatus] || currentStatus}</Text>
+          {isCancelled
+            ? <Text style={styles.statusMsg}>This order was cancelled.</Text>
+            : <Text style={styles.statusMsg}>Thanks for your order!</Text>
+          }
         </View>
-
-        {/* Progress tracker */}
-        {!isCancelled && (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Progress</Text>
-            {ORDER_STATUSES.map((s, i) => {
-              const isDone    = i < currentStatusIdx || isCompleted;
-              const isCurrent = i === currentStatusIdx && !isCompleted;
-              return (
-                <View key={s.key} style={styles.stepRow}>
-                  <View style={[
-                    styles.stepCircle,
-                    isDone    && { backgroundColor: '#059669', borderColor: '#059669' },
-                    isCurrent && { backgroundColor: s.color,   borderColor: s.color },
-                  ]}>
-                    <Feather
-                      name={isDone ? 'check' : s.icon}
-                      size={14}
-                      color={isDone || isCurrent ? '#fff' : '#d1d5db'}
-                    />
-                  </View>
-                  {i < ORDER_STATUSES.length - 1 && (
-                    <View style={[styles.stepLine, isDone && { backgroundColor: '#059669' }]} />
-                  )}
-                  <Text style={[
-                    styles.stepLabel,
-                    isDone    && { color: '#059669', fontWeight: '700' },
-                    isCurrent && { color: s.color,   fontWeight: '800' },
-                  ]}>{s.label}</Text>
-                </View>
-              );
-            })}
-          </View>
-        )}
 
         {isCancelled && (
           <View style={[styles.card, { alignItems: 'center' }]}>
@@ -379,7 +278,6 @@ export default function OrderTrackingScreen() {
               <Text style={styles.totalValue}>${parseFloat(order.tax).toFixed(2)}</Text>
             </View>
           )}
-          {/* FIX Bug 2: read from metadata */}
           {discountAmount > 0 && (
             <View style={styles.totalRow}>
               <Text style={[styles.totalLabel, { color: '#059669' }]}>
@@ -396,7 +294,6 @@ export default function OrderTrackingScreen() {
             <Feather name="lock" size={12} color="#6b7280" />
             <Text style={styles.squareBadgeText}>Paid securely via Square</Text>
           </View>
-          {/* FIX Bug 3: only show if we actually have the value */}
           {pointsEarned > 0 && (
             <View style={styles.pointsBadge}>
               <Feather name="award" size={14} color="#d97706" />
@@ -405,7 +302,7 @@ export default function OrderTrackingScreen() {
           )}
         </View>
 
-        {isCompleted && !reviewed && (
+        {!isCancelled && !reviewed && (
           <TouchableOpacity style={styles.reviewButton} onPress={() => setShowReview(true)}>
             <Feather name="star" size={18} color="#fff" />
             <Text style={styles.reviewButtonText}>Leave a Review</Text>
@@ -450,22 +347,17 @@ const styles = StyleSheet.create({
   centered:             { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText:          { marginTop: 12, color: '#6b7280', fontSize: 14 },
   errorText:            { fontSize: 16, color: '#9ca3af', marginTop: 8 },
-  readyBanner:          { margin: 16, marginBottom: 0, backgroundColor: '#059669', borderRadius: 14, padding: 16, alignItems: 'center' },
-  readyBannerText:      { color: '#fff', fontWeight: '800', fontSize: 15, textAlign: 'center' },
+  etaBanner:            { margin: 16, marginBottom: 0, backgroundColor: '#d97706', borderRadius: 14, padding: 16, alignItems: 'center' },
+  etaBannerTitle:       { color: '#fff', fontWeight: '800', fontSize: 16, textAlign: 'center', marginBottom: 4 },
+  etaBannerText:        { color: '#fff', fontWeight: '600', fontSize: 13, textAlign: 'center', opacity: 0.95 },
   card:                 { margin: 16, marginBottom: 0, backgroundColor: '#fff', borderRadius: 16, padding: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
   shopRow:              { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   shopLogo:             { width: 44, height: 44, borderRadius: 22, backgroundColor: '#f3f4f6' },
   shopLogoPlaceholder:  { width: 44, height: 44, borderRadius: 22, backgroundColor: '#fef3c7', alignItems: 'center', justifyContent: 'center' },
   shopName:             { fontSize: 16, fontWeight: '700', color: '#111827' },
   orderMeta:            { fontSize: 12, color: '#9ca3af', marginTop: 2 },
-  statusBadge:          { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  statusBadgeText:      { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
   statusMsg:            { fontSize: 14, color: '#6b7280', fontStyle: 'italic' },
   sectionTitle:         { fontSize: 12, fontWeight: '700', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 },
-  stepRow:              { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  stepCircle:           { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: '#d1d5db', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f9fafb' },
-  stepLine:             { position: 'absolute', left: 13, top: 28, width: 2, height: 8, backgroundColor: '#d1d5db' },
-  stepLabel:            { marginLeft: 12, fontSize: 14, color: '#9ca3af' },
   cancelTitle:          { fontSize: 20, fontWeight: '800', color: '#dc2626', marginTop: 12 },
   cancelSub:            { fontSize: 14, color: '#9ca3af', textAlign: 'center', marginTop: 6 },
   itemRow:              { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },

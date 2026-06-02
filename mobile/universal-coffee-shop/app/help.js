@@ -20,19 +20,23 @@ const FAQS = [
     items: [
       {
         q: 'How do I place a mobile order?',
-        a: "Browse shops on the home screen, tap a shop to open its menu, add items to your cart, then tap \"View Cart\" and proceed to checkout. Your card is charged only when the order is confirmed.",
+        a: "Browse shops on the home screen, tap a shop to open its menu, add items to your cart, then tap \"View Cart\" and proceed to checkout. Your card is charged only when the order is sent to the shop.",
+      },
+      {
+        q: 'When will my order be ready?',
+        a: "Right after you order, you'll see an estimated time — usually around 10 minutes, but each shop sets their own. Your order is sent straight to the shop's counter, so just head over and pick it up when it's ready.",
       },
       {
         q: 'Can I cancel an order after placing it?',
-        a: "You can cancel an order while it's still in \"Pending\" or \"Confirmed\" status — before the shop starts preparing it. Go to Order History, tap the order, and hit Cancel. Once a shop starts making it, cancellation is no longer available.",
+        a: "You can cancel right after placing it, while it's still showing as \"Placed\". Go to Order History, tap the order, and hit Cancel. Once the shop has started making it, cancellation may no longer be available — contact the shop directly.",
       },
       {
         q: "My card was charged but I got an error — what happened?",
         a: "This is rare but can happen if your connection drops at the wrong moment. If you were charged and don't see an order in your Order History, email us at support@loyalcupapp.com with your email and approximate order time.",
       },
       {
-        q: 'How do I know when my order is ready?',
-        a: "You'll receive a push notification when the shop marks your order \"Ready for pickup\". You can also track your order status in real time under Order History.",
+        q: 'How do I know the shop got my order?',
+        a: "As soon as you check out, your order prints at the shop's counter marked \"MOBILE\" and you'll get a confirmation with your pickup time. If something goes wrong sending it, we'll tell you right away and you won't be charged.",
       },
     ],
   },
@@ -41,7 +45,7 @@ const FAQS = [
     items: [
       {
         q: 'How do I earn loyalty points?',
-        a: "Points are awarded automatically after each completed mobile order. Each shop sets its own earn rate — for example, 10 points per dollar spent. You can see a shop's loyalty details on their menu page.",
+        a: "Points are awarded automatically after each mobile order. Each shop sets its own earn rate — for example, 10 points per dollar spent. You can see a shop's loyalty details on their menu page.",
       },
       {
         q: 'How do I redeem points?',
@@ -83,7 +87,7 @@ const FAQS = [
     items: [
       {
         q: 'How do I get a refund?',
-        a: "Refunds are handled by each shop individually — LoyalCup processes the payment but the shop owner approves refunds. Tap the order in Order History and use \"Contact Shop\" or reach out to support@loyalcupapp.com.",
+        a: "Refunds are handled by each shop individually — LoyalCup processes the payment but the shop owner approves refunds. Tap the order in Order History and use \"Contact Shop\" or reach out to us at support@loyalcupapp.com.",
       },
       {
         q: 'My order was wrong or incomplete — what do I do?',
@@ -182,7 +186,7 @@ export default function HelpScreen() {
 
 const styles = StyleSheet.create({
   container:      { flex: 1, backgroundColor: '#F5F5F5' },
-  header:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  header:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#EEE' },
   headerSide:     { width: 40, padding: 4 },
   headerTitle:    { fontSize: 18, fontWeight: '800', color: '#000' },
   scroll:         { paddingVertical: 20, paddingHorizontal: 16, paddingBottom: 40 },

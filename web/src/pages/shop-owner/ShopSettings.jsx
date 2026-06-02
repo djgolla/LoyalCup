@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Store, MapPin, Clock, Image as ImageIcon,
-  Save, Upload, X, Check, Smartphone, Power
+  Save, Upload, X, Check, Smartphone, Power, Timer, Printer
 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import supabase from '../../lib/supabase';
@@ -64,6 +64,7 @@ export default function ShopSettings() {
     banner_url:              '',
     hours:                   DEFAULT_HOURS,
     mobile_ordering_enabled: true,
+    avg_prep_time_minutes:   10,
   });
 
   const [savedAddress, setSavedAddress] = useState('');
@@ -83,6 +84,7 @@ export default function ShopSettings() {
         banner_url:              shop.banner_url              || '',
         hours:                   shop.hours                   || DEFAULT_HOURS,
         mobile_ordering_enabled: shop.mobile_ordering_enabled ?? true,
+        avg_prep_time_minutes:   shop.avg_prep_time_minutes   ?? 10,
       });
       setSavedAddress([shop.address, shop.city, shop.state, shop.zip].filter(Boolean).join(', '));
     }
@@ -142,6 +144,14 @@ export default function ShopSettings() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Validate prep time (1–120 min)
+    const prep = parseInt(formData.avg_prep_time_minutes, 10);
+    if (isNaN(prep) || prep < 1 || prep > 120) {
+      toast.error('Average prep time must be between 1 and 120 minutes.');
+      return;
+    }
+
     try {
       setLoading(true);
 
@@ -177,6 +187,7 @@ export default function ShopSettings() {
         banner_url:              formData.banner_url              || null,
         hours:                   formData.hours,
         mobile_ordering_enabled: formData.mobile_ordering_enabled,
+        avg_prep_time_minutes:   prep,
         updated_at:              new Date().toISOString(),
         ...geoUpdate,
       }).eq('id', shopId);
@@ -235,6 +246,64 @@ export default function ShopSettings() {
           )}
         </motion.div>
 
+        {/* ── Prep Time (REQUIRED — drives the customer ETA) ── */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.07 }}
+          className="bg-white dark:bg-neutral-900 rounded-2xl p-5 border-2 border-amber-200 dark:border-amber-800 shadow-lg">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/20 shrink-0">
+              <Timer className="w-5 h-5 text-amber-600" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-base font-bold text-gray-900 dark:text-white">
+                Average Prep Time <span className="text-red-500">*</span>
+              </h2>
+              <p className="text-sm text-gray-500 mb-3">
+                When a customer orders, we tell them their drink will be ready in about this long.
+                Set it to match how long a typical mobile order takes at your busiest realistic pace —
+                it's better to slightly over-estimate than leave customers waiting.
+              </p>
+              <div className="flex items-center gap-3">
+                <input
+                  type="number"
+                  min="1"
+                  max="120"
+                  required
+                  value={formData.avg_prep_time_minutes}
+                  onChange={e => setFormData(prev => ({ ...prev, avg_prep_time_minutes: e.target.value }))}
+                  className="w-28 px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-amber-300 dark:border-amber-700 rounded-xl focus:outline-none focus:border-amber-500 transition font-bold text-lg"
+                />
+                <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">minutes</span>
+              </div>
+              <p className="text-xs text-amber-700 dark:text-amber-500 mt-2">
+                Preview: “Order placed! {formData.name || 'Your shop'} will have it ready in about {formData.avg_prep_time_minutes || 10} minutes.”
+              </p>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* ── Mobile Order Printing (Square auto-print guidance) ── */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.09 }}
+          className="bg-white dark:bg-neutral-900 rounded-2xl p-5 border-2 border-gray-200 dark:border-neutral-800 shadow-lg">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-xl bg-blue-100 dark:bg-blue-900/20 shrink-0">
+              <Printer className="w-5 h-5 text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-base font-bold text-gray-900 dark:text-white mb-1">How Mobile Orders Reach You</h2>
+              <p className="text-sm text-gray-500 mb-2">
+                Every mobile order is sent straight into your Square account and shows up in your
+                <strong> Square Orders</strong>, clearly marked <strong>“MOBILE”</strong> on the ticket — just like a normal order.
+              </p>
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-xl text-sm text-blue-700 dark:text-blue-400">
+                <p className="font-semibold mb-1">✅ One-time setup: turn on auto-print</p>
+                In your Square hardware/printer settings, enable <strong>automatic printing for online orders</strong>.
+                Then every LoyalCup order prints at your counter automatically — your baristas just make it and hand it over.
+                No extra screen, no status buttons to tap.
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
         {/* ── Shop Images ── */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
           className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border-2 border-gray-200 dark:border-neutral-800 shadow-lg">
@@ -275,7 +344,7 @@ export default function ShopSettings() {
                 <div
                   onDragEnter={e => handleDrag(e, type)} onDragLeave={e => handleDrag(e, type)}
                   onDragOver={e => handleDrag(e, type)} onDrop={e => handleDrop(e, type)}
-                  className={`relative border-2 border-dashed rounded-2xl p-4 text-center transition ${dragActive === type ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20' : 'border-gray-300 dark:border-neutral-700 hover:border-amber-400'}`}
+                  className={`relative border-2 border-dashed rounded-2xl p-4 text-center transition ${dragActive === type ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20' : 'border-gray-300 dark:border-neutral-700'}`}
                 >
                   {formData[field] ? (
                     <div className="relative">

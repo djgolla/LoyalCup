@@ -73,7 +73,7 @@ export default function ShopOwnerSidebar() {
         <Link to="/shop-owner/customizations" icon={Sliders}    requiresSquare>Modifiers</Link>
 
         <Section>Operations</Section>
-        <Link to="/shop-owner/orders"    icon={ShoppingBag} requiresSquare>Orders</Link>
+        <Link to="/shop-owner/orders"    icon={ShoppingBag} requiresSquare>Order Log</Link>
         <Link to="/shop-owner/reviews"   icon={Star}        requiresSquare>Reviews</Link>
         <Link to="/shop-owner/loyalty"   icon={Award}       requiresSquare>Loyalty</Link>
         <Link to="/shop-owner/analytics" icon={BarChart3}   requiresSquare>Analytics</Link>

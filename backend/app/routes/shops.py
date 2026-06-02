@@ -5,7 +5,7 @@ Includes public, shop owner, and admin endpoints
 import secrets
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Query
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 
 from app.services.shop_service import shop_service
 from app.utils.security import require_auth, require_admin
@@ -21,6 +21,14 @@ router = APIRouter(
 # PYDANTIC MODELS
 # ============================================================================
 
+def _validate_prep_time(v):
+    if v is None:
+        return v
+    if v < 1 or v > 120:
+        raise ValueError("Average prep time must be between 1 and 120 minutes")
+    return v
+
+
 class ShopCreate(BaseModel):
     name: str
     description: Optional[str] = None
@@ -33,6 +41,12 @@ class ShopCreate(BaseModel):
     hours: Optional[Dict[str, Any]] = None
     loyalty_points_per_dollar: int = 0
     participates_in_global_loyalty: bool = False
+    # Customers are told their order will be ready in ~this many minutes.
+    avg_prep_time_minutes: int = 10
+
+    @validator("avg_prep_time_minutes")
+    def _prep(cls, v):
+        return _validate_prep_time(v)
 
 
 class ShopUpdate(BaseModel):
@@ -47,6 +61,11 @@ class ShopUpdate(BaseModel):
     hours: Optional[Dict[str, Any]] = None
     loyalty_points_per_dollar: Optional[int] = None
     participates_in_global_loyalty: Optional[bool] = None
+    avg_prep_time_minutes: Optional[int] = None
+
+    @validator("avg_prep_time_minutes")
+    def _prep(cls, v):
+        return _validate_prep_time(v)
 
 
 class ShopApplicationRequest(BaseModel):
@@ -220,7 +239,6 @@ async def generate_shop_api_key(shop_id: str, user: dict = Depends(require_auth(
 
     db = get_supabase()
 
-    # FIXED: was db.execute_query() which doesn't exist — use get_service_client()
     shop_resp = (
         db.get_service_client()
         .table("shops")

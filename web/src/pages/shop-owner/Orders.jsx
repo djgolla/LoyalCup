@@ -1,50 +1,28 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Clock, CheckCircle, XCircle, Package, Search, ShoppingBag,
-  Eye, AlertCircle, Coffee, X, ChevronRight, Loader2, Terminal,
+  Clock, CheckCircle, XCircle, Search, ShoppingBag,
+  Eye, AlertCircle, Coffee, X, ChevronRight, Loader2, Terminal, Printer,
 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import supabase from '../../lib/supabase';
 import { toast } from 'sonner';
 
-// ─── Status config ─────────────────────────────────────────────────────────
+// ─── Status config (display only — no workflow) ─────────────────────────────
+// Orders are simply Placed, Completed, or Cancelled. Everything routes to the
+// shop's Square POS and prints marked "MOBILE"; baristas make it from the ticket.
 const STATUS_CONFIG = {
-  confirmed: { color: 'from-emerald-500 to-green-500',  bg: 'bg-emerald-100 dark:bg-emerald-900/20', text: 'text-emerald-700 dark:text-emerald-400', icon: Terminal,    label: 'New Order'  },
-  pending:   { color: 'from-yellow-500 to-amber-500',   bg: 'bg-yellow-100 dark:bg-yellow-900/20',   text: 'text-yellow-700 dark:text-yellow-400',  icon: Clock,        label: 'Pending'    },
-  accepted:  { color: 'from-blue-500 to-blue-600',      bg: 'bg-blue-100 dark:bg-blue-900/20',       text: 'text-blue-700 dark:text-blue-400',      icon: Package,      label: 'Accepted'   },
-  preparing: { color: 'from-purple-500 to-purple-600',  bg: 'bg-purple-100 dark:bg-purple-900/20',   text: 'text-purple-700 dark:text-purple-400',  icon: Coffee,       label: 'Preparing'  },
-  ready:     { color: 'from-green-500 to-green-600',    bg: 'bg-green-100 dark:bg-green-900/20',     text: 'text-green-700 dark:text-green-400',    icon: CheckCircle,  label: 'Ready'      },
-  picked_up: { color: 'from-teal-500 to-teal-600',      bg: 'bg-teal-100 dark:bg-teal-900/20',       text: 'text-teal-700 dark:text-teal-400',      icon: CheckCircle,  label: 'Picked Up'  },
-  completed: { color: 'from-gray-500 to-gray-600',      bg: 'bg-gray-100 dark:bg-gray-800',          text: 'text-gray-600 dark:text-gray-400',      icon: CheckCircle,  label: 'Completed'  },
-  cancelled: { color: 'from-red-500 to-red-600',        bg: 'bg-red-100 dark:bg-red-900/20',         text: 'text-red-700 dark:text-red-400',        icon: XCircle,      label: 'Cancelled'  },
+  confirmed: { bg: 'bg-emerald-100 dark:bg-emerald-900/20', text: 'text-emerald-700 dark:text-emerald-400', icon: Terminal,   label: 'Placed'    },
+  pending:   { bg: 'bg-amber-100 dark:bg-amber-900/20',     text: 'text-amber-700 dark:text-amber-400',     icon: Clock,      label: 'Placed'    },
+  completed: { bg: 'bg-gray-100 dark:bg-gray-800',          text: 'text-gray-600 dark:text-gray-400',       icon: CheckCircle,label: 'Completed' },
+  cancelled: { bg: 'bg-red-100 dark:bg-red-900/20',         text: 'text-red-700 dark:text-red-400',         icon: XCircle,    label: 'Cancelled' },
 };
 
-// Statuses that are real visible orders — exclude payment lifecycle statuses
-const VISIBLE_STATUSES = ['confirmed', 'pending', 'accepted', 'preparing', 'ready', 'picked_up', 'completed', 'cancelled'];
+// Real visible orders — exclude payment lifecycle ghost statuses
+const VISIBLE_STATUSES = ['confirmed', 'pending', 'completed', 'cancelled'];
 
-const NEXT_STATUSES = {
-  confirmed:  ['accepted', 'cancelled'],
-  pending:    ['accepted', 'cancelled'],
-  accepted:   ['preparing', 'cancelled'],
-  preparing:  ['ready', 'cancelled'],
-  ready:      ['picked_up'],
-  picked_up:  ['completed'],
-  completed:  [],
-  cancelled:  [],
-};
-
-const STATUS_ACTION_LABELS = {
-  accepted:  { label: 'Accept Order',    color: 'bg-blue-500 hover:bg-blue-600'     },
-  preparing: { label: 'Start Preparing', color: 'bg-purple-500 hover:bg-purple-600' },
-  ready:     { label: 'Mark Ready',      color: 'bg-green-500 hover:bg-green-600'   },
-  picked_up: { label: 'Mark Picked Up',  color: 'bg-teal-500 hover:bg-teal-600'     },
-  completed: { label: 'Complete Order',  color: 'bg-gray-600 hover:bg-gray-700'     },
-  cancelled: { label: 'Cancel Order',    color: 'bg-red-500 hover:bg-red-600'       },
-};
-
-const shortId      = (id) => id?.slice(0, 8).toUpperCase() || '—';
-const formatDate   = (d) => {
+const shortId    = (id) => id?.slice(0, 8).toUpperCase() || '—';
+const formatDate = (d) => {
   if (!d) return '';
   const date    = new Date(d);
   const isToday = date.toDateString() === new Date().toDateString();
@@ -67,10 +45,10 @@ const normalizeItems = (order) => {
 
 // ─── Order card ─────────────────────────────────────────────────────────────
 const OrderCard = ({ order, onViewDetails, delay }) => {
-  const config     = STATUS_CONFIG[order.status] || STATUS_CONFIG.confirmed;
+  const config = STATUS_CONFIG[order.status] || STATUS_CONFIG.confirmed;
   const StatusIcon = config.icon;
-  const items      = normalizeItems(order);
-  const isNew      = order.status === 'confirmed';
+  const items  = normalizeItems(order);
+  const isNew  = order.status === 'confirmed' || order.status === 'pending';
 
   return (
     <motion.div
@@ -92,15 +70,15 @@ const OrderCard = ({ order, onViewDetails, delay }) => {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
           </span>
-          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">
-            New — Paid via App
+          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide flex items-center gap-1">
+            <Printer className="w-3 h-3" /> Printed at counter · MOBILE
           </span>
         </div>
       )}
 
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
-          <div className={`p-2.5 bg-gradient-to-br ${config.color} rounded-xl shadow`}>
+          <div className="p-2.5 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl shadow">
             <ShoppingBag className="w-5 h-5 text-white" />
           </div>
           <div>
@@ -139,7 +117,7 @@ const OrderCard = ({ order, onViewDetails, delay }) => {
         </span>
         <div className="flex items-center gap-1 text-amber-600 text-sm font-semibold">
           <Eye className="w-4 h-4" />
-          <span>Manage</span>
+          <span>View</span>
           <ChevronRight className="w-4 h-4" />
         </div>
       </div>
@@ -147,51 +125,14 @@ const OrderCard = ({ order, onViewDetails, delay }) => {
   );
 };
 
-// ─── Order details modal ──────────────────────────────────────────────────────
-const OrderDetailsModal = ({ order: initialOrder, onClose, onStatusUpdated }) => {
-  const [order,    setOrder]    = useState(initialOrder);
-  const [updating, setUpdating] = useState(false);
-
+// ─── Order details modal (read-only) ────────────────────────────────────────
+const OrderDetailsModal = ({ order, onClose }) => {
   if (!order) return null;
 
-  const items        = normalizeItems(order);
-  const config       = STATUS_CONFIG[order.status] || STATUS_CONFIG.confirmed;
-  const StatusIcon   = config.icon;
-  const nextStatuses = NEXT_STATUSES[order.status] || [];
-
-  // FIX: discount_amount is stored in dollars in metadata, not derived from points count
+  const items  = normalizeItems(order);
+  const config = STATUS_CONFIG[order.status] || STATUS_CONFIG.confirmed;
+  const StatusIcon = config.icon;
   const discountAmount = parseFloat(order.metadata?.discount_amount || 0);
-
-  const handleStatusChange = async (newStatus) => {
-    setUpdating(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) throw new Error('Not authenticated');
-
-      const res = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/v1/shops/${order.shop_id}/orders/${order.id}/status`,
-        {
-          method:  'PUT',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body:    JSON.stringify({ status: newStatus }),
-        }
-      );
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Failed to update status');
-      }
-
-      const updated = { ...order, status: newStatus };
-      setOrder(updated);
-      onStatusUpdated?.(updated);
-      toast.success(`Order ${STATUS_CONFIG[newStatus]?.label || newStatus}`);
-    } catch (err) {
-      toast.error(err.message || 'Failed to update status');
-    } finally {
-      setUpdating(false);
-    }
-  };
 
   return (
     <motion.div
@@ -228,6 +169,12 @@ const OrderDetailsModal = ({ order: initialOrder, onClose, onStatusUpdated }) =>
         {/* Body */}
         <div className="p-5 space-y-5 overflow-y-auto flex-1">
 
+          {/* Print reminder */}
+          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-neutral-800 rounded-xl px-3 py-2">
+            <Printer className="w-3.5 h-3.5" />
+            <span>This order printed at your Square station marked “MOBILE”.</span>
+          </div>
+
           {/* Payment badge */}
           {order.metadata?.square_payment_id && (
             <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-neutral-800 rounded-xl px-3 py-2">
@@ -245,31 +192,6 @@ const OrderDetailsModal = ({ order: initialOrder, onClose, onStatusUpdated }) =>
               <p className="text-sm text-gray-700 dark:text-gray-300">
                 {order.metadata?.customer_note || order.notes}
               </p>
-            </div>
-          )}
-
-          {/* Status actions */}
-          {nextStatuses.length > 0 && (
-            <div>
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Update Status</p>
-              <div className="flex flex-wrap gap-2">
-                {nextStatuses.map(s => {
-                  const c = STATUS_ACTION_LABELS[s];
-                  return (
-                    <motion.button
-                      key={s}
-                      whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                      disabled={updating}
-                      onClick={() => handleStatusChange(s)}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-white text-sm font-bold transition disabled:opacity-50 disabled:cursor-not-allowed
-                        ${s === 'cancelled' ? 'bg-red-500 hover:bg-red-600' : c?.color || 'bg-gray-500 hover:bg-gray-600'}`}
-                    >
-                      {updating && <Loader2 className="w-4 h-4 animate-spin" />}
-                      {c?.label || `Mark ${STATUS_CONFIG[s]?.label || s}`}
-                    </motion.button>
-                  );
-                })}
-              </div>
             </div>
           )}
 
@@ -313,7 +235,7 @@ const OrderDetailsModal = ({ order: initialOrder, onClose, onStatusUpdated }) =>
             )}
           </div>
 
-          {/* Totals — FIX: discount_amount is in dollars in metadata */}
+          {/* Totals */}
           <div className="bg-gray-50 dark:bg-neutral-800 rounded-xl p-4 space-y-2">
             <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
               <span>Subtotal</span>
@@ -345,14 +267,14 @@ const OrderDetailsModal = ({ order: initialOrder, onClose, onStatusUpdated }) =>
   );
 };
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+// ─── Main page ──────────────────────────────────────────────────────────────
 export default function Orders() {
-  const { shopId }                            = useShop();
-  const [orders,        setOrders]            = useState([]);
-  const [loading,       setLoading]           = useState(true);
-  const [filterStatus,  setFilterStatus]      = useState('all');
-  const [searchQuery,   setSearchQuery]       = useState('');
-  const [selectedOrder, setSelectedOrder]     = useState(null);
+  const { shopId }                        = useShop();
+  const [orders,        setOrders]        = useState([]);
+  const [loading,       setLoading]       = useState(true);
+  const [filterStatus,  setFilterStatus]  = useState('all');
+  const [searchQuery,   setSearchQuery]   = useState('');
+  const [selectedOrder, setSelectedOrder] = useState(null);
 
   const loadOrders = useCallback(async () => {
     if (!shopId) return;
@@ -367,7 +289,6 @@ export default function Orders() {
           )
         `)
         .eq('shop_id', shopId)
-        // FIX: never show payment lifecycle ghost orders to the barista
         .in('status', VISIBLE_STATUSES)
         .order('created_at', { ascending: false });
 
@@ -391,11 +312,10 @@ export default function Orders() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'orders', filter: `shop_id=eq.${shopId}` },
         (payload) => {
-          // Only ping if the new/updated status is something the barista cares about
           if (VISIBLE_STATUSES.includes(payload.new?.status)) {
             loadOrders();
             if (payload.eventType === 'INSERT') {
-              toast.success('🔔 New order received!', { duration: 6000 });
+              toast.success('🔔 New mobile order — check your printer!', { duration: 6000 });
             }
           }
         }
@@ -405,11 +325,6 @@ export default function Orders() {
     return () => supabase.removeChannel(channel);
   }, [shopId, loadOrders]);
 
-  const handleStatusUpdated = (updatedOrder) => {
-    setOrders(prev => prev.map(o => o.id === updatedOrder.id ? { ...o, status: updatedOrder.status } : o));
-    setSelectedOrder(prev => prev?.id === updatedOrder.id ? { ...prev, status: updatedOrder.status } : prev);
-  };
-
   const filteredOrders = orders.filter(order => {
     const matchesStatus = filterStatus === 'all' || order.status === filterStatus;
     if (!searchQuery) return matchesStatus;
@@ -417,15 +332,12 @@ export default function Orders() {
   });
 
   const statusCounts = orders.reduce((acc, o) => {
-    acc[o.status] = (acc[o.status] || 0) + 1;
+    const key = (o.status === 'confirmed' || o.status === 'pending') ? 'placed' : o.status;
+    acc[key] = (acc[key] || 0) + 1;
     return acc;
   }, {});
 
-  const activeCount =
-    (statusCounts.confirmed || 0) +
-    (statusCounts.pending   || 0) +
-    (statusCounts.accepted  || 0) +
-    (statusCounts.preparing || 0);
+  const todayCount = orders.filter(o => new Date(o.created_at).toDateString() === new Date().toDateString()).length;
 
   if (loading) {
     return (
@@ -440,12 +352,7 @@ export default function Orders() {
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="text-4xl font-black text-gray-900 dark:text-white mb-1">Orders</h1>
         <p className="text-gray-500 dark:text-gray-400">
-          {activeCount > 0 ? (
-            <span className="text-amber-600 font-semibold">
-              {activeCount} active order{activeCount !== 1 ? 's' : ''}
-            </span>
-          ) : 'All caught up!'}
-          {' · '}{orders.length} total
+          {todayCount} today · {orders.length} total — every order prints at your counter marked “MOBILE”.
         </p>
       </motion.div>
 
@@ -458,7 +365,7 @@ export default function Orders() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by order ID..."
-            className="w-full pl-11 pr-4 py-2.5 bg-white dark:bg-neutral-900 border-2 border-gray-200 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-amber-500 transition text-sm text-gray-900 dark:text-white"
+            className="w-full pl-11 pr-4 py-2.5 bg-white dark:bg-neutral-900 border-2 border-gray-200 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-amber-500 transition text-sm"
           />
         </div>
         <select
@@ -467,11 +374,8 @@ export default function Orders() {
           className="px-4 py-2.5 bg-white dark:bg-neutral-900 border-2 border-gray-200 dark:border-neutral-800 rounded-xl focus:outline-none focus:border-amber-500 transition text-sm text-gray-900 dark:text-white"
         >
           <option value="all">All Orders ({orders.length})</option>
-          {Object.entries(STATUS_CONFIG).map(([key, cfg]) =>
-            statusCounts[key] ? (
-              <option key={key} value={key}>{cfg.label} ({statusCounts[key]})</option>
-            ) : null
-          )}
+          <option value="completed">Completed ({statusCounts.completed || 0})</option>
+          <option value="cancelled">Cancelled ({statusCounts.cancelled || 0})</option>
         </select>
       </div>
 
@@ -506,7 +410,6 @@ export default function Orders() {
           <OrderDetailsModal
             order={selectedOrder}
             onClose={() => setSelectedOrder(null)}
-            onStatusUpdated={handleStatusUpdated}
           />
         )}
       </AnimatePresence>

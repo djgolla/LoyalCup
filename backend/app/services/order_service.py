@@ -3,21 +3,22 @@ from typing import Dict, List, Optional, Any
 
 
 class OrderService:
-    """Service layer for order operations"""
+    """Service layer for order operations.
+
+    Order statuses are intentionally minimal — there is NO customer-facing
+    preparing/ready/picked_up flow anymore. Orders are simply placed and then
+    eventually completed or cancelled (for history/accounting only).
+    """
 
     TAX_RATE = 0.0875  # fallback for cash/manual orders — Square calculates real tax
 
     VALID_TRANSITIONS = {
-        # Pre-payment states (card flow created in payments.py)
+        # Card flow (created in payments.py)
         "payment_pending": ["confirmed", "payment_failed"],
-        "payment_failed":  [],          # terminal — card was never charged
-        # Normal order lifecycle
-        "confirmed":  ["accepted", "cancelled"],
-        "pending":    ["accepted", "cancelled"],
-        "accepted":   ["preparing", "cancelled"],
-        "preparing":  ["ready",     "cancelled"],
-        "ready":      ["picked_up"],
-        "picked_up":  ["completed"],
+        "payment_failed":  [],            # terminal — card was never charged
+        # Placed orders
+        "confirmed":  ["completed", "cancelled"],   # card-paid, sent to shop
+        "pending":    ["completed", "cancelled"],   # cash, sent to shop
         "completed":  [],
         "cancelled":  [],
     }
@@ -178,6 +179,7 @@ class OrderService:
             return []
 
     async def update_order_status(self, order_id: str, new_status: str) -> Dict[str, Any]:
+        """Minimal internal transition (completed/cancelled) for accounting only."""
         if not self.db:
             raise ValueError("Database not available")
 
@@ -243,7 +245,7 @@ class OrderService:
         if not self.can_cancel_order(order.get("status")):
             raise ValueError(
                 f"Cannot cancel order with status '{order.get('status')}'. "
-                "Only new orders (confirmed/pending) can be cancelled."
+                "Only newly placed orders can be cancelled."
             )
         update_response = (
             self.db.get_service_client()
