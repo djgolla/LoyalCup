@@ -1,11 +1,12 @@
 // web/src/pages/shop-owner/LoyaltySettings.jsx
-// Shop owner loyalty page — driven by /api/v1/loyalty/* (single source of truth)
+// Shop owner loyalty page — driven by /api/v1/loyalty/* (single source of truth).
+// SHOP-SPECIFIC ONLY. The shop owner sets every value; points are usable only here.
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import {
-  Award, TrendingUp, Users, DollarSign, Sparkles, Globe, Check,
+  Award, TrendingUp, Users, Sparkles, Check,
   Info, RefreshCw, Calculator,
 } from "lucide-react";
 import { useShop } from "../../context/ShopContext";
@@ -34,13 +35,11 @@ async function authedFetch(path, opts = {}) {
 export default function LoyaltySettings() {
   const { shopId, loading: shopLoading } = useShop();
 
-  const [loading, setLoading]   = useState(true);
-  const [saving,  setSaving]    = useState(false);
-  const [globalCfg, setGlobalCfg] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving,  setSaving]  = useState(false);
   const [stats, setStats] = useState({ active_members: 0, total_issued: 0, total_redeemed: 0 });
 
   const [form, setForm] = useState({
-    use_global_system:      true,
     points_per_dollar:      10,
     min_redemption_points:  200,
     points_to_dollar_value: 0.005,
@@ -53,14 +52,11 @@ export default function LoyaltySettings() {
     if (!shopId) return;
     setLoading(true);
     try {
-      const [cfg, glob, st] = await Promise.all([
+      const [cfg, st] = await Promise.all([
         authedFetch(`/api/v1/loyalty/shop-settings/${shopId}`),
-        authedFetch(`/api/v1/loyalty/global-config`),
         authedFetch(`/api/v1/loyalty/shop-stats/${shopId}`),
       ]);
-      setGlobalCfg(glob);
       setForm({
-        use_global_system:      cfg.use_global_system,
         points_per_dollar:      cfg.points_per_dollar,
         min_redemption_points:  cfg.min_redemption_points,
         points_to_dollar_value: cfg.points_to_dollar_value,
@@ -86,30 +82,32 @@ export default function LoyaltySettings() {
   const handleSave = async (e) => {
     e?.preventDefault?.();
     if (!shopId) return;
+
+    const ppd  = Number(form.points_per_dollar);
+    const step = Number(form.min_redemption_points);
+    const pv   = Number(form.points_to_dollar_value);
+
+    if (!ppd || !step || !pv) {
+      toast.error("Fill in all three values before saving.");
+      return;
+    }
+
     try {
       setSaving(true);
       const body = {
-        use_global_system: form.use_global_system,
-        bonus_active:      !!form.bonus_active,
-        bonus_multiplier:  Number(form.bonus_multiplier) || 1.0,
-        bonus_description: form.bonus_description || null,
+        points_per_dollar:      ppd,
+        min_redemption_points:  step,
+        points_to_dollar_value: pv,
+        bonus_active:           !!form.bonus_active,
+        bonus_multiplier:       Number(form.bonus_multiplier) || 1.0,
+        bonus_description:      form.bonus_description || null,
+        is_active:              true,
       };
-      if (!form.use_global_system) {
-        body.points_per_dollar      = Number(form.points_per_dollar);
-        body.min_redemption_points  = Number(form.min_redemption_points);
-        body.points_to_dollar_value = Number(form.points_to_dollar_value);
-        if (!body.points_per_dollar || !body.min_redemption_points || !body.points_to_dollar_value) {
-          toast.error("Fill in all custom values before saving.");
-          setSaving(false);
-          return;
-        }
-      }
       const updated = await authedFetch(`/api/v1/loyalty/shop-settings/${shopId}`, {
         method: "PUT",
         body:   JSON.stringify(body),
       });
       setForm({
-        use_global_system:      updated.use_global_system,
         points_per_dollar:      updated.points_per_dollar,
         min_redemption_points:  updated.min_redemption_points,
         points_to_dollar_value: updated.points_to_dollar_value,
@@ -125,18 +123,16 @@ export default function LoyaltySettings() {
     }
   };
 
-  // ── effective values used in preview (when on global, show global's numbers)
-  const eff = form.use_global_system && globalCfg ? globalCfg : form;
-  const effPpd  = Number(eff.points_per_dollar)      || 0;
-  const effStep = Number(eff.min_redemption_points)  || 0;
-  const effPV   = Number(eff.points_to_dollar_value) || 0;
+  // ── preview math ──────────────────────────────────────────────────────────
+  const effPpd  = Number(form.points_per_dollar)      || 0;
+  const effStep = Number(form.min_redemption_points)  || 0;
+  const effPV   = Number(form.points_to_dollar_value) || 0;
   const bonusM  = form.bonus_active ? (Number(form.bonus_multiplier) || 1) : 1;
   const pctBack = (effPpd && effPV) ? (effPpd * effPV * 100).toFixed(1) : "—";
   const dollarsPerStep = (effStep * effPV).toFixed(2);
 
-  // example earn/redeem sentence
-  const sampleSpend  = 20;
-  const earnedAt$20  = Math.floor(sampleSpend * effPpd * bonusM);
+  const sampleSpend = 20;
+  const earnedAt$20 = Math.floor(sampleSpend * effPpd * bonusM);
 
   if (shopLoading || loading) return <Loading />;
 
@@ -155,79 +151,45 @@ export default function LoyaltySettings() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard color="from-amber-500 to-orange-500" icon={TrendingUp} label="Points Issued" value={stats.total_issued.toLocaleString()} />
-        <StatCard color="from-green-500 to-emerald-600" icon={Users}      label="Active Members" value={stats.active_members.toLocaleString()} subtitle="Earned points here" />
-        <StatCard color="from-purple-500 to-fuchsia-600" icon={Award}     label="Points Redeemed" value={stats.total_redeemed.toLocaleString()} />
+        <StatCard color="from-amber-500 to-orange-500"   icon={TrendingUp} label="Points Issued"   value={stats.total_issued.toLocaleString()} />
+        <StatCard color="from-green-500 to-emerald-600"  icon={Users}      label="Active Members"  value={stats.active_members.toLocaleString()} subtitle="Earned points here" />
+        <StatCard color="from-purple-500 to-fuchsia-600" icon={Award}      label="Points Redeemed" value={stats.total_redeemed.toLocaleString()} />
       </div>
 
       <form onSubmit={handleSave} className="space-y-6">
 
-        {/* Program mode */}
+        {/* Configuration */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border-2 border-gray-200 dark:border-neutral-800 shadow-lg">
           <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-amber-600" /> Program Type
+            <Calculator className="w-5 h-5 text-amber-600" /> Program Configuration
           </h2>
-          <p className="text-sm text-gray-500 mb-5">Choose how points work at your shop.</p>
+          <p className="text-sm text-gray-500 mb-5">Three numbers control everything. Points are usable only at your shop.</p>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <ModeCard
-              active={form.use_global_system}
-              onClick={() => setForm(f => ({ ...f, use_global_system: true }))}
-              icon={Globe}
-              title="LoyalCup Global Program"
-              desc={globalCfg
-                ? `${globalCfg.points_per_dollar} pts per $1 · ${globalCfg.min_redemption_points} pts = $${(globalCfg.min_redemption_points * globalCfg.points_to_dollar_value).toFixed(2)} off · ${(globalCfg.points_per_dollar * globalCfg.points_to_dollar_value * 100).toFixed(1)}% cashback`
-                : "Customers earn cross-shop points usable anywhere on LoyalCup."}
-              footer="Recommended — drives more repeat traffic across the network."
-              tone="emerald"
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Field
+              label="Points per $1 spent"
+              hint="Higher = customers earn faster."
+              type="number" min="0" step="1"
+              value={form.points_per_dollar}
+              onChange={v => setForm(f => ({ ...f, points_per_dollar: v }))}
             />
-            <ModeCard
-              active={!form.use_global_system}
-              onClick={() => setForm(f => ({ ...f, use_global_system: false }))}
-              icon={Sparkles}
-              title="Custom Shop Program"
-              desc="Set your own earning rate, redemption step, and point value. Points are usable only at your shop."
-              footer="Full control. Points are scoped to your shop only."
-              tone="purple"
+            <Field
+              label="Redemption step (pts)"
+              hint="Customers redeem in multiples of this. e.g. 200 → 200 / 400 / 600..."
+              type="number" min="1" step="1"
+              value={form.min_redemption_points}
+              onChange={v => setForm(f => ({ ...f, min_redemption_points: v }))}
+            />
+            <Field
+              label="$ value per point"
+              hint="e.g. 0.005 → 200 pts = $1 off."
+              type="number" min="0.0001" step="0.0001"
+              value={form.points_to_dollar_value}
+              onChange={v => setForm(f => ({ ...f, points_to_dollar_value: v }))}
             />
           </div>
         </motion.div>
-
-        {/* Custom values */}
-        {!form.use_global_system && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-            className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border-2 border-gray-200 dark:border-neutral-800 shadow-lg">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
-              <Calculator className="w-5 h-5 text-amber-600" /> Custom Configuration
-            </h2>
-            <p className="text-sm text-gray-500 mb-5">Three numbers control everything.</p>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Field
-                label="Points per $1 spent"
-                hint="Higher = customers earn faster."
-                type="number" min="0" step="1"
-                value={form.points_per_dollar}
-                onChange={v => setForm(f => ({ ...f, points_per_dollar: v }))}
-              />
-              <Field
-                label="Redemption step (pts)"
-                hint="Customers redeem in multiples of this. e.g. 200 → chips are 200 / 400 / 600..."
-                type="number" min="1" step="1"
-                value={form.min_redemption_points}
-                onChange={v => setForm(f => ({ ...f, min_redemption_points: v }))}
-              />
-              <Field
-                label="$ value per point"
-                hint="e.g. 0.005 → 200 pts = $1 off."
-                type="number" min="0.0001" step="0.0001"
-                value={form.points_to_dollar_value}
-                onChange={v => setForm(f => ({ ...f, points_to_dollar_value: v }))}
-              />
-            </div>
-          </motion.div>
-        )}
 
         {/* Live preview */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
@@ -255,8 +217,7 @@ export default function LoyaltySettings() {
           </div>
           <div className="mt-4 text-sm text-emerald-900 dark:text-emerald-200 bg-white/60 dark:bg-black/20 rounded-xl p-3">
             <b>Example:</b> A customer spends <b>$20</b> → earns <b>{earnedAt$20} pts</b>.
-            Once they hit <b>{effStep} pts</b>, they can redeem <b>${dollarsPerStep}</b> off any order at your shop
-            {form.use_global_system ? " (or any LoyalCup shop on the global program)" : ""}.
+            Once they hit <b>{effStep} pts</b>, they can redeem <b>${dollarsPerStep}</b> off any order at your shop.
           </div>
         </motion.div>
 
@@ -278,7 +239,7 @@ export default function LoyaltySettings() {
           </div>
 
           <p className="text-sm text-gray-500 mb-4">
-            Temporarily multiply earning rate (e.g. 2× points weekend). Stacks on top of {form.use_global_system ? "the global rate" : "your custom rate"}.
+            Temporarily multiply your earning rate (e.g. 2× points weekend). Stacks on top of your base rate.
           </p>
 
           {form.bonus_active && (
@@ -310,7 +271,7 @@ export default function LoyaltySettings() {
           </button>
           <motion.button type="submit" disabled={saving}
             whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-            className="flex items-center justify-center gap-2 px-8 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl font-bold shadow-lg hover:shadow-xl transition disabled:opacity-50">
+            className="flex items-center justify-center gap-2 px-8 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl font-bold shadow-lg hover:shadow-xl transition disabled:opacity-60">
             {saving ? "Saving..." : <><Check className="w-5 h-5" /> Save Loyalty Settings</>}
           </motion.button>
         </div>
@@ -319,7 +280,7 @@ export default function LoyaltySettings() {
   );
 }
 
-// ── Subcomponents ───────────────────────────────────────────────────────────
+// ── Subcomponents ────────────────────────────────────────────────────────────
 function StatCard({ icon: Icon, label, value, subtitle, color }) {
   return (
     <motion.div whileHover={{ y: -3 }}
@@ -333,24 +294,6 @@ function StatCard({ icon: Icon, label, value, subtitle, color }) {
         <Icon className="w-10 h-10 text-white/40" />
       </div>
     </motion.div>
-  );
-}
-
-function ModeCard({ active, onClick, icon: Icon, title, desc, footer, tone }) {
-  const ring = active
-    ? (tone === "purple" ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20" : "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20")
-    : "border-gray-200 dark:border-neutral-700 bg-gray-50 dark:bg-neutral-800/50 hover:border-gray-300";
-  return (
-    <button type="button" onClick={onClick}
-      className={`text-left p-4 rounded-xl border-2 transition ${ring}`}>
-      <div className="flex items-center gap-2 mb-1">
-        <Icon className="w-4 h-4 text-current opacity-70" />
-        <span className="font-bold text-gray-900 dark:text-white">{title}</span>
-        {active && <Check className="w-4 h-4 text-current ml-auto" />}
-      </div>
-      <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{desc}</p>
-      {footer && <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2 italic">{footer}</p>}
-    </button>
   );
 }
 

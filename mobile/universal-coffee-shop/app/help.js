@@ -45,19 +45,19 @@ const FAQS = [
     items: [
       {
         q: 'How do I earn loyalty points?',
-        a: "Points are awarded automatically after each mobile order. Each shop sets its own earn rate — for example, 10 points per dollar spent. You can see a shop's loyalty details on their menu page.",
+        a: "Points are awarded automatically after each mobile order. Each shop runs its own loyalty program and sets its own earn rate — for example, 10 points per dollar spent. You can see a shop's loyalty details on its menu page.",
       },
       {
         q: 'How do I redeem points?',
-        a: "At checkout, if you have enough points at that shop, you'll see a \"Redeem Points\" option. Toggle it on and select how many points to apply — they'll reduce your total.",
+        a: "At checkout, if you have enough points at that shop, you'll see a \"Redeem Points\" option. Toggle it on and choose how many points to apply — they'll reduce your total at that shop.",
       },
       {
         q: 'Do my points expire?',
-        a: "Point expiration is set by each individual shop. Check the Rewards screen for expiration info specific to each shop you've earned points at.",
+        a: "Point expiration is set by each individual shop. Check the Rewards screen for details specific to each shop you've earned points at.",
       },
       {
         q: 'Why do I have different point balances at different shops?',
-        a: "Each shop runs its own loyalty program. Your points at one shop can only be redeemed at that shop. Your profile shows a combined global total for reference.",
+        a: "Each shop runs its own separate loyalty program. Points you earn at one shop can only be redeemed at that same shop — they don't transfer between shops. The Rewards screen shows your balance at each shop, and your profile shows the combined total across all of them for reference.",
       },
     ],
   },

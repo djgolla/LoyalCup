@@ -1,9 +1,9 @@
 /**
  * Loyalty service — thin client over /api/v1/loyalty/*
  *
- * IMPORTANT: never writes balances from the client anymore (the prior version
- * did, which RLS allowed — that was a duping risk). All mutations go through
- * the backend payment flow.
+ * SHOP-SPECIFIC ONLY. There is no global/cross-shop program. Points are earned
+ * and redeemed per shop. This client never writes balances — all mutations go
+ * through the backend payment flow.
  */
 import { supabase } from '../lib/supabase';
 import { apiClient } from './apiClient';
@@ -14,9 +14,6 @@ async function _token() {
 }
 
 // ── public reads (no auth needed)
-export async function getGlobalConfig() {
-  return apiClient.get('/api/v1/loyalty/global-config');
-}
 export async function getShopConfig(shopId) {
   return apiClient.get(`/api/v1/loyalty/shop-config/${shopId}`);
 }
@@ -43,17 +40,15 @@ export async function previewRedeem({ shopId, subtotalCents, requestedPoints }) 
   }, token);
 }
 
-// ── legacy helper kept for any old screens that just want a number
-export async function getGlobalPoints(customerId) {
+/**
+ * Total points a customer holds across all their shops (for profile summary).
+ * Returns a single number — the sum of every shop balance.
+ */
+export async function getTotalPoints() {
   try {
     const me = await getMyLoyalty();
-    return {
-      customer_id:     customerId,
-      total_earned:    me.global.total_earned    || 0,
-      total_spent:     me.global.total_spent     || 0,
-      current_balance: me.global.current_balance || 0,
-    };
+    return (me.shops || []).reduce((sum, s) => sum + (s.current_balance || 0), 0);
   } catch {
-    return { customer_id: customerId, total_earned: 0, total_spent: 0, current_balance: 0 };
+    return 0;
   }
 }

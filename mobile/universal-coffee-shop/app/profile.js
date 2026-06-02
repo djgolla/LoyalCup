@@ -9,35 +9,43 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
+// Orders that count toward the customer's order tally.
 const REAL_ORDER_STATUSES = ['confirmed', 'pending', 'completed'];
 
 export default function ProfileScreen() {
   const router            = useRouter();
   const { user, signOut } = useAuth();
 
-  const [profile,      setProfile]      = useState(null);
-  const [globalPoints, setGlobalPoints] = useState(0);
+  const [profile,       setProfile]       = useState(null);
+  const [totalPoints,   setTotalPoints]   = useState(0);
   const [shopBreakdown, setShopBreakdown] = useState([]);
-  const [orderCount,   setOrderCount]   = useState(0);
-  const [loading,      setLoading]      = useState(true);
+  const [orderCount,    setOrderCount]    = useState(0);
+  const [loading,       setLoading]       = useState(true);
 
   useEffect(() => { if (user?.id) loadData(); }, [user?.id]);
 
   const loadData = async () => {
     try {
-      const [profileResp, globalPtsResp, shopPtsResp, orderResp] = await Promise.all([
+      const [profileResp, shopPtsResp, orderResp] = await Promise.all([
         supabase.from('profiles').select('full_name, phone, avatar_url').eq('id', user.id).single(),
-        supabase.from('customer_global_points').select('current_balance').eq('customer_id', user.id).maybeSingle(),
-        supabase.from('customer_shop_points').select('current_balance, shops(name)').eq('customer_id', user.id).gt('current_balance', 0).order('current_balance', { ascending: false }).limit(3),
-        supabase.from('orders').select('id', { count: 'exact', head: true }).eq('customer_id', user.id).in('status', REAL_ORDER_STATUSES),
+        supabase.from('customer_shop_points')
+          .select('current_balance, shops(name)')
+          .eq('customer_id', user.id)
+          .gt('current_balance', 0)
+          .order('current_balance', { ascending: false }),
+        supabase.from('orders').select('id', { count: 'exact', head: true })
+          .eq('customer_id', user.id).in('status', REAL_ORDER_STATUSES),
       ]);
 
       setProfile(profileResp.data);
       setOrderCount(orderResp.count || 0);
-      setGlobalPoints(globalPtsResp.data?.current_balance || 0);
-      setShopBreakdown((shopPtsResp.data || []).map(b => ({
+
+      const rows  = shopPtsResp.data || [];
+      const total = rows.reduce((sum, r) => sum + (r.current_balance || 0), 0);
+      setTotalPoints(total);
+      setShopBreakdown(rows.slice(0, 3).map(b => ({
         shopName: b.shops?.name || 'Shop',
-        balance: b.current_balance || 0,
+        balance:  b.current_balance || 0,
       })));
     } catch (e) {
       console.error('[Profile] loadData error:', e);
@@ -89,7 +97,7 @@ export default function ProfileScreen() {
           <Text style={styles.userEmail}>{user?.email}</Text>
           {profile?.phone && <Text style={styles.userPhone}>{profile.phone}</Text>}
 
-          {/* Stats row — Orders + Points only, bigger and more spread */}
+          {/* Stats row — Orders + Points */}
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <Text style={styles.statValue}>{orderCount}</Text>
@@ -97,20 +105,20 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Text style={styles.statValue}>{globalPoints.toLocaleString()}</Text>
+              <Text style={styles.statValue}>{totalPoints.toLocaleString()}</Text>
               <Text style={styles.statLabel}>Points</Text>
             </View>
           </View>
         </View>
 
-        {/* Loyalty card */}
+        {/* Loyalty card — total across shops */}
         <View style={styles.loyaltyCard}>
           <View style={styles.loyaltyCardHeader}>
             <Feather name="award" size={20} color="#fff" />
             <Text style={styles.loyaltyCardLabel}>LOYALTY POINTS</Text>
           </View>
-          <Text style={styles.loyaltyCardPoints}>{globalPoints.toLocaleString()}</Text>
-          <Text style={styles.loyaltyCardSub}>= ${(globalPoints * 0.01).toFixed(2)} in savings</Text>
+          <Text style={styles.loyaltyCardPoints}>{totalPoints.toLocaleString()}</Text>
+          <Text style={styles.loyaltyCardSub}>across all your shops</Text>
 
           {shopBreakdown.length > 0 && (
             <View style={styles.loyaltyBreakdown}>
@@ -174,7 +182,6 @@ const styles = StyleSheet.create({
   userName:              { fontSize: 22, fontWeight: '800', color: '#000', marginBottom: 3 },
   userEmail:             { fontSize: 13, color: '#999', marginBottom: 2 },
   userPhone:             { fontSize: 13, color: '#999', marginBottom: 14 },
-  // 2-stat row — wider padding, bigger numbers
   statsRow:              { flexDirection: 'row', alignItems: 'center', marginTop: 6, backgroundColor: '#F9F9F9', borderRadius: 20, paddingVertical: 18, paddingHorizontal: 40, gap: 0 },
   statItem:              { flex: 1, alignItems: 'center' },
   statValue:             { fontSize: 28, fontWeight: '900', color: '#000' },

@@ -323,7 +323,7 @@ export default function CheckoutScreen() {
                       {pointsToRedeem > 0 ? `${pointsToRedeem} pts → −$${pointsDiscount.toFixed(2)}` : 'Redeem Points'}
                     </Text>
                     <Text style={styles.pointsToggleSub}>
-                      {balance.toLocaleString()} pts available · {loyaltyBalance.points_type === 'global' ? 'Global rewards' : `${(itemsByShop[activeShopId]?.shopName) || 'Shop'} rewards`}
+                      {balance.toLocaleString()} pts available · {(itemsByShop[activeShopId]?.shopName) || 'Shop'} rewards
                     </Text>
                   </View>
                 </View>

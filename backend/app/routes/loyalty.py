@@ -1,29 +1,28 @@
 """
 Loyalty REST API.
 
+SHOP-SPECIFIC ONLY — no global/cross-shop program.
+
 Public:
-  GET  /api/v1/loyalty/global-config
-  GET  /api/v1/loyalty/shop-config/{shop_id}            ← effective config (global or custom)
+  GET  /api/v1/loyalty/shop-config/{shop_id}     ← effective config for a shop
 
 Customer (auth):
-  GET  /api/v1/loyalty/me                               ← global balance + per-shop balances + last 10 txns
-  GET  /api/v1/loyalty/balance/{shop_id}                ← which bucket applies + balance + config
+  GET  /api/v1/loyalty/me                         ← all per-shop balances + last 10 txns
+  GET  /api/v1/loyalty/balance/{shop_id}          ← balance + config for one shop
   GET  /api/v1/loyalty/transactions
-  POST /api/v1/loyalty/preview-redeem                   ← dry-run; never writes
+  POST /api/v1/loyalty/preview-redeem             ← dry-run; never writes
 
 Shop owner (auth + ownership check):
-  GET  /api/v1/loyalty/shop-settings/{shop_id}          ← raw row (may be null if no override)
+  GET  /api/v1/loyalty/shop-settings/{shop_id}
   PUT  /api/v1/loyalty/shop-settings/{shop_id}
-
   GET  /api/v1/loyalty/shop-stats/{shop_id}
 """
 import logging
-from typing import Optional, List
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
 from app.services.loyalty_service import (
-    get_global_config,
     get_shop_config,
     get_balance,
     compute_redemption,
@@ -39,13 +38,13 @@ logger = logging.getLogger(__name__)
 # Models
 # ─────────────────────────────────────────────────────────────────────────────
 class ShopLoyaltyUpdate(BaseModel):
-    use_global_system:      bool
-    points_per_dollar:      Optional[int]   = Field(None, ge=0,  le=1000)
-    min_redemption_points:  Optional[int]   = Field(None, ge=1,  le=100000)
-    points_to_dollar_value: Optional[float] = Field(None, gt=0,  le=1.0)
+    points_per_dollar:      int   = Field(..., ge=0, le=1000)
+    min_redemption_points:  int   = Field(..., ge=1, le=100000)
+    points_to_dollar_value: float = Field(..., gt=0, le=1.0)
     bonus_active:           Optional[bool]  = False
     bonus_multiplier:       Optional[float] = Field(None, ge=1.0, le=10.0)
     bonus_description:      Optional[str]   = None
+    is_active:              Optional[bool]  = True
 
 
 class PreviewRedeemBody(BaseModel):
@@ -57,12 +56,6 @@ class PreviewRedeemBody(BaseModel):
 # ─────────────────────────────────────────────────────────────────────────────
 # Public config
 # ─────────────────────────────────────────────────────────────────────────────
-@router.get("/global-config")
-async def api_global_config():
-    db = get_supabase()
-    return get_global_config(db)
-
-
 @router.get("/shop-config/{shop_id}")
 async def api_shop_config(shop_id: str):
     db = get_supabase()
@@ -74,20 +67,17 @@ async def api_shop_config(shop_id: str):
 # ─────────────────────────────────────────────────────────────────────────────
 @router.get("/me")
 async def my_loyalty(user: dict = Depends(require_auth())):
-    """Snapshot for the rewards screen."""
+    """Snapshot for the rewards screen — per-shop balances + recent transactions."""
     customer_id = user.get("sub")
     db = get_supabase()
     sc = db.get_service_client()
 
-    global_row = (
-        sc.table("customer_global_points")
-        .select("*").eq("customer_id", customer_id).limit(1).execute()
-    ).data
     shop_rows = (
         sc.table("customer_shop_points")
         .select("*, shops(id, name, logo_url, color)")
         .eq("customer_id", customer_id)
         .gt("current_balance", 0)
+        .order("current_balance", desc=True)
         .execute()
     ).data or []
     txns = (
@@ -98,15 +88,7 @@ async def my_loyalty(user: dict = Depends(require_auth())):
         .limit(10).execute()
     ).data or []
 
-    glob_cfg = get_global_config(db)
-
     return {
-        "global": {
-            "current_balance": (global_row[0]["current_balance"] if global_row else 0),
-            "total_earned":    (global_row[0]["total_earned"]    if global_row else 0),
-            "total_spent":     (global_row[0]["total_spent"]     if global_row else 0),
-            "config":          glob_cfg,
-        },
         "shops":        shop_rows,
         "transactions": txns,
     }
@@ -114,7 +96,7 @@ async def my_loyalty(user: dict = Depends(require_auth())):
 
 @router.get("/balance/{shop_id}")
 async def my_balance_for_shop(shop_id: str, user: dict = Depends(require_auth())):
-    """Used by checkout. Returns the *correct* bucket + effective config in one shot."""
+    """Used by checkout. Returns the customer's balance + effective config for one shop."""
     db = get_supabase()
     return get_balance(db, user.get("sub"), shop_id)
 
@@ -179,22 +161,15 @@ async def shop_settings_put(
     _require_shop_owner(db, user.get("sub"), shop_id)
 
     payload = {
-        "shop_id":           shop_id,
-        "use_global_system": body.use_global_system,
-        "bonus_active":      bool(body.bonus_active),
-        "bonus_multiplier":  float(body.bonus_multiplier or 1.0),
-        "bonus_description": body.bonus_description,
-        "is_active":         True,
+        "shop_id":                shop_id,
+        "points_per_dollar":      int(body.points_per_dollar),
+        "min_redemption_points":  int(body.min_redemption_points),
+        "points_to_dollar_value": float(body.points_to_dollar_value),
+        "bonus_active":           bool(body.bonus_active),
+        "bonus_multiplier":       float(body.bonus_multiplier or 1.0),
+        "bonus_description":      body.bonus_description,
+        "is_active":              bool(body.is_active if body.is_active is not None else True),
     }
-    if not body.use_global_system:
-        if body.points_per_dollar is None or body.min_redemption_points is None or body.points_to_dollar_value is None:
-            raise HTTPException(
-                status_code=400,
-                detail="Custom program requires points_per_dollar, min_redemption_points, and points_to_dollar_value.",
-            )
-        payload["points_per_dollar"]      = int(body.points_per_dollar)
-        payload["min_redemption_points"]  = int(body.min_redemption_points)
-        payload["points_to_dollar_value"] = float(body.points_to_dollar_value)
 
     sc = db.get_service_client()
     existing = sc.table("shop_loyalty_settings").select("id").eq("shop_id", shop_id).limit(1).execute()
