@@ -192,7 +192,7 @@ export default function ShopDetailScreen() {
 
       // Load categories
       const catResp = await supabase
-        .from('menu_categories')
+        .from('categories')
         .select('*')
         .eq('shop_id', id)
         .order('display_order', { ascending: true });
