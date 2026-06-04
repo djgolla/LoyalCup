@@ -41,29 +41,51 @@ export default function Reviews() {
     if (!shopId) return;
     try {
       setError(null);
-      // JOIN with profiles to get reviewer name + avatar
-      const { data, error: fetchError } = await supabase
+      
+      // Fetch reviews for this shop
+      const { data: reviewsData, error: reviewsError } = await supabase
         .from('reviews')
-        .select(`
-          id,
-          shop_id,
-          user_id,
-          order_id,
-          rating,
-          body,
-          created_at,
-          updated_at,
-          reviewer:profiles(full_name, avatar_url, email)
-        `)
+        .select('id, shop_id, user_id, order_id, rating, body, created_at, updated_at')
         .eq('shop_id', shopId)
         .order('created_at', { ascending: false });
 
-      if (fetchError) {
-        console.error('[Reviews] Fetch error:', fetchError);
-        throw fetchError;
+      if (reviewsError) {
+        console.error('[Reviews] Reviews fetch error:', reviewsError);
+        throw reviewsError;
       }
 
-      setReviews(data || []);
+      if (!reviewsData || reviewsData.length === 0) {
+        setReviews([]);
+        return;
+      }
+
+      // Get unique user_ids from reviews
+      const userIds = [...new Set(reviewsData.map(r => r.user_id))];
+
+      // Fetch all reviewer profiles
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url, email')
+        .in('id', userIds);
+
+      if (profilesError) {
+        console.error('[Reviews] Profiles fetch error:', profilesError);
+        throw profilesError;
+      }
+
+      // Map profiles by ID for easy lookup
+      const profilesMap = {};
+      (profilesData || []).forEach(p => {
+        profilesMap[p.id] = p;
+      });
+
+      // Merge reviews with reviewer info
+      const mergedReviews = reviewsData.map(review => ({
+        ...review,
+        reviewer: profilesMap[review.user_id] || { full_name: 'Anonymous', avatar_url: null },
+      }));
+
+      setReviews(mergedReviews);
     } catch (e) {
       console.error('[Reviews] Load error:', e);
       setError('Failed to load reviews');
@@ -171,7 +193,6 @@ export default function Reviews() {
       ) : (
         <div className="space-y-4">
           {filtered.map((review, i) => {
-            // reviewer is now the joined profiles object
             const reviewer = review.reviewer || {};
             const reviewerName = reviewer.full_name || 'Anonymous';
             const reviewerAvatar = reviewer.avatar_url;
