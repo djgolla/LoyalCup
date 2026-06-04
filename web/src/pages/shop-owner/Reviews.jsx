@@ -54,6 +54,8 @@ export default function Reviews() {
         throw reviewsError;
       }
 
+      console.log('[Reviews] reviewsData:', reviewsData);
+
       if (!reviewsData || reviewsData.length === 0) {
         setReviews([]);
         return;
@@ -61,12 +63,16 @@ export default function Reviews() {
 
       // Get unique user_ids from reviews
       const userIds = [...new Set(reviewsData.map(r => r.user_id))];
+      console.log('[Reviews] userIds to fetch:', userIds);
 
       // Fetch all reviewer profiles
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, full_name, avatar_url, email')
         .in('id', userIds);
+
+      console.log('[Reviews] profilesData:', profilesData);
+      console.log('[Reviews] profilesError:', profilesError);
 
       if (profilesError) {
         console.error('[Reviews] Profiles fetch error:', profilesError);
@@ -79,11 +85,15 @@ export default function Reviews() {
         profilesMap[p.id] = p;
       });
 
+      console.log('[Reviews] profilesMap:', profilesMap);
+
       // Merge reviews with reviewer info
       const mergedReviews = reviewsData.map(review => ({
         ...review,
         reviewer: profilesMap[review.user_id] || { full_name: 'Anonymous', avatar_url: null },
       }));
+
+      console.log('[Reviews] mergedReviews:', mergedReviews);
 
       setReviews(mergedReviews);
     } catch (e) {
