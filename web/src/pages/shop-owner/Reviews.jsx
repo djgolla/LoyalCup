@@ -35,25 +35,46 @@ export default function Reviews() {
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterRating, setFilterRating] = useState(0);
+  const [error, setError] = useState(null);
 
   const loadReviews = useCallback(async () => {
     if (!shopId) return;
     try {
-      const { data, error } = await supabase
+      setError(null);
+      // JOIN with profiles to get reviewer name + avatar
+      const { data, error: fetchError } = await supabase
         .from('reviews')
-        .select('*')
+        .select(`
+          id,
+          shop_id,
+          user_id,
+          order_id,
+          rating,
+          body,
+          created_at,
+          updated_at,
+          reviewer:profiles(full_name, avatar_url, email)
+        `)
         .eq('shop_id', shopId)
         .order('created_at', { ascending: false });
-      if (error) throw error;
+
+      if (fetchError) {
+        console.error('[Reviews] Fetch error:', fetchError);
+        throw fetchError;
+      }
+
       setReviews(data || []);
     } catch (e) {
-      console.error(e);
+      console.error('[Reviews] Load error:', e);
+      setError('Failed to load reviews');
     } finally {
       setLoading(false);
     }
   }, [shopId]);
 
-  useEffect(() => { loadReviews(); }, [loadReviews]);
+  useEffect(() => {
+    loadReviews();
+  }, [loadReviews]);
 
   const total = reviews.length;
   const avg = total > 0 ? reviews.reduce((s, r) => s + r.rating, 0) / total : 0;
@@ -64,6 +85,20 @@ export default function Reviews() {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="w-10 h-10 text-amber-600 animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 dark:bg-red-900/20 rounded-2xl p-6 border border-red-200 dark:border-red-800 text-center">
+        <p className="text-red-600 dark:text-red-400 font-semibold">{error}</p>
+        <button
+          onClick={loadReviews}
+          className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition"
+        >
+          Try Again
+        </button>
       </div>
     );
   }
@@ -135,41 +170,48 @@ export default function Reviews() {
         </div>
       ) : (
         <div className="space-y-4">
-          {filtered.map((review, i) => (
-            <motion.div
-              key={review.id}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.04 }}
-              className="bg-white dark:bg-neutral-900 rounded-2xl p-5 border border-gray-200 dark:border-neutral-800"
-            >
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  {review.customer?.avatar_url ? (
-                    <img src={review.customer.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover" />
-                  ) : (
-                    <div className="w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 font-bold text-sm">
-                      {(review.customer?.full_name || 'A')[0].toUpperCase()}
+          {filtered.map((review, i) => {
+            // reviewer is now the joined profiles object
+            const reviewer = review.reviewer || {};
+            const reviewerName = reviewer.full_name || 'Anonymous';
+            const reviewerAvatar = reviewer.avatar_url;
+
+            return (
+              <motion.div
+                key={review.id}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.04 }}
+                className="bg-white dark:bg-neutral-900 rounded-2xl p-5 border border-gray-200 dark:border-neutral-800"
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    {reviewerAvatar ? (
+                      <img src={reviewerAvatar} alt={reviewerName} className="w-9 h-9 rounded-full object-cover" />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 font-bold text-sm">
+                        {reviewerName[0].toUpperCase()}
+                      </div>
+                    )}
+                    <div>
+                      <p className="font-semibold text-gray-900 dark:text-white text-sm">
+                        {reviewerName}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {new Date(review.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
                     </div>
-                  )}
-                  <div>
-                    <p className="font-semibold text-gray-900 dark:text-white text-sm">
-                      {review.customer?.full_name || 'Anonymous'}
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      {new Date(review.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </p>
                   </div>
+                  <StarRow rating={review.rating} size={15} />
                 </div>
-                <StarRow rating={review.rating} size={15} />
-              </div>
-              {review.body && (
-                <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed mt-2 pl-12">
-                  {review.body}
-                </p>
-              )}
-            </motion.div>
-          ))}
+                {review.body && (
+                  <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed mt-2 pl-12">
+                    {review.body}
+                  </p>
+                )}
+              </motion.div>
+            );
+          })}
         </div>
       )}
     </div>
