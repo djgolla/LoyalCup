@@ -11,10 +11,111 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  StyleSheet,
 } from 'react-native';
 import { useState } from 'react';
 import Feather from '@expo/vector-icons/Feather';
-import { styles } from '../styles/login.styles';
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: 20,
+  },
+  backButton: {
+    position: 'absolute',
+    top: 10,
+    left: 20,
+    zIndex: 10,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#666',
+  },
+  form: {
+    marginVertical: 20,
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+    color: '#333',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    height: 50,
+  },
+  input: {
+    flex: 1,
+    marginLeft: 10,
+    fontSize: 16,
+  },
+  forgotPassword: {
+    color: '#b8860b',
+    fontSize: 14,
+    marginBottom: 20,
+  },
+  button: {
+    backgroundColor: '#b8860b',
+    height: 50,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 20,
+  },
+  footerText: {
+    color: '#666',
+  },
+  footerLink: {
+    color: '#b8860b',
+    fontWeight: '600',
+  },
+});
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -24,7 +125,6 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [resetSent, setResetSent] = useState(false);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -53,7 +153,6 @@ export default function LoginScreen() {
         redirectUrl: 'loyalcup://reset-password',
       });
       if (error) throw error;
-      setResetSent(true);
       Alert.alert(
         'Check Your Email 📬',
         `We sent a password reset link to ${email.trim()}. Check your inbox (and spam folder).`
