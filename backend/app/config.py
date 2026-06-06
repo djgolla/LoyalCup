@@ -3,10 +3,6 @@ from pydantic_settings import BaseSettings
 from pydantic import Field, ValidationError, field_validator
 
 
-# Default placeholder values. These are SAFE for local development but MUST
-# never be used in production — the guard below refuses to boot if any of the
-# security-critical secrets are still set to a placeholder while running in
-# a production environment.
 PLACEHOLDER_VALUES = {
     "placeholder-jwt-secret-change-in-production",
     "placeholder-service-key",
@@ -55,6 +51,7 @@ class Settings(BaseSettings):
     # Email
     sendgrid_api_key: str = Field(default="")
     sendgrid_from_email: str = Field(default="noreply@loyalcup.com")
+    google_app_password: str = Field(default="", alias="GOOGLE_APP_PASSWORD")
 
     # Cache
     redis_url: str = Field(default="redis://localhost:6379")
@@ -80,11 +77,6 @@ except ValidationError as e:
     raise SystemExit(2)
 
 
-# ---------------------------------------------------------------------------
-# Production safety guard: never boot with placeholder secrets in production.
-# A missing env var would otherwise silently fall back to a publicly-known
-# placeholder (e.g. the JWT secret), allowing anyone to forge admin tokens.
-# ---------------------------------------------------------------------------
 if settings.environment.lower() == "production":
     missing = []
     if settings.jwt_secret in PLACEHOLDER_VALUES:

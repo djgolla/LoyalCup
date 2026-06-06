@@ -1,23 +1,30 @@
-import React, { useState } from 'react';
-import {
-  StyleSheet, Text, View, TouchableOpacity, TextInput,
-  KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
+import { useRouter } from 'expo-router';
+import {
+  SafeAreaView,
+  KeyboardAvoidingView,
+  ScrollView,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  Platform,
+} from 'react-native';
+import { useState } from 'react';
+import Feather from '@expo/vector-icons/Feather';
+import { styles } from '../styles/login.styles';
 
 export default function LoginScreen() {
   const router = useRouter();
   const { signIn } = useAuth();
 
-  const [email,        setEmail]        = useState('');
-  const [password,     setPassword]     = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [loading,      setLoading]      = useState(false);
-  const [resetSent,    setResetSent]    = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -35,7 +42,6 @@ export default function LoginScreen() {
     }
   };
 
-  // FIXED: was a dead button — now actually sends a password reset email via Supabase
   const handleForgotPassword = async () => {
     if (!email.trim()) {
       Alert.alert('Enter Your Email', 'Type your email address above, then tap Forgot Password.');
@@ -44,7 +50,7 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: 'loyalcup://reset-password',
+        redirectUrl: 'loyalcup://reset-password',
       });
       if (error) throw error;
       setResetSent(true);
@@ -106,7 +112,7 @@ export default function LoginScreen() {
                 <Feather name="lock" size={20} color="#666" />
                 <TextInput
                   style={styles.input}
-                  placeholder="Enter your password"
+                  placeholder="••••••••"
                   placeholderTextColor="#999"
                   value={password}
                   onChangeText={setPassword}
@@ -114,67 +120,32 @@ export default function LoginScreen() {
                   autoCapitalize="none"
                 />
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                  <Feather name={showPassword ? 'eye-off' : 'eye'} size={20} color="#666" />
+                  <Feather name={showPassword ? 'eye' : 'eye-off'} size={20} color="#666" />
                 </TouchableOpacity>
               </View>
             </View>
 
-            {/* FIXED: was a dead button, now sends Supabase password reset email */}
-            <TouchableOpacity style={styles.forgotPassword} onPress={handleForgotPassword} disabled={loading}>
-              <Text style={[styles.forgotPasswordText, resetSent && { color: '#10B981' }]}>
-                {resetSent ? '✓ Reset email sent' : 'Forgot Password?'}
-              </Text>
+            <TouchableOpacity onPress={handleForgotPassword}>
+              <Text style={styles.forgotPassword}>Forgot Password?</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+              style={[styles.button, loading && styles.buttonDisabled]}
               onPress={handleLogin}
               disabled={loading}
-              activeOpacity={0.8}
             >
-              {loading ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
-                <>
-                  <Text style={styles.loginButtonText}>Sign In</Text>
-                  <Feather name="arrow-right" size={20} color="#FFF" />
-                </>
-              )}
+              <Text style={styles.buttonText}>{loading ? 'Signing in...' : 'Sign In'}</Text>
             </TouchableOpacity>
+          </View>
 
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>Don't have an account? </Text>
-              <TouchableOpacity onPress={() => router.push('/signup')}>
-                <Text style={styles.footerLink}>Sign Up</Text>
-              </TouchableOpacity>
-            </View>
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Don't have an account? </Text>
+            <TouchableOpacity onPress={() => router.push('/signup')}>
+              <Text style={styles.footerLink}>Sign up</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container:            { flex: 1, backgroundColor: '#FFF' },
-  keyboardView:         { flex: 1 },
-  scrollContent:        { flexGrow: 1, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 40 },
-  backButton:           { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-  header:               { alignItems: 'center', marginBottom: 40 },
-  iconCircle:           { width: 80, height: 80, borderRadius: 40, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center', marginBottom: 20, borderWidth: 3, borderColor: '#00704A' },
-  title:                { fontSize: 32, fontWeight: '800', color: '#000', marginBottom: 8 },
-  subtitle:             { fontSize: 16, color: '#666' },
-  form:                 { gap: 20 },
-  inputGroup:           { gap: 8 },
-  label:                { fontSize: 15, fontWeight: '600', color: '#000' },
-  inputContainer:       { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 16, gap: 12 },
-  input:                { flex: 1, fontSize: 16, color: '#000' },
-  forgotPassword:       { alignSelf: 'flex-end', marginTop: -8 },
-  forgotPasswordText:   { fontSize: 14, fontWeight: '600', color: '#00704A' },
-  loginButton:          { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#00704A', paddingVertical: 18, borderRadius: 12, gap: 8, marginTop: 8 },
-  loginButtonDisabled:  { opacity: 0.6 },
-  loginButtonText:      { fontSize: 18, fontWeight: '700', color: '#FFF' },
-  footer:               { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 20 },
-  footerText:           { fontSize: 15, color: '#666' },
-  footerLink:           { fontSize: 15, fontWeight: '700', color: '#00704A' },
-});

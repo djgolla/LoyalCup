@@ -1,5 +1,6 @@
-import sendgrid
-from sendgrid.helpers.mail import Mail, Email, To, Content
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from app.config import settings
 from app.utils.logging import get_logger
 
@@ -7,27 +8,24 @@ logger = get_logger(__name__)
 
 
 async def send_email(to: str, subject: str, html: str, reply_to: str = None):
-    """Send email via SendGrid"""
-    if not settings.sendgrid_api_key:
-        logger.error("SendGrid API key not configured")
-        raise ValueError("Email service not configured")
-    
+    """Send email via Google SMTP"""
     try:
-        sg = sendgrid.SendGridAPIClient(settings.sendgrid_api_key)
-        
-        message = Mail(
-            from_email=Email("forgotpassword@loyalcupapp.com", "LoyalCup"),
-            to_emails=To(to),
-            subject=subject,
-            html_content=Content("text/html", html)
-        )
-        
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = "support@loyalcupapp.com"
+        msg["To"] = to
         if reply_to:
-            message.reply_to = Email(reply_to)
-        
-        response = sg.send(message)
-        logger.info(f"Email sent to {to}: {response.status_code}")
-        return response
+            msg["Reply-To"] = reply_to
+
+        msg.attach(MIMEText(html, "html"))
+
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login("support@loyalcupapp.com", settings.google_app_password)
+            server.send_message(msg)
+
+        logger.info(f"Email sent to {to}")
+        return True
     except Exception as e:
-        logger.error(f"SendGrid error: {str(e)}")
+        logger.error(f"Email error: {str(e)}")
         raise
