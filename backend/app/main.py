@@ -30,6 +30,7 @@ from app.routes import (
     pos_square_callback,
     pos_square_set_location,
     menu_sync,
+    contact,
 )
 from app.routes import pos_sync
 from app.routes import pos_square_webhook
@@ -119,6 +120,7 @@ app.include_router(pos_sync.router)
 app.include_router(pos_square_webhook.router)
 app.include_router(reviews.router)
 app.include_router(menu_sync.router)
+app.include_router(contact.router)
 
 
 @app.get("/")

@@ -2,7 +2,8 @@ import { Mail, Phone, Send } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '../../context/AuthContext';
-import supabase from '../../lib/supabase';
+
+const API_URL = import.meta.env.VITE_API_URL || 'https://api.loyalcupapp.com';
 
 export default function Contact() {
   const { user } = useAuth();
@@ -21,13 +22,16 @@ export default function Contact() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const { error } = await supabase.from('contact_messages').insert({
-        name:    formData.name,
-        email:   formData.email,
-        subject: formData.subject,
-        message: formData.message,
+      const response = await fetch(`${API_URL}/api/v1/contact/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
       });
-      if (error) throw error;
+
+      if (!response.ok) {
+        throw new Error('Failed to send email');
+      }
+
       toast.success("Message sent! We'll get back to you within 1 business day.");
       setFormData({ name: '', email: '', subject: '', message: '' });
     } catch (err) {
