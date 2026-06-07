@@ -170,56 +170,41 @@ export default function LoginScreen() {
     }, 1000);
   };
 
-  const handleForgotPassword = async () => {
-    if (!email.trim()) {
-      Alert.alert('Enter Your Email', 'Type your email address above, then tap Forgot Password.');
-      return;
-    }
+const handleForgotPassword = async () => {
+  if (!email.trim()) {
+    Alert.alert('Enter Your Email', 'Type your email address above, then tap Forgot Password.');
+    return;
+  }
 
-    // Verify email exists before sending reset link (security)
-    if (cooldown > 0) {
-      Alert.alert('Please Wait', `Try again in ${cooldown} seconds`);
-      return;
-    }
+  if (cooldown > 0) {
+    Alert.alert('Please Wait', `Try again in ${cooldown} seconds`);
+    return;
+  }
 
-    setLoading(true);
-    try {
-      // Check if email exists in auth system
-      const { data, error: fetchError } = await supabase
-        .from('auth.users')
-        .select('id')
-        .eq('email', email.toLowerCase().trim())
-        .single();
+  setLoading(true);
 
-      // Don't reveal if email exists or not (security best practice)
-      if (fetchError || !data) {
-        Alert.alert(
-          'Check Your Email 📬',
-          'If that email exists in our system, a password reset link has been sent.'
-        );
-        startCooldown();
-        setLoading(false);
-        return;
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(
+      email.trim().toLowerCase(),
+      {
+        redirectTo: 'https://loyalcupapp.com/reset-password',
       }
+    );
 
-      // Email exists, send reset link
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectUrl: 'https://loyalcupapp.com/reset-password',
-      });
+    if (error) throw error;
 
-      if (error) throw error;
+    Alert.alert(
+      'Check Your Email 📬',
+      'If that email exists in our system, a password reset link has been sent.'
+    );
 
-      Alert.alert(
-        'Check Your Email 📬',
-        `We sent a password reset link to ${email.trim()}. Check your inbox (and spam folder).`
-      );
-      startCooldown();
-    } catch (e) {
-      Alert.alert('Error', e.message || 'Failed to send reset email. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
+    startCooldown();
+  } catch (e) {
+    Alert.alert('Error', e.message || 'Failed to send reset email. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>

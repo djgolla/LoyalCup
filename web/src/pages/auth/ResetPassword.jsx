@@ -1,142 +1,195 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
-import { toast } from 'sonner';
-import AuthLayout from '../../layout/AuthLayout';
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import supabase from "../lib/supabase";
+import { toast } from "sonner";
+import AuthLayout from "../layout/AuthLayout";
 
 export default function ResetPassword() {
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [sessionReady, setSessionReady] = useState(false);
-  const [isValidToken, setIsValidToken] = useState(false);
   const navigate = useNavigate();
 
-  // Check if valid recovery token exists in URL hash
+  const [checkingLink, setCheckingLink] = useState(true);
+  const [linkValid, setLinkValid] = useState(false);
+
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
   useEffect(() => {
-    const verifyToken = async () => {
+    let mounted = true;
+
+    const checkResetLink = async () => {
       try {
-        // Give Supabase SDK time to parse hash from email link
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        
-        // Valid recovery token must have session with recovery type in URL
-        if (session && window.location.hash.includes('type=recovery')) {
-          setIsValidToken(true);
-          setSessionReady(true);
-        } else if (sessionError || !session) {
-          setError('Invalid or expired password reset link. Please request a new one.');
-          setSessionReady(true);
-          setTimeout(() => navigate('/login'), 3000);
-        } else {
-          setError('Invalid link. Please request a new password reset.');
-          setSessionReady(true);
+        /*
+          Supabase recovery links usually land here like:
+          /reset-password#access_token=...&refresh_token=...&type=recovery
+
+          Supabase JS will parse that hash and create a temporary session.
+          Then updateUser({ password }) can work.
+        */
+
+        const hash = window.location.hash || "";
+        const search = window.location.search || "";
+
+        const looksLikeRecoveryLink =
+          hash.includes("type=recovery") || search.includes("type=recovery");
+
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
+
+        if (!mounted) return;
+
+        if (sessionError) {
+          console.error("[ResetPassword] Session error:", sessionError);
+          setError("Invalid or expired password reset link. Please request a new one.");
+          setLinkValid(false);
+          setCheckingLink(false);
+          return;
         }
+
+        if (session && looksLikeRecoveryLink) {
+          setLinkValid(true);
+          setCheckingLink(false);
+          return;
+        }
+
+        setError("Invalid or expired password reset link. Please request a new one.");
+        setLinkValid(false);
+        setCheckingLink(false);
       } catch (err) {
-        console.error('Token verification error:', err);
-        setError('An error occurred. Please try again.');
-        setSessionReady(true);
-        setTimeout(() => navigate('/login'), 3000);
+        console.error("[ResetPassword] Link check failed:", err);
+
+        if (!mounted) return;
+
+        setError("Something went wrong while checking your reset link.");
+        setLinkValid(false);
+        setCheckingLink(false);
       }
     };
 
-    verifyToken();
-  }, [navigate]);
+    checkResetLink();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
-    setError('');
-    
+    setError("");
+
     if (!newPassword || !confirmPassword) {
-      setError('Please fill in all fields');
+      setError("Please fill in both password fields.");
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setError('Passwords do not match');
+      setError("Passwords do not match.");
       return;
     }
 
     if (newPassword.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError("Password must be at least 6 characters.");
       return;
     }
 
     setLoading(true);
+
     try {
       const { error: updateError } = await supabase.auth.updateUser({
         password: newPassword,
       });
-      
+
       if (updateError) throw updateError;
 
-      // Sign out after password update
       await supabase.auth.signOut();
-      
-      toast.success('Password reset successfully!');
-      setTimeout(() => navigate('/login'), 1500);
+
+      toast.success("Password reset successfully!");
+
+      setNewPassword("");
+      setConfirmPassword("");
+
+      setTimeout(() => {
+        navigate("/login", {
+          replace: true,
+          state: {
+            passwordResetComplete: true,
+          },
+        });
+      }, 1200);
     } catch (err) {
-      console.error('Password update error:', err);
-      const errorMsg = err.message || 'Failed to reset password';
-      setError(errorMsg);
-      toast.error(errorMsg);
+      console.error("[ResetPassword] Password update failed:", err);
+
+      const message = err.message || "Failed to reset password.";
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Loading state
-  if (!sessionReady) {
+  if (checkingLink) {
     return (
       <AuthLayout>
-        <div className="flex items-center justify-center h-screen">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-700 mx-auto mb-4"></div>
-            <p className="text-gray-600 dark:text-gray-400">Verifying reset link...</p>
-          </div>
-        </div>
-      </AuthLayout>
-    );
-  }
-
-  // Invalid token - show error
-  if (!isValidToken) {
-    return (
-      <AuthLayout>
-        <div className="w-full max-w-md">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Invalid Link</h1>
-            <p className="text-gray-600 dark:text-gray-400">This password reset link has expired or is invalid.</p>
-          </div>
-
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
-            <p className="text-red-800 dark:text-red-300 text-sm">{error}</p>
-          </div>
-
-          <p className="text-center text-gray-600 dark:text-gray-400 mt-6">
-            <a href="/login" className="text-green-700 hover:text-green-800 font-medium">
-              Return to Login
-            </a>
+        <div className="w-full max-w-md text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-700 mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400">
+            Verifying reset link...
           </p>
         </div>
       </AuthLayout>
     );
   }
 
-  // Valid token - show reset form
+  if (!linkValid) {
+    return (
+      <AuthLayout>
+        <div className="w-full max-w-md">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+              Invalid Link
+            </h1>
+
+            <p className="text-gray-600 dark:text-gray-400">
+              This password reset link has expired or is invalid.
+            </p>
+          </div>
+
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
+            <p className="text-red-800 dark:text-red-300 text-sm">
+              {error}
+            </p>
+          </div>
+
+          <p className="text-center text-gray-600 dark:text-gray-400 mt-6">
+            Go back to the LoyalCup app and request a new reset link.
+          </p>
+        </div>
+      </AuthLayout>
+    );
+  }
+
   return (
     <AuthLayout>
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Reset Password</h1>
-          <p className="text-gray-600 dark:text-gray-400">Enter your new password below.</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+            Reset Password
+          </h1>
+
+          <p className="text-gray-600 dark:text-gray-400">
+            Enter your new LoyalCup password below.
+          </p>
         </div>
 
         {error && (
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
-            <p className="text-red-800 dark:text-red-300 text-sm">{error}</p>
+            <p className="text-red-800 dark:text-red-300 text-sm">
+              {error}
+            </p>
           </div>
         )}
 
@@ -145,6 +198,7 @@ export default function ResetPassword() {
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               New Password
             </label>
+
             <input
               type="password"
               value={newPassword}
@@ -161,6 +215,7 @@ export default function ResetPassword() {
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Confirm Password
             </label>
+
             <input
               type="password"
               value={confirmPassword}
@@ -178,14 +233,13 @@ export default function ResetPassword() {
             disabled={loading}
             className="w-full bg-green-700 text-white py-2 rounded-lg hover:bg-green-800 transition font-medium disabled:opacity-50"
           >
-            {loading ? 'Resetting...' : 'Reset Password'}
+            {loading ? "Resetting..." : "Reset Password"}
           </button>
         </form>
 
         <p className="text-center text-gray-600 dark:text-gray-400 mt-6">
-          <a href="/login" className="text-green-700 hover:text-green-800 font-medium">
-            Back to Login
-          </a>
+          After resetting, return to the LoyalCup app and sign in with your new
+          password.
         </p>
       </div>
     </AuthLayout>
