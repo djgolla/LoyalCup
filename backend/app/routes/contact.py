@@ -50,6 +50,7 @@ async def send_contact_email(data: ContactRequest):
             """,
             data.email
         )
+        logger.info(f"Contact email sent from {data.email}")
         return {"message": "Email sent successfully"}
     except Exception as e:
         logger.error(f"Failed to send contact email: {str(e)}")

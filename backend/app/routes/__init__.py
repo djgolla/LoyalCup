@@ -20,11 +20,12 @@ from app.routes import (
     pos_square_webhook,
     billing,
     reviews,
+    contact,
 )
 
 __all__ = [
     "auth", "users", "shops", "menu", "menu_sync", "orders", "loyalty",
     "admin", "payments", "pos_connect", "pos_status", "pos_sync",
     "pos_square_callback", "pos_square_set_location", "pos_square_webhook",
-    "billing", "reviews",
+    "billing", "reviews", "contact",
 ]
