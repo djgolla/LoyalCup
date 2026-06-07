@@ -13,38 +13,17 @@ export default function ResetPassword() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Exchange hash token for session
-    const handleHashSession = async () => {
+    // Let Supabase handle the hash automatically
+    const checkSession = async () => {
       try {
-        const hash = window.location.hash.substring(1); // Remove #
-        if (!hash) {
+        const { data } = await supabase.auth.getSession();
+        
+        if (data.session) {
+          setSessionReady(true);
+        } else {
           setError('Invalid or expired reset link. Please request a new password reset.');
           setTimeout(() => navigate('/login'), 3000);
-          return;
         }
-
-        // Parse hash parameters
-        const params = new URLSearchParams(hash);
-        const accessToken = params.get('access_token');
-        const type = params.get('type');
-
-        if (!accessToken || type !== 'recovery') {
-          setError('Invalid reset link.');
-          setTimeout(() => navigate('/login'), 3000);
-          return;
-        }
-
-        // Exchange token for session
-        const { data, error: sessionError } = await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: params.get('refresh_token') || '',
-        });
-
-        if (sessionError || !data.session) {
-          throw sessionError || new Error('Failed to create session');
-        }
-
-        setSessionReady(true);
       } catch (err) {
         console.error('Session error:', err);
         setError('Invalid or expired reset link. Please request a new password reset.');
@@ -52,7 +31,7 @@ export default function ResetPassword() {
       }
     };
 
-    handleHashSession();
+    checkSession();
   }, [navigate]);
 
   const handleResetPassword = async (e) => {
@@ -80,7 +59,6 @@ export default function ResetPassword() {
       
       if (error) throw error;
 
-      // Sign out after reset
       await supabase.auth.signOut();
       
       toast.success('Password reset successfully! Redirecting to login...');
