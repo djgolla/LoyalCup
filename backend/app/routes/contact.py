@@ -22,7 +22,7 @@ class ContactRequest(BaseModel):
 async def send_contact_email(data: ContactRequest):
     """Send contact form email to support@loyalcupapp.com"""
     try:
-        await email_service.send_email(
+        email_service.send_email(
             to="support@loyalcupapp.com",
             subject=f"Contact Form: {data.subject}",
             html=f"""
