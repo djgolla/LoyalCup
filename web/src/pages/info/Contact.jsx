@@ -21,15 +21,23 @@ export default function Contact() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
+    console.log('[Contact] Submitting:', { API_URL, formData });
+    
     try {
       const response = await fetch(`${API_URL}/api/v1/contact/send`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(formData)
       });
 
+      console.log('[Contact] Response status:', response.status);
+      const responseBody = await response.text();
+      console.log('[Contact] Response body:', responseBody);
+
       if (!response.ok) {
-        throw new Error('Failed to send email');
+        throw new Error(`Failed to send email: ${response.status} - ${responseBody}`);
       }
 
       toast.success("Message sent! We'll get back to you within 1 business day.");
