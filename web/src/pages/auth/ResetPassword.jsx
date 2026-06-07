@@ -163,7 +163,7 @@ export default function ResetPassword() {
       setNewPassword("");
       setConfirmPassword("");
 
-      navigate("/login", {
+      navigate("/", {
         replace: true,
         state: {
           passwordResetComplete: true,
