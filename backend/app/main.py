@@ -92,10 +92,10 @@ async def log_requests(request: Request, call_next):
         if origin in CORS_ORIGINS:
             headers["Access-Control-Allow-Origin"] = origin
             headers["Access-Control-Allow-Credentials"] = "true"
-        logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}")
+        logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}", exc_info=True)
         return JSONResponse(
             status_code=500,
-            content={"detail": "Internal server error"},
+            content={"detail": "Internal server error", "error": str(exc)},
             headers=headers,
         )
     duration = time.time() - start_time
@@ -151,7 +151,7 @@ async def health_check():
         health_status["status"] = "degraded"
 
     health_status["checks"]["rate_limiter"] = "enabled" if settings.rate_limit_enabled else "disabled"
-    health_status["checks"]["email_service"] = "configured" if settings.sendgrid_api_key else "not_configured"
+    health_status["checks"]["email_service"] = "configured" if settings.google_app_password else "not_configured"
     health_status["checks"]["error_tracking"] = "enabled" if settings.sentry_dsn else "disabled"
     health_status["checks"]["stripe"] = "configured" if settings.stripe_secret_key else "not_configured"
     status_code = 200 if health_status["status"] == "healthy" else 503
