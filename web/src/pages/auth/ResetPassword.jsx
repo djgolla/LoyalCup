@@ -21,19 +21,33 @@ export default function ResetPassword() {
 
     const checkResetLink = async () => {
       try {
-        /*
-          Supabase recovery links usually land here like:
-          /reset-password#access_token=...&refresh_token=...&type=recovery
-
-          Supabase JS will parse that hash and create a temporary session.
-          Then updateUser({ password }) can work.
-        */
-
         const hash = window.location.hash || "";
-        const search = window.location.search || "";
+        const params = new URLSearchParams(hash.replace("#", ""));
 
-        const looksLikeRecoveryLink =
-          hash.includes("type=recovery") || search.includes("type=recovery");
+        const urlError = params.get("error");
+        const urlErrorCode = params.get("error_code");
+        const urlErrorDescription = params.get("error_description");
+
+        if (urlError) {
+          if (!mounted) return;
+
+          console.error("[ResetPassword] URL error:", {
+            urlError,
+            urlErrorCode,
+            urlErrorDescription,
+          });
+
+          setError(
+            urlErrorDescription?.replaceAll("+", " ") ||
+              "This password reset link is invalid or has expired. Please request a new one."
+          );
+
+          setLinkValid(false);
+          setCheckingLink(false);
+          return;
+        }
+
+        const isRecoveryLink = params.get("type") === "recovery";
 
         const {
           data: { session },
@@ -44,19 +58,24 @@ export default function ResetPassword() {
 
         if (sessionError) {
           console.error("[ResetPassword] Session error:", sessionError);
-          setError("Invalid or expired password reset link. Please request a new one.");
+
+          setError(
+            "Invalid or expired password reset link. Please request a new one."
+          );
           setLinkValid(false);
           setCheckingLink(false);
           return;
         }
 
-        if (session && looksLikeRecoveryLink) {
+        if (session && isRecoveryLink) {
           setLinkValid(true);
           setCheckingLink(false);
           return;
         }
 
-        setError("Invalid or expired password reset link. Please request a new one.");
+        setError(
+          "Invalid or expired password reset link. Please request a new one."
+        );
         setLinkValid(false);
         setCheckingLink(false);
       } catch (err) {
@@ -150,11 +169,11 @@ export default function ResetPassword() {
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              Invalid Link
+              Reset Link Expired
             </h1>
 
             <p className="text-gray-600 dark:text-gray-400">
-              This password reset link has expired or is invalid.
+              This password reset link is invalid or has expired.
             </p>
           </div>
 
