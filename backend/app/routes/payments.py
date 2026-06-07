@@ -130,23 +130,32 @@ async def create_payment(
 
     # ── STEP 1: Create order in DB BEFORE charging ────────────────────────────
     try:
+        pending_payload = {
+            "customer_id": customer_id,
+            "shop_id":     request.shop_id,
+            "status":      "payment_pending",
+            "subtotal":    subtotal_dollars,
+            "tax":         0,
+            "total":       0,
+            "metadata": {
+                "pos_provider":            "square",
+                "payment_method":          "card_in_app",
+                "loyalty_points_redeemed": request.loyalty_points_to_redeem,
+                "customer_note":           request.customer_note,
+            },
+        }
+
         pending_resp = (
-            db.get_service_client().table("orders").insert({
-                "customer_id": customer_id,
-                "shop_id":     request.shop_id,
-                "status":      "payment_pending",
-                "subtotal":    subtotal_dollars,
-                "tax":         0,
-                "total":       0,
-                "metadata": {
-                    "pos_provider":            "square",
-                    "payment_method":          "card_in_app",
-                    "loyalty_points_redeemed": request.loyalty_points_to_redeem,
-                    "customer_note":           request.customer_note,
-                },
-            }).select().single().execute()
+            db.get_service_client()
+            .table("orders")
+            .insert(pending_payload)
+            .execute()
         )
-        order    = pending_resp.data
+
+        if not pending_resp.data:
+            raise RuntimeError("Pending order insert returned no data")
+
+        order = pending_resp.data[0]
         order_id = order["id"]
     except Exception as e:
         logger.exception(f"[Payment] Failed to create pending order (before charge): {e}")
@@ -197,15 +206,21 @@ async def create_payment(
 
     try:
         confirmed_resp = (
-            db.get_service_client().table("orders").update({
+            db.get_service_client()
+            .table("orders")
+            .update({
                 "status":   "confirmed",
                 "subtotal": subtotal_dollars,
                 "tax":      tax_dollars,
                 "total":    charged_dollars,
                 "metadata": order_metadata,
-            }).eq("id", order_id).select().single().execute()
+            })
+            .eq("id", order_id)
+            .execute()
         )
-        order = confirmed_resp.data
+
+        if confirmed_resp.data:
+            order = confirmed_resp.data[0]
     except Exception as e:
         logger.error(
             f"[Payment] CHARGE SUCCEEDED but order confirm update failed! "
