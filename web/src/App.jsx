@@ -17,6 +17,7 @@ import Download from "./pages/Download";
 
 // auth pages
 import Login           from "./pages/auth/Login";
+import ResetPassword   from "./pages/auth/ResetPassword";
 import ShopApplication from "./pages/auth/ShopApplication";
 
 // shop owner pages
@@ -84,6 +85,7 @@ export default function App() {
                 {/* auth pages */}
                 <Route element={<AuthLayout />}>
                   <Route path="/login" element={<Login />} />
+                  <Route path="/reset-password" element={<ResetPassword />} />
                   <Route path="/application-pending" element={<Navigate to="/shop-owner/subscribe" replace />} />
                 </Route>
 

@@ -155,7 +155,7 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectUrl: 'loyalcup://reset-password',
+        redirectUrl: 'https://loyalcupapp.com/reset-password',
       });
       if (error) throw error;
       Alert.alert(
