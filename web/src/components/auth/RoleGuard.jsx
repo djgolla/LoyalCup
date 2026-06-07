@@ -1,14 +1,15 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import PageLoader from "../ui/PageLoader";
 
 export default function RoleGuard({ children, roles }) {
   const { user, loading, hasRole } = useAuth();
 
-  // Don't redirect while auth is still resolving (prevents flash-redirect on refresh)
-  if (loading) return null;
+  // CRITICAL: Return null while loading - don't redirect yet
+  // This gives onAuthStateChange time to parse recovery token from email link
+  if (loading) return <PageLoader />;
 
-  // Not logged in → send to login page so shop owners with expired sessions
-  // land on the sign-in form, not the public marketing page with no obvious way back
+  // Not logged in → send to login page
   if (!user) {
     return <Navigate to="/login" replace />;
   }
