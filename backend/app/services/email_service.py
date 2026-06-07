@@ -3,6 +3,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from app.config import settings
 from app.utils.logging import get_logger
+import socket
 
 logger = get_logger(__name__)
 
@@ -26,13 +27,23 @@ class EmailService:
 
             msg.attach(MIMEText(html, "html"))
 
-            with smtplib.SMTP("smtp-relay.gmail.com", 587) as server:
+            logger.info(f"Connecting to smtp-relay.gmail.com:587")
+            with smtplib.SMTP("smtp-relay.gmail.com", 587, timeout=10) as server:
+                logger.info("Connected, starting TLS")
                 server.starttls()
+                logger.info("TLS started, logging in")
                 server.login("support@loyalcupapp.com", settings.google_app_password)
+                logger.info("Login successful, sending message")
                 server.send_message(msg)
 
             logger.info(f"Email sent to {to}")
             return True
+        except smtplib.SMTPAuthenticationError as e:
+            logger.error(f"SMTP Auth failed: {str(e)}")
+            raise
+        except socket.timeout as e:
+            logger.error(f"SMTP timeout (connection took >10s): {str(e)}")
+            raise
         except Exception as e:
             logger.error(f"Email error: {str(e)}")
             raise
