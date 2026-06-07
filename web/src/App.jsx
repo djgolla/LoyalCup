@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 
 // layouts
@@ -52,11 +52,17 @@ import PageLoader         from "./components/ui/PageLoader";
 
 function RoleRedirect({ children }) {
   const { user, loading } = useAuth();
+  const location = useLocation();
+  
+  // Don't redirect if on reset-password page
+  if (location.pathname === '/reset-password') {
+    return children;
+  }
+  
   if (loading) return <PageLoader />;
   if (user) {
     const role = user.user_metadata?.role;
     if (role === "shop_owner") return <Navigate to="/shop-owner/dashboard" replace />;
-    // admin accounts get sent to home — admin panel has been removed
     if (role === "admin") return <Navigate to="/" replace />;
   }
   return children;
