@@ -13,7 +13,7 @@ import {
   Platform,
   StyleSheet,
 } from 'react-native';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Feather from '@expo/vector-icons/Feather';
 
 const styles = StyleSheet.create({
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 20,
+    marginTime: 20,
   },
   footerText: {
     color: '#666',
@@ -119,6 +119,12 @@ const styles = StyleSheet.create({
   footerLink: {
     color: '#00704A',
     fontWeight: '600',
+  },
+  cooldownText: {
+    color: '#999',
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: 'center',
   },
 });
 
@@ -130,6 +136,8 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+  const cooldownTimer = useRef(null);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -147,21 +155,65 @@ export default function LoginScreen() {
     }
   };
 
+  const startCooldown = () => {
+    setCooldown(30);
+    if (cooldownTimer.current) clearInterval(cooldownTimer.current);
+    
+    cooldownTimer.current = setInterval(() => {
+      setCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(cooldownTimer.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
   const handleForgotPassword = async () => {
     if (!email.trim()) {
       Alert.alert('Enter Your Email', 'Type your email address above, then tap Forgot Password.');
       return;
     }
+
+    // Verify email exists before sending reset link (security)
+    if (cooldown > 0) {
+      Alert.alert('Please Wait', `Try again in ${cooldown} seconds`);
+      return;
+    }
+
     setLoading(true);
     try {
+      // Check if email exists in auth system
+      const { data, error: fetchError } = await supabase
+        .from('auth.users')
+        .select('id')
+        .eq('email', email.toLowerCase().trim())
+        .single();
+
+      // Don't reveal if email exists or not (security best practice)
+      if (fetchError || !data) {
+        Alert.alert(
+          'Check Your Email 📬',
+          'If that email exists in our system, a password reset link has been sent.'
+        );
+        startCooldown();
+        setLoading(false);
+        return;
+      }
+
+      // Email exists, send reset link
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectUrl: 'https://loyalcupapp.com/reset-password',
       });
+
       if (error) throw error;
+
       Alert.alert(
         'Check Your Email 📬',
         `We sent a password reset link to ${email.trim()}. Check your inbox (and spam folder).`
       );
+      startCooldown();
     } catch (e) {
       Alert.alert('Error', e.message || 'Failed to send reset email. Please try again.');
     } finally {
@@ -206,6 +258,7 @@ export default function LoginScreen() {
                   autoCapitalize="none"
                   keyboardType="email-address"
                   autoComplete="email"
+                  editable={!loading}
                 />
               </View>
             </View>
@@ -222,6 +275,7 @@ export default function LoginScreen() {
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
+                  editable={!loading}
                 />
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                   <Feather name={showPassword ? 'eye' : 'eye-off'} size={20} color="#666" />
@@ -229,9 +283,23 @@ export default function LoginScreen() {
               </View>
             </View>
 
-            <TouchableOpacity onPress={handleForgotPassword}>
-              <Text style={styles.forgotPassword}>Forgot Password?</Text>
+            <TouchableOpacity 
+              onPress={handleForgotPassword}
+              disabled={loading || cooldown > 0}
+            >
+              <Text style={[
+                styles.forgotPassword,
+                (loading || cooldown > 0) && { opacity: 0.5 }
+              ]}>
+                Forgot Password?
+              </Text>
             </TouchableOpacity>
+
+            {cooldown > 0 && (
+              <Text style={styles.cooldownText}>
+                Try again in {cooldown}s
+              </Text>
+            )}
 
             <TouchableOpacity
               style={[styles.button, loading && styles.buttonDisabled]}
