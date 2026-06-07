@@ -54,17 +54,21 @@ function RoleRedirect({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
   
-  // Don't redirect if on reset-password page
+  // Don't redirect on reset-password page
   if (location.pathname === '/reset-password') {
     return children;
   }
   
+  // Wait for auth to load
   if (loading) return <PageLoader />;
-  if (user) {
+  
+  // Don't redirect if user just has a session (might be from reset link)
+  if (user && location.pathname === '/') {
     const role = user.user_metadata?.role;
     if (role === "shop_owner") return <Navigate to="/shop-owner/dashboard" replace />;
     if (role === "admin") return <Navigate to="/" replace />;
   }
+  
   return children;
 }
 
