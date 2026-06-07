@@ -19,7 +19,7 @@ import Feather from '@expo/vector-icons/Feather';
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffff',
   },
   keyboardView: {
     flex: 1,
@@ -52,6 +52,7 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     marginBottom: 10,
+    color: '#000000',
   },
   subtitle: {
     fontSize: 16,
@@ -81,11 +82,13 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 10,
     fontSize: 16,
+    color: '#000000',
   },
   forgotPassword: {
     color: '#b8860b',
     fontSize: 14,
     marginBottom: 20,
+    textAlign: 'right',
   },
   button: {
     backgroundColor: '#b8860b',

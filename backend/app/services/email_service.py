@@ -10,9 +10,13 @@ logger = get_logger(__name__)
 class EmailService:
     """Email service for sending transactional emails via Google SMTP"""
 
-    async def send_email(self, to: str, subject: str, html: str, reply_to: str = None):
-        """Send email via Google SMTP"""
+    def send_email(self, to: str, subject: str, html: str, reply_to: str = None):
+        """Send email via Google SMTP (synchronous)"""
         try:
+            if not settings.google_app_password:
+                logger.error("GOOGLE_APP_PASSWORD not configured")
+                raise ValueError("Email service not configured - missing GOOGLE_APP_PASSWORD")
+            
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
             msg["From"] = "support@loyalcupapp.com"
@@ -33,7 +37,7 @@ class EmailService:
             logger.error(f"Email error: {str(e)}")
             raise
 
-    async def send_order_confirmation_rich(self, to_email: str, order_id: str, shop_name: str, 
+    def send_order_confirmation_rich(self, to_email: str, order_id: str, shop_name: str, 
                                           items: list, subtotal: float, tax: float, total: float, 
                                           customer_note: str = None):
         """Send order confirmation email"""
@@ -64,7 +68,7 @@ class EmailService:
             <p>Your order will be ready soon!</p>
             """
 
-            await self.send_email(
+            self.send_email(
                 to=to_email,
                 subject=f"Order Confirmation - {order_id}",
                 html=html

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, EmailStr
-from app.services.email_service import send_email
+from app.services.email_service import email_service
 from app.utils.logging import get_logger
 
 router = APIRouter(
@@ -22,7 +22,7 @@ class ContactRequest(BaseModel):
 async def send_contact_email(data: ContactRequest):
     """Send contact form email to support@loyalcupapp.com"""
     try:
-        await send_email(
+        await email_service.send_email(
             to="support@loyalcupapp.com",
             subject=f"Contact Form: {data.subject}",
             html=f"""

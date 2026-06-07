@@ -140,19 +140,6 @@ async def get_current_user(token_payload: dict = Depends(require_auth())):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.post("/google")
-async def google_oauth():
-    """
-    Get Google OAuth URL.
-    Note: Actual OAuth flow is typically handled client-side with Supabase.
-    """
-    try:
-        oauth_url = await auth_service.get_google_oauth_url()
-        return {"oauth_url": oauth_url}
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
-
 @router.post("/forgot-password")
 async def forgot_password(data: ForgotPasswordRequest):
     """
