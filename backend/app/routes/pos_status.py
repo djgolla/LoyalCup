@@ -1,13 +1,13 @@
 """
 GET /api/v1/pos/status  — current POS connection state for a shop
 
-Uses the token manager to auto-refresh expired Square tokens,
-and surfaces a `needs_reauth` flag so the frontend can prompt
-the shop owner to reconnect if refresh also fails.
+Owner/admin callers get full POS connection status + Square locations.
 
-Authorization: the user's role is resolved from profiles.role (DB),
-never from the editable JWT user_metadata. Admins may read any shop;
-everyone else must own the shop.
+Customer/non-owner callers get a safe checkout-ready response only:
+  status, provider, shop_id, location_id, has_location, needs_reauth, error
+
+This lets mobile checkout verify that a shop can accept Square payments
+without exposing access tokens, refresh tokens, or owner-only Square settings.
 """
 import logging
 from fastapi import APIRouter, Request, HTTPException, Depends
@@ -19,8 +19,8 @@ from app.integrations.square.token_manager import (
     SquareReauthRequired,
 )
 
-router  = APIRouter()
-logger  = logging.getLogger(__name__)
+router = APIRouter()
+logger = logging.getLogger(__name__)
 _square = SquareAdapter()
 
 
@@ -32,41 +32,73 @@ async def pos_status(
 ):
     """
     Returns POS connection status for a shop.
-    Query params: provider (required), shop_id (required)
+
+    Query params:
+      provider=square
+      shop_id=<uuid>
+
+    Owners/admins get full Square status.
+    Customers/non-owners get only payment-readiness data needed for checkout.
     """
     provider = request.query_params.get("provider")
-    shop_id  = request.query_params.get("shop_id")
+    shop_id = request.query_params.get("shop_id")
 
     if not provider:
         raise HTTPException(status_code=400, detail="Missing provider")
     if not shop_id:
         raise HTTPException(status_code=400, detail="Missing shop_id")
+    if provider != "square":
+        raise HTTPException(status_code=400, detail="Only square is currently supported")
 
-    user_id   = user.get("sub", "")
-    user_role = get_user_role(user_id)  # ← DB lookup, NOT user_metadata
+    user_id = user.get("sub", "")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
     svc = db.get_service_client()
 
-    # Authorization: admin can read any shop; otherwise must own this shop.
-    if user_role != "admin":
-        shop_check = (
-            svc.table("shops")
-            .select("id")
-            .eq("id", shop_id)
-            .eq("owner_id", user_id)
-            .limit(1)
-            .execute()
-        )
-        if not shop_check.data:
-            raise HTTPException(status_code=403, detail="Not authorized for this shop")
+    # Resolve role, but do not let a missing/broken profile crash checkout
+    # into a fake "payments not setup" state without a useful backend log.
+    try:
+        user_role = get_user_role(user_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"[POS Status] Could not resolve role for user {user_id}: {e}")
+        user_role = "customer"
+
+    # Check whether this user owns the shop.
+    is_owner = False
+    shop_check = (
+        svc.table("shops")
+        .select("id, owner_id, status")
+        .eq("id", shop_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not shop_check.data:
+        raise HTTPException(status_code=404, detail="Shop not found")
+
+    shop = shop_check.data[0]
+    if shop.get("owner_id") == user_id:
+        is_owner = True
+
+    is_admin = user_role == "admin"
+    can_see_full_pos_details = is_admin or is_owner
+
+    # Pull POS connection.
+    # Owners/admins need tokens so token manager can refresh/self-heal.
+    # Customers should NEVER receive or require tokens.
+    select_fields = (
+        "id, status, merchant_id, location_id, "
+        "token_expires_at, updated_at, access_token, refresh_token"
+        if can_see_full_pos_details
+        else "id, status, merchant_id, location_id, token_expires_at, updated_at"
+    )
 
     result = (
         svc.table("pos_connections")
-        .select(
-            "id, status, merchant_id, location_id, "
-            "token_expires_at, updated_at, "
-            "access_token, refresh_token"
-        )
+        .select(select_fields)
         .eq("shop_id", shop_id)
         .eq("provider", provider)
         .limit(1)
@@ -75,36 +107,55 @@ async def pos_status(
 
     if not result.data:
         return {
-            "status":       "disconnected",
-            "provider":     provider,
-            "shop_id":      shop_id,
-            "merchant_id":  None,
-            "location_id":  None,
+            "status": "disconnected",
+            "provider": provider,
+            "shop_id": shop_id,
+            "merchant_id": None if can_see_full_pos_details else None,
+            "location_id": None,
+            "token_expires_at": None if can_see_full_pos_details else None,
+            "last_updated": None,
             "has_location": False,
             "needs_reauth": False,
-            "last_updated": None,
-            "locations":    [],
-            "error":        None,
+            "locations": [] if can_see_full_pos_details else [],
+            "error": None,
         }
 
-    conn      = result.data[0]
+    conn = result.data[0]
     db_status = conn.get("status", "disconnected")
+    location_id = conn.get("location_id")
 
-    locations    = []
+    # Customer/non-owner path:
+    # Mobile checkout only needs this location_id. Do not hit Square, do not
+    # return tokens, do not require shop ownership.
+    if not can_see_full_pos_details:
+        needs_reauth = db_status == "reauth_required"
+        error_msg = None
+
+        if db_status != "connected":
+            error_msg = "Square is not connected for this shop."
+        elif not location_id:
+            error_msg = "Square location is not set for this shop."
+
+        return {
+            "status": db_status,
+            "provider": provider,
+            "shop_id": shop_id,
+            "merchant_id": None,
+            "location_id": location_id if db_status == "connected" else None,
+            "token_expires_at": None,
+            "last_updated": conn.get("updated_at"),
+            "has_location": location_id is not None,
+            "needs_reauth": needs_reauth,
+            "locations": [],
+            "error": error_msg,
+        }
+
+    # Owner/admin path:
+    # Full status + Square locations + token self-healing.
+    locations = []
     needs_reauth = db_status == "reauth_required"
-    error_msg    = None
+    error_msg = None
 
-    # ------------------------------------------------------------------
-    # Decide whether to actually hit Square to (a) load locations and
-    # (b) self-heal a stale `reauth_required` flag.
-    #
-    # We hit Square if:
-    #   - provider is square, AND
-    #   - status is `connected`, OR
-    #   - status is `reauth_required` BUT we still have tokens that
-    #     might be valid (i.e. we have access_token or refresh_token).
-    #     This is the self-healing path.
-    # ------------------------------------------------------------------
     should_try_square = provider == "square" and (
         db_status == "connected"
         or (
@@ -116,18 +167,19 @@ async def pos_status(
     if should_try_square:
         try:
             loc_objects = await with_square_retry(
-                db, shop_id,
+                db,
+                shop_id,
                 lambda token: _square.list_locations(token),
             )
             locations = [{"id": l.id, "name": l.name} for l in loc_objects]
 
-            # Self-heal: if Square just accepted our token but the row
-            # was stuck on `reauth_required`, flip it back to connected.
+            # Self-heal: if Square accepted our token but the row was stale.
             if db_status != "connected":
                 try:
                     svc.table("pos_connections").update({
                         "status": "connected",
                     }).eq("id", conn["id"]).execute()
+
                     logger.info(
                         f"[POS Status] Self-healed shop {shop_id}: "
                         f"{db_status} -> connected"
@@ -137,36 +189,33 @@ async def pos_status(
                         f"[POS Status] Could not self-heal status for "
                         f"shop {shop_id}: {e}"
                     )
-                db_status    = "connected"
+
+                db_status = "connected"
                 needs_reauth = False
-                error_msg    = None
+                error_msg = None
 
         except SquareReauthRequired as e:
-            logger.warning(
-                f"[POS Status] Square reauth required for shop {shop_id}: {e}"
-            )
+            logger.warning(f"[POS Status] Square reauth required for shop {shop_id}: {e}")
             needs_reauth = True
-            db_status    = "reauth_required"
-            error_msg    = "Square connection expired. Please reconnect Square."
+            db_status = "reauth_required"
+            error_msg = "Square connection expired. Please reconnect Square."
+
         except Exception as e:
-            logger.warning(
-                f"[POS Status] Could not fetch Square locations for "
-                f"shop {shop_id}: {e}"
-            )
+            logger.warning(f"[POS Status] Could not fetch Square locations for shop {shop_id}: {e}")
             error_msg = "Could not load Square locations. Try again or reconnect."
 
     return {
-        "status":           db_status,
-        "provider":         provider,
-        "shop_id":          shop_id,
-        "merchant_id":      conn.get("merchant_id"),
-        "location_id":      conn.get("location_id"),
+        "status": db_status,
+        "provider": provider,
+        "shop_id": shop_id,
+        "merchant_id": conn.get("merchant_id"),
+        "location_id": conn.get("location_id"),
         "token_expires_at": conn.get("token_expires_at"),
-        "last_updated":     conn.get("updated_at"),
-        "has_location":     conn.get("location_id") is not None,
-        "needs_reauth":     needs_reauth,
-        "locations":        locations,
-        "error":            error_msg,
+        "last_updated": conn.get("updated_at"),
+        "has_location": conn.get("location_id") is not None,
+        "needs_reauth": needs_reauth,
+        "locations": locations,
+        "error": error_msg,
     }
 
 
