@@ -149,7 +149,7 @@ export default function Categories() {
         .from('categories')
         .select('*')
         .eq('shop_id', shopId)
-        // no is_active filter — old rows have NULL which gets excluded by eq()
+        .eq('is_active', true)
         .order('display_order', { ascending: true });
       if (error) throw error;
       setCategories(data || []);
@@ -166,7 +166,11 @@ export default function Categories() {
       if (editingCategory) {
         const { error } = await supabase
           .from('categories')
-          .update({ name: formData.name, description: formData.description || null })
+          .update({
+            name: formData.name,
+            description: formData.description || null,
+            is_active: true,
+          })
           .eq('id', editingCategory.id);
         if (error) throw error;
         toast.success('Category updated!');
