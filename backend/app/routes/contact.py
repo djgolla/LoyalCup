@@ -34,6 +34,7 @@ def send_email_blocking(to: str, subject: str, html: str, reply_to: str):
 @router.post("/send")
 async def send_contact_email(data: ContactRequest):
     """Send contact form email to support@loyalcupapp.com"""
+    logger.info(f"[Contact] Received request from {data.email}")
     try:
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
@@ -50,11 +51,11 @@ async def send_contact_email(data: ContactRequest):
             """,
             data.email
         )
-        logger.info(f"Contact email sent from {data.email}")
+        logger.info(f"[Contact] Email sent successfully from {data.email}")
         return {"message": "Email sent successfully"}
     except Exception as e:
-        logger.error(f"Failed to send contact email: {str(e)}")
+        logger.error(f"[Contact] Failed to send email: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to send email"
+            detail=f"Failed to send email: {str(e)}"
         )
