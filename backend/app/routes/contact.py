@@ -21,6 +21,16 @@ class ContactRequest(BaseModel):
     message: str
 
 
+def send_email_blocking(to: str, subject: str, html: str, reply_to: str):
+    """Wrapper to send email with keyword args"""
+    return email_service.send_email(
+        to=to,
+        subject=subject,
+        html=html,
+        reply_to=reply_to
+    )
+
+
 @router.post("/send")
 async def send_contact_email(data: ContactRequest):
     """Send contact form email to support@loyalcupapp.com"""
@@ -28,7 +38,7 @@ async def send_contact_email(data: ContactRequest):
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
             executor,
-            email_service.send_email,
+            send_email_blocking,
             "support@loyalcupapp.com",
             f"Contact Form: {data.subject}",
             f"""
