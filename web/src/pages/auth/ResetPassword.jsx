@@ -13,25 +13,21 @@ export default function ResetPassword() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Let Supabase handle the hash automatically
-    const checkSession = async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-        
-        if (data.session) {
+    // Listen for auth changes - this catches the hash parsing
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+        if (session) {
           setSessionReady(true);
-        } else {
-          setError('Invalid or expired reset link. Please request a new password reset.');
-          setTimeout(() => navigate('/login'), 3000);
         }
-      } catch (err) {
-        console.error('Session error:', err);
+      } else if (event === 'SIGNED_OUT' || !session) {
         setError('Invalid or expired reset link. Please request a new password reset.');
         setTimeout(() => navigate('/login'), 3000);
       }
-    };
+    });
 
-    checkSession();
+    return () => {
+      subscription?.unsubscribe();
+    };
   }, [navigate]);
 
   const handleResetPassword = async (e) => {
@@ -61,7 +57,7 @@ export default function ResetPassword() {
 
       await supabase.auth.signOut();
       
-      toast.success('Password reset successfully! Redirecting to login...');
+      toast.success('Password reset successfully!');
       setTimeout(() => navigate('/login'), 1500);
     } catch (err) {
       const errorMsg = err.message || 'Failed to reset password';
@@ -75,7 +71,7 @@ export default function ResetPassword() {
   if (!sessionReady && !error) {
     return (
       <AuthLayout>
-        <div className="flex items-center justify-center">
+        <div className="flex items-center justify-center h-screen">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-700 mx-auto mb-4"></div>
             <p className="text-gray-600 dark:text-gray-400">Verifying reset link...</p>
