@@ -3,11 +3,16 @@ import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { toast } from "sonner";
 import { Coffee, Smartphone } from "lucide-react";
+import { supabase } from "../../lib/supabase";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotCooldown, setForgotCooldown] = useState(0);
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -18,10 +23,9 @@ export default function Login() {
       const { user } = await login(email, password);
       toast.success("Welcome back!");
       const role = user?.user_metadata?.role;
-      if (role === "admin")      navigate("/admin/dashboard");
+      if (role === "admin") navigate("/admin/dashboard");
       else if (role === "shop_owner") navigate("/shop-owner/dashboard");
       else {
-        // customers don't belong here
         toast.info("LoyalCup for customers is on the mobile app.");
         navigate("/download");
       }
@@ -32,6 +36,136 @@ export default function Login() {
       setLoading(false);
     }
   };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    
+    if (!forgotEmail) {
+      toast.error("Please enter your email");
+      return;
+    }
+
+    if (forgotCooldown > 0) {
+      toast.error(`Please wait ${forgotCooldown}s before trying again`);
+      return;
+    }
+
+    setForgotLoading(true);
+    try {
+      // First, verify email exists in system
+      const { data, error: lookupError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', forgotEmail.toLowerCase())
+        .single();
+
+      if (lookupError || !data) {
+        // Don't reveal if email exists - security best practice
+        toast.success('If that email exists, a reset link has been sent');
+        setForgotEmail('');
+        setShowForgotPassword(false);
+        // Start 30s cooldown
+        setForgotCooldown(30);
+        const interval = setInterval(() => {
+          setForgotCooldown(prev => {
+            if (prev <= 1) {
+              clearInterval(interval);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+        return;
+      }
+
+      // Send reset link
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) throw error;
+
+      toast.success('Password reset link sent to your email!');
+      setForgotEmail('');
+      setShowForgotPassword(false);
+      
+      // Start 30s cooldown
+      setForgotCooldown(30);
+      const interval = setInterval(() => {
+        setForgotCooldown(prev => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } catch (error) {
+      console.error("Password reset error:", error);
+      toast.error(error.message || "Failed to send reset link. Please try again.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  if (showForgotPassword) {
+    return (
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl shadow-lg mb-4">
+            <Coffee className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Reset Password
+          </h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
+            Enter your email to receive a reset link
+          </p>
+        </div>
+
+        <form
+          onSubmit={handleForgotPassword}
+          className="bg-white dark:bg-neutral-900 p-8 rounded-2xl shadow-lg border border-gray-200 dark:border-neutral-800"
+        >
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Email
+            </label>
+            <input
+              type="email"
+              value={forgotEmail}
+              onChange={(e) => setForgotEmail(e.target.value)}
+              className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-xl outline-none focus:ring-2 focus:ring-amber-500 transition"
+              placeholder="you@example.com"
+              required
+              disabled={forgotLoading || forgotCooldown > 0}
+            />
+            {forgotCooldown > 0 && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                Try again in {forgotCooldown}s
+              </p>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            disabled={forgotLoading || forgotCooldown > 0}
+            className="w-full bg-gradient-to-r from-amber-600 to-orange-600 text-white py-3 rounded-xl font-semibold hover:from-amber-700 hover:to-orange-700 transition disabled:opacity-50"
+          >
+            {forgotLoading ? 'Sending...' : forgotCooldown > 0 ? `Wait ${forgotCooldown}s` : 'Send Reset Link'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowForgotPassword(false)}
+            className="w-full mt-3 text-amber-600 hover:text-amber-700 font-medium py-2 transition"
+          >
+            Back to Login
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-md">
@@ -77,6 +211,13 @@ export default function Login() {
             placeholder="••••••••"
             required
           />
+          <button
+            type="button"
+            onClick={() => setShowForgotPassword(true)}
+            className="text-xs text-amber-600 hover:text-amber-700 mt-2 font-medium transition"
+          >
+            Forgot password?
+          </button>
         </div>
 
         <button

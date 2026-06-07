@@ -10,24 +10,39 @@ export default function ResetPassword() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [sessionReady, setSessionReady] = useState(false);
+  const [isValidToken, setIsValidToken] = useState(false);
   const navigate = useNavigate();
 
+  // Check if valid recovery token exists in URL hash
   useEffect(() => {
-    // Listen for auth changes - this catches the hash parsing
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-        if (session) {
+    const verifyToken = async () => {
+      try {
+        // Give Supabase SDK time to parse hash from email link
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        // Valid recovery token must have session with recovery type in URL
+        if (session && window.location.hash.includes('type=recovery')) {
+          setIsValidToken(true);
+          setSessionReady(true);
+        } else if (sessionError || !session) {
+          setError('Invalid or expired password reset link. Please request a new one.');
+          setSessionReady(true);
+          setTimeout(() => navigate('/login'), 3000);
+        } else {
+          setError('Invalid link. Please request a new password reset.');
           setSessionReady(true);
         }
-      } else if (event === 'SIGNED_OUT' || !session) {
-        setError('Invalid or expired reset link. Please request a new password reset.');
+      } catch (err) {
+        console.error('Token verification error:', err);
+        setError('An error occurred. Please try again.');
+        setSessionReady(true);
         setTimeout(() => navigate('/login'), 3000);
       }
-    });
-
-    return () => {
-      subscription?.unsubscribe();
     };
+
+    verifyToken();
   }, [navigate]);
 
   const handleResetPassword = async (e) => {
@@ -51,15 +66,19 @@ export default function ResetPassword() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
       
-      if (error) throw error;
+      if (updateError) throw updateError;
 
+      // Sign out after password update
       await supabase.auth.signOut();
       
       toast.success('Password reset successfully!');
       setTimeout(() => navigate('/login'), 1500);
     } catch (err) {
+      console.error('Password update error:', err);
       const errorMsg = err.message || 'Failed to reset password';
       setError(errorMsg);
       toast.error(errorMsg);
@@ -68,7 +87,8 @@ export default function ResetPassword() {
     }
   };
 
-  if (!sessionReady && !error) {
+  // Loading state
+  if (!sessionReady) {
     return (
       <AuthLayout>
         <div className="flex items-center justify-center h-screen">
@@ -81,6 +101,31 @@ export default function ResetPassword() {
     );
   }
 
+  // Invalid token - show error
+  if (!isValidToken) {
+    return (
+      <AuthLayout>
+        <div className="w-full max-w-md">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Invalid Link</h1>
+            <p className="text-gray-600 dark:text-gray-400">This password reset link has expired or is invalid.</p>
+          </div>
+
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
+            <p className="text-red-800 dark:text-red-300 text-sm">{error}</p>
+          </div>
+
+          <p className="text-center text-gray-600 dark:text-gray-400 mt-6">
+            <a href="/login" className="text-green-700 hover:text-green-800 font-medium">
+              Return to Login
+            </a>
+          </p>
+        </div>
+      </AuthLayout>
+    );
+  }
+
+  // Valid token - show reset form
   return (
     <AuthLayout>
       <div className="w-full max-w-md">
@@ -108,6 +153,7 @@ export default function ResetPassword() {
               className="w-full px-4 py-2 bg-gray-100 dark:bg-neutral-700 rounded-lg outline-none focus:ring-2 focus:ring-green-700 text-gray-900 dark:text-white"
               required
               disabled={loading}
+              autoComplete="new-password"
             />
           </div>
 
@@ -123,6 +169,7 @@ export default function ResetPassword() {
               className="w-full px-4 py-2 bg-gray-100 dark:bg-neutral-700 rounded-lg outline-none focus:ring-2 focus:ring-green-700 text-gray-900 dark:text-white"
               required
               disabled={loading}
+              autoComplete="new-password"
             />
           </div>
 
@@ -136,9 +183,8 @@ export default function ResetPassword() {
         </form>
 
         <p className="text-center text-gray-600 dark:text-gray-400 mt-6">
-          Remember your password?{' '}
           <a href="/login" className="text-green-700 hover:text-green-800 font-medium">
-            Sign In
+            Back to Login
           </a>
         </p>
       </div>
