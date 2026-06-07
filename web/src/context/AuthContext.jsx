@@ -9,21 +9,47 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Initial session check - Supabase SDK parses hash automatically
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    let isMounted = true;
 
-    // Listen for auth state changes - catches recovery token from email link
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    const initAuth = async () => {
+      try {
+        // First: Get current session (Supabase SDK auto-parses hash)
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        
+        if (isMounted) {
+          setSession(currentSession);
+          setUser(currentSession?.user ?? null);
+        }
 
-    return () => subscription.unsubscribe();
+        // Second: Subscribe to auth state changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+          (event, newSession) => {
+            if (isMounted) {
+              setSession(newSession);
+              setUser(newSession?.user ?? null);
+            }
+          }
+        );
+
+        // Set loading to false AFTER initial session check
+        if (isMounted) {
+          setLoading(false);
+        }
+
+        return () => subscription.unsubscribe();
+      } catch (error) {
+        console.error('Auth init error:', error);
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    initAuth();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const login = async (email, password) => {
@@ -51,10 +77,6 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  /**
-   * Force-refresh the JWT — call after subscription activates so shop_owner
-   * role is live immediately without logout/login.
-   */
   const refreshSession = useCallback(async () => {
     try {
       const { data, error } = await supabase.auth.refreshSession();
@@ -81,7 +103,7 @@ export function AuthProvider({ children }) {
     switch (userRole) {
       case "admin":       return "/admin/dashboard";
       case "shop_owner":  return "/shop-owner/dashboard";
-      case "shop_worker": return "/worker";
+      case "shop_worker" : return "/worker";
       default:            return "/";
     }
   };
