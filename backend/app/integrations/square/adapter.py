@@ -22,6 +22,7 @@ def _square_base() -> str:
         else "https://connect.squareup.com"
     )
 
+
 def _square_api() -> str:
     return _square_base() + "/v2"
 
@@ -59,11 +60,11 @@ class SquareAdapter(POSAdapter):
             resp = await client.post(
                 f"{_square_base()}/oauth2/token",
                 json={
-                    "client_id":     settings.square_application_id,
+                    "client_id": settings.square_application_id,
                     "client_secret": settings.square_application_secret,
-                    "code":          code,
-                    "grant_type":    "authorization_code",
-                    "redirect_uri":  redirect_uri,
+                    "code": code,
+                    "grant_type": "authorization_code",
+                    "redirect_uri": redirect_uri,
                 },
             )
             if resp.status_code != 200:
@@ -77,10 +78,10 @@ class SquareAdapter(POSAdapter):
             resp = await client.post(
                 f"{_square_base()}/oauth2/token",
                 json={
-                    "client_id":     settings.square_application_id,
+                    "client_id": settings.square_application_id,
                     "client_secret": settings.square_application_secret,
                     "refresh_token": refresh_token,
-                    "grant_type":    "refresh_token",
+                    "grant_type": "refresh_token",
                 },
             )
             if resp.status_code != 200:
@@ -114,9 +115,13 @@ class SquareAdapter(POSAdapter):
 
         async with httpx.AsyncClient(timeout=60) as client:
             while True:
-                body: Dict[str, Any] = {"object_types": object_types, "include_related_objects": True}
+                body: Dict[str, Any] = {
+                    "object_types": object_types,
+                    "include_related_objects": True,
+                }
                 if cursor:
                     body["cursor"] = cursor
+
                 resp = await client.post(
                     f"{_square_api()}/catalog/search",
                     headers={"Authorization": f"Bearer {access_token}"},
@@ -124,6 +129,7 @@ class SquareAdapter(POSAdapter):
                 )
                 if resp.status_code != 200:
                     raise RuntimeError(f"Square catalog fetch failed {resp.status_code}: {resp.text}")
+
                 payload = resp.json()
                 all_objects.extend(payload.get("objects") or [])
                 all_objects.extend(payload.get("related_objects") or [])
@@ -152,15 +158,17 @@ class SquareAdapter(POSAdapter):
                     raw=obj,
                 ))
             elif t == "ITEM":
-                item_data   = obj.get("item_data", {})
+                item_data = obj.get("item_data", {})
                 price_cents = None
-                currency    = "USD"
-                variations  = item_data.get("variations") or []
+                currency = "USD"
+                variations = item_data.get("variations") or []
+
                 if variations:
                     money = (variations[0].get("item_variation_data") or {}).get("price_money")
                     if money:
                         price_cents = money.get("amount")
-                        currency    = money.get("currency") or "USD"
+                        currency = money.get("currency") or "USD"
+
                 category_id = None
                 for cat_ref in [
                     item_data.get("reporting_category"),
@@ -169,6 +177,7 @@ class SquareAdapter(POSAdapter):
                     if cat_ref and cat_ref.get("id"):
                         category_id = cat_ref["id"]
                         break
+
                 items.append(POSCatalogItem(
                     id=obj["id"],
                     name=item_data.get("name") or "Item",
@@ -188,20 +197,24 @@ class SquareAdapter(POSAdapter):
 
         modifier_sets: List[POSCatalogModifierSet] = []
         for mod_list in modifier_lists_by_id.values():
-            d    = mod_list.get("modifier_list_data") or {}
+            d = mod_list.get("modifier_list_data") or {}
             mods: List[POSCatalogModifier] = []
+
             for m in d.get("modifiers") or []:
                 mod_id = m.get("id")
                 if not mod_id:
                     continue
-                md    = m.get("modifier_data") or {}
+
+                md = m.get("modifier_data") or {}
                 money = md.get("price_money")
+
                 mods.append(POSCatalogModifier(
                     id=mod_id,
                     name=md.get("name") or "Option",
                     price_cents=money.get("amount") if money else None,
                     raw=m,
                 ))
+
             modifier_sets.append(POSCatalogModifierSet(
                 id=mod_list["id"],
                 name=d.get("name") or "Options",
@@ -217,6 +230,44 @@ class SquareAdapter(POSAdapter):
             modifier_sets=modifier_sets,
             images_by_id=images_by_id,
         )
+
+    async def calculate_order(
+        self,
+        access_token: str,
+        location_id: str,
+        order_payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Ask Square to calculate the exact order totals before card entry.
+        This does NOT create an order and does NOT charge a card.
+        """
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                f"{_square_api()}/orders/calculate",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "order": {
+                        "location_id": location_id,
+                        **order_payload,
+                    },
+                },
+            )
+
+            if resp.status_code != 200:
+                try:
+                    err = resp.json()
+                except Exception:
+                    err = {"errors": resp.text}
+
+                raise RuntimeError(
+                    f"Square calculate_order failed {resp.status_code}: "
+                    f"{err.get('errors', resp.text)}"
+                )
+
+            return resp.json()
 
     async def create_order(
         self,
@@ -235,7 +286,7 @@ class SquareAdapter(POSAdapter):
                 f"{_square_api()}/orders",
                 headers={
                     "Authorization": f"Bearer {access_token}",
-                    "Content-Type":  "application/json",
+                    "Content-Type": "application/json",
                 },
                 json={
                     "idempotency_key": idempotency_key or str(uuid.uuid4()),
@@ -245,12 +296,18 @@ class SquareAdapter(POSAdapter):
                     },
                 },
             )
+
             if resp.status_code != 200:
-                err = resp.json()
+                try:
+                    err = resp.json()
+                except Exception:
+                    err = {"errors": resp.text}
+
                 raise RuntimeError(
                     f"Square create_order failed {resp.status_code}: "
                     f"{err.get('errors', resp.text)}"
                 )
+
             return resp.json()
 
     async def charge_payment(
@@ -279,14 +336,15 @@ class SquareAdapter(POSAdapter):
 
         payload: Dict[str, Any] = {
             "idempotency_key": idempotency_key or str(uuid.uuid4()),
-            "source_id":       source_id,
+            "source_id": source_id,
             "amount_money": {
-                "amount":   amount_cents,
+                "amount": amount_cents,
                 "currency": currency,
             },
             "location_id": location_id,
             "autocomplete": True,
         }
+
         if order_id:
             payload["order_id"] = order_id
         if reference_id:
@@ -299,13 +357,19 @@ class SquareAdapter(POSAdapter):
                 f"{_square_api()}/payments",
                 headers={
                     "Authorization": f"Bearer {access_token}",
-                    "Content-Type":  "application/json",
+                    "Content-Type": "application/json",
                 },
                 json=payload,
             )
+
             if resp.status_code != 200:
-                err    = resp.json()
-                errors = err.get("errors", [])
-                msg    = errors[0].get("detail") if errors else resp.text
+                try:
+                    err = resp.json()
+                    errors = err.get("errors", [])
+                    msg = errors[0].get("detail") if errors else resp.text
+                except Exception:
+                    msg = resp.text
+
                 raise RuntimeError(f"Square payment failed: {msg}")
+
             return resp.json()
