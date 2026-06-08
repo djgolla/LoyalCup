@@ -8,13 +8,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCart } from '../context/CartContext';
-import { supabase } from '../lib/supabase';
-import { getGlobalPoints } from '../services/loyaltyService';
+import { getMyLoyalty } from '../services/loyaltyService';
 
 export default function CartScreen() {
   const router = useRouter();
   const { cart, removeItem, clearCart, updateQuantity } = useCart();
-  const [globalPoints, setGlobalPoints] = useState(null);
+  const [pointsSummary, setPointsSummary] = useState(null);
 
   const itemsByShop = cart.reduce((acc, item) => {
     const shopId   = item.shopId;
@@ -28,11 +27,13 @@ export default function CartScreen() {
 
   const loadPoints = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const pts = await getGlobalPoints(user.id);
-        setGlobalPoints(pts);
-      }
+      const loyalty = await getMyLoyalty();
+      const shops = loyalty?.shops || [];
+
+      const available = shops.reduce((sum, s) => sum + (s.current_balance || 0), 0);
+      const pending   = shops.reduce((sum, s) => sum + (s.pending_balance || 0), 0);
+
+      setPointsSummary({ available, pending, total: available + pending });
     } catch (e) {
       console.error('Failed to load points:', e);
     }
@@ -45,7 +46,9 @@ export default function CartScreen() {
   const handleUpdateQuantity = (cartKey, change) => {
     const item = cart.find(i => i.cartKey === cartKey);
     if (!item) return;
+
     const newQty = (item.quantity || 1) + change;
+
     if (newQty <= 0) {
       Alert.alert('Remove Item', 'Remove this item from cart?', [
         { text: 'Cancel', style: 'cancel' },
@@ -74,6 +77,7 @@ export default function CartScreen() {
           <Text style={styles.headerTitle}>Cart</Text>
           <View style={styles.headerButton} />
         </View>
+
         <View style={styles.emptyContainer}>
           <Feather name="shopping-bag" size={80} color="#CCC" />
           <Text style={styles.emptyTitle}>Your cart is empty</Text>
@@ -85,6 +89,10 @@ export default function CartScreen() {
       </SafeAreaView>
     );
   }
+
+  const availablePoints = pointsSummary?.available || 0;
+  const pendingPoints   = pointsSummary?.pending || 0;
+  const hasPoints       = availablePoints > 0 || pendingPoints > 0;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -112,30 +120,40 @@ export default function CartScreen() {
               <View key={item.cartKey} style={styles.cartItem}>
                 {item.image_url
                   ? <Image source={{ uri: item.image_url }} style={styles.itemImage} />
-                  : <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
+                  : (
+                    <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
                       <Feather name="coffee" size={24} color="#CCC" />
                     </View>
+                  )
                 }
+
                 <View style={styles.itemDetails}>
                   <Text style={styles.itemName}>{item.name}</Text>
+
                   {item.customizations?.length > 0 && (
                     <Text style={styles.itemCustomizations}>
                       {item.customizations.map(c => c.name).join(' · ')}
                     </Text>
                   )}
+
                   <Text style={styles.itemPrice}>
                     ${(parseFloat(item.price) * (item.quantity || 1)).toFixed(2)}
                   </Text>
+
                   <View style={styles.quantityContainer}>
                     <TouchableOpacity
                       style={styles.quantityButton}
-                      onPress={() => handleUpdateQuantity(item.cartKey, -1)}>
+                      onPress={() => handleUpdateQuantity(item.cartKey, -1)}
+                    >
                       <Feather name="minus" size={16} color="#000" />
                     </TouchableOpacity>
+
                     <Text style={styles.quantityText}>{item.quantity || 1}</Text>
+
                     <TouchableOpacity
                       style={styles.quantityButton}
-                      onPress={() => handleUpdateQuantity(item.cartKey, 1)}>
+                      onPress={() => handleUpdateQuantity(item.cartKey, 1)}
+                    >
                       <Feather name="plus" size={16} color="#000" />
                     </TouchableOpacity>
                   </View>
@@ -145,11 +163,13 @@ export default function CartScreen() {
           </View>
         ))}
 
-        {globalPoints && globalPoints.current_balance > 0 && (
+        {hasPoints && (
           <View style={styles.pointsTeaser}>
             <Feather name="award" size={18} color="#00704A" />
             <Text style={styles.pointsTeaserText}>
-              You have {globalPoints.current_balance.toLocaleString()} points — redeem at checkout!
+              {availablePoints.toLocaleString()} points available
+              {pendingPoints > 0 ? ` · ${pendingPoints.toLocaleString()} pending` : ''}
+              {availablePoints > 0 ? ' — redeem at checkout!' : ' — available soon!'}
             </Text>
           </View>
         )}

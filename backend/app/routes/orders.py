@@ -1,30 +1,29 @@
 """
 Orders routes.
 
-POST /api/v1/orders            — cash/manual order → sent to Square POS (no charge)
-                                 Mobile card checkout goes through
-                                 POST /api/v1/payments/create (payments.py)
+Launch flow is CARD ONLY:
+  POST /api/v1/payments/create creates and pays orders.
 
-GET  /api/v1/orders            — customer's own orders
-GET  /api/v1/orders/history    — completed/cancelled orders
-GET  /api/v1/orders/{id}       — order details
-POST /api/v1/orders/{id}/cancel — customer cancel (newly placed only)
+This file handles:
+  GET  /api/v1/orders
+  GET  /api/v1/orders/history
+  GET  /api/v1/orders/{id}
+  POST /api/v1/orders/{id}/cancel
+  POST /api/v1/orders/complete-ready
+  POST /api/v1/orders/complete-ready/cron
 
-GET  /api/v1/shops/{id}/orders  — shop order list (owner history)
-
-NOTE: There is no order-status workflow. Customers are given an ETA based on
-the shop's avg_prep_time_minutes; orders go straight to the shop's Square POS.
+Manual/cash order creation is intentionally disabled for launch.
 """
 import logging
-from typing import List, Optional
+import os
+from datetime import datetime, timezone
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, Depends
-from pydantic import BaseModel, validator
+from fastapi import APIRouter, HTTPException, Query, Depends, Header
+from pydantic import BaseModel
 
 from app.services.order_service import order_service
-from app.services.square_order_service import push_order_to_pos
-from app.services.notification_service import send_order_placed_push
-from app.services.email_service import email_service
+from app.services.notification_service import send_order_ready_push
 from app.utils.security import require_auth, require_shop_worker, get_user_role
 from app.database import get_supabase
 
@@ -32,178 +31,185 @@ router = APIRouter(prefix="/api/v1", tags=["orders"])
 logger = logging.getLogger(__name__)
 
 
-# ── Request models ───────────────────────────────────────────────────────────
-
-class OrderItem(BaseModel):
-    menu_item_id:   str
-    quantity:       int
-    base_price:     float
-    customizations: List[dict] = []
-
-    @validator("quantity")
-    def qty_positive(cls, v):
-        if v <= 0:
-            raise ValueError("Quantity must be positive")
-        return v
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
-class CreateOrderRequest(BaseModel):
-    shop_id:       str
-    items:         List[OrderItem]
-    customer_note: Optional[str] = None
+class DisabledOrderRequest(BaseModel):
+    shop_id: Optional[str] = None
 
-    @validator("items")
-    def items_not_empty(cls, v):
-        if not v:
-            raise ValueError("Order must have at least one item")
-        return v
-
-    @validator("customer_note")
-    def note_max_length(cls, v):
-        if v and len(v) > 500:
-            raise ValueError("Note too long (max 500 chars)")
-        return v
-
-
-# ── POST /orders — cash / manual order ───────────────────────────────────────
-# Mobile card payments go through POST /api/v1/payments/create instead.
 
 @router.post("/orders")
-async def create_order(
-    request: CreateOrderRequest,
+async def create_order_disabled(
+    request: DisabledOrderRequest,
     user: dict = Depends(require_auth()),
 ):
     """
-    Create an order and send it to the shop's Square POS (no card charge).
-    Used for cash / in-person payment.
-
-    Reliability: if the shop has Square connected and the POS submission fails,
-    the order is cancelled and we return an error — we NEVER tell the customer
-    the order was placed if it didn't reach the shop.
+    Disabled for launch. Card checkout must use POST /api/v1/payments/create.
     """
-    customer_id = user.get("sub")
-    if not customer_id:
-        raise HTTPException(status_code=401, detail="User ID not found in token")
-
-    db = get_supabase()
-    order_service.db = db
-
-    # Validate shop (and grab prep time + name for the ETA notification)
-    shop_resp = (
-        db.get_service_client()
-        .table("shops")
-        .select("id, status, name, avg_prep_time_minutes")
-        .eq("id", request.shop_id)
-        .limit(1)
-        .execute()
+    raise HTTPException(
+        status_code=410,
+        detail="Manual/cash orders are disabled. Use card checkout.",
     )
-    if not shop_resp.data:
-        raise HTTPException(status_code=404, detail="Shop not found")
-    shop = shop_resp.data[0]
-    if shop.get("status") != "active":
-        raise HTTPException(status_code=400, detail="This shop is not currently accepting orders")
 
-    prep_minutes = int(shop.get("avg_prep_time_minutes") or 10)
-    shop_name    = shop.get("name", "the shop")
 
-    items_data = [item.dict() for item in request.items]
-
-    # Create the order row first (status=pending for cash)
+async def _complete_ready_orders_for_query(sc, query, now_iso: str) -> dict:
     try:
-        order = await order_service.create_order(
-            shop_id=request.shop_id,
-            customer_id=customer_id,
-            items=items_data,
-            status="pending",
-            metadata={
-                "pos_provider":   "square",
-                "payment_method": "cash",
-                "customer_note":  request.customer_note,
-            },
-        )
+        orders = query.execute().data or []
+    except Exception as e:
+        logger.error(f"[Orders] complete-ready lookup failed: {e}")
+        raise HTTPException(status_code=500, detail="Could not check ready orders")
+
+    completed = 0
+    notified = 0
+
+    for order in orders:
         order_id = order["id"]
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.exception(f"[Orders] create_order DB error: {e}")
-        raise HTTPException(status_code=500, detail="Could not create order. Please try again.")
+        metadata = order.get("metadata") or {}
 
-    # Send to Square POS. CRITICAL: if a connection exists and this fails,
-    # cancel the order and fail loudly so the customer isn't misled.
-    try:
-        pos_order_id = await push_order_to_pos(
-            db=db,
-            shop_id=request.shop_id,
-            loyalcup_order_id=order_id,
-            items=items_data,
-            customer_note=request.customer_note,
-        )
-    except Exception as e:
-        logger.error(f"[Orders] POS submission FAILED order={order_id}: {e}")
-        try:
-            db.get_service_client().table("orders").update({
-                "status":   "cancelled",
-                "metadata": {**(order.get("metadata") or {}), "failure_reason": f"pos_submit_failed: {e}"},
-            }).eq("id", order_id).execute()
-        except Exception as mark_err:
-            logger.error(f"[Orders] Could not cancel failed order {order_id}: {mark_err}")
-        raise HTTPException(
-            status_code=502,
-            detail="We couldn't send your order to the shop. You were not charged — please try again.",
-        )
-
-    if pos_order_id:
-        meta = {**(order.get("metadata") or {}), "pos_order_id": pos_order_id, "square_order_id": pos_order_id}
-        db.get_service_client().table("orders").update({"metadata": meta}).eq("id", order_id).execute()
-        order["metadata"] = meta
-
-    # One ETA push notification (fire and forget)
-    try:
-        profile = (
-            db.get_service_client()
-            .table("profiles")
-            .select("push_token")
-            .eq("id", customer_id)
-            .single()
+        update_resp = (
+            sc.table("orders")
+            .update({
+                "status": "completed",
+                "completed_at": now_iso,
+                "updated_at": now_iso,
+                "metadata": {
+                    **metadata,
+                    "auto_completed": True,
+                    "auto_completed_at": now_iso,
+                },
+            })
+            .eq("id", order_id)
+            .in_("status", ["confirmed", "pending"])
             .execute()
-            .data or {}
         )
-        await send_order_placed_push(
-            push_token=profile.get("push_token"),
-            shop_name=shop_name,
-            prep_minutes=prep_minutes,
-            order_id=order_id,
-        )
-    except Exception as e:
-        logger.warning(f"[Orders] ETA push failed order={order_id}: {e}")
 
-    # Confirmation email — fire and forget
-    try:
-        full_order = await order_service.get_order(order_id)
-        if full_order:
-            customer_email = (full_order.get("customer", {}).get("email") or user.get("email"))
-            if customer_email:
-                await email_service.send_order_confirmation_rich(
-                    to_email=customer_email,
-                    order_id=order_id,
-                    shop_name=shop_name,
-                    items=full_order.get("items", []),
-                    subtotal=float(full_order.get("subtotal", 0)),
-                    tax=float(full_order.get("tax", 0)),
-                    total=float(full_order.get("total", 0)),
-                    customer_note=request.customer_note,
+        if not update_resp.data:
+            continue
+
+        completed += 1
+
+        try:
+            shop_name = "the shop"
+            shop_id = order.get("shop_id")
+            customer_id = order.get("customer_id")
+
+            if shop_id:
+                shop_resp = (
+                    sc.table("shops")
+                    .select("name")
+                    .eq("id", shop_id)
+                    .limit(1)
+                    .execute()
                 )
-    except Exception as e:
-        logger.warning(f"[Orders] Confirmation email failed order={order_id}: {e}")
+                if shop_resp.data:
+                    shop_name = shop_resp.data[0].get("name") or shop_name
+
+            push_token = None
+            if customer_id:
+                profile_resp = (
+                    sc.table("profiles")
+                    .select("push_token")
+                    .eq("id", customer_id)
+                    .limit(1)
+                    .execute()
+                )
+                if profile_resp.data:
+                    push_token = profile_resp.data[0].get("push_token")
+
+            sent = await send_order_ready_push(
+                push_token=push_token,
+                shop_name=shop_name,
+                order_id=order_id,
+            )
+
+            if sent:
+                notified += 1
+                latest_meta = update_resp.data[0].get("metadata") or {}
+                sc.table("orders").update({
+                    "metadata": {
+                        **latest_meta,
+                        "ready_push_sent": True,
+                        "ready_push_sent_at": now_iso,
+                    }
+                }).eq("id", order_id).execute()
+
+        except Exception as e:
+            logger.warning(f"[Orders] ready push failed order={order_id}: {e}")
 
     return {
-        "order":        order,
-        "prep_minutes": prep_minutes,
-        "message":      f"Order placed! {shop_name} will have it ready in about {prep_minutes} minutes.",
+        "success": True,
+        "completed": completed,
+        "notified": notified,
     }
 
 
-# ── GET /orders — customer's orders ──────────────────────────────────────────
+@router.post("/orders/complete-ready")
+async def complete_ready_orders(user: dict = Depends(require_auth())):
+    """
+    Customer/admin lazy auto-complete.
+    Mobile can call this on order detail/history refresh.
+    Non-admin users can only complete their own ready orders.
+    """
+    db = get_supabase()
+    sc = db.get_service_client()
+
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    now_iso = _now_iso()
+
+    try:
+        user_role = get_user_role(user_id)
+    except Exception:
+        user_role = "customer"
+
+    query = (
+        sc.table("orders")
+        .select("id, customer_id, shop_id, status, ready_at, metadata")
+        .in_("status", ["confirmed", "pending"])
+        .not_.is_("ready_at", "null")
+        .lte("ready_at", now_iso)
+        .limit(50)
+    )
+
+    if user_role != "admin":
+        query = query.eq("customer_id", user_id)
+
+    return await _complete_ready_orders_for_query(sc, query, now_iso)
+
+
+@router.post("/orders/complete-ready/cron")
+async def complete_ready_orders_cron(
+    x_order_completion_secret: Optional[str] = Header(None),
+):
+    """
+    Cron-safe endpoint for Railway scheduled jobs.
+    Set ORDER_COMPLETION_SECRET in Railway, then call this every minute.
+    """
+    expected = os.getenv("ORDER_COMPLETION_SECRET")
+    if not expected:
+        raise HTTPException(status_code=500, detail="ORDER_COMPLETION_SECRET is not configured")
+
+    if not x_order_completion_secret or x_order_completion_secret != expected:
+        raise HTTPException(status_code=401, detail="Invalid completion secret")
+
+    db = get_supabase()
+    sc = db.get_service_client()
+    now_iso = _now_iso()
+
+    query = (
+        sc.table("orders")
+        .select("id, customer_id, shop_id, status, ready_at, metadata")
+        .in_("status", ["confirmed", "pending"])
+        .not_.is_("ready_at", "null")
+        .lte("ready_at", now_iso)
+        .limit(100)
+    )
+
+    return await _complete_ready_orders_for_query(sc, query, now_iso)
+
 
 @router.get("/orders")
 async def get_customer_orders(
@@ -215,10 +221,18 @@ async def get_customer_orders(
         customer_id = user.get("sub")
         db = get_supabase()
         order_service.db = db
+
+        await complete_ready_orders(user)
+
         orders = await order_service.list_orders(
-            customer_id=customer_id, status=status, limit=limit
+            customer_id=customer_id,
+            status=status,
+            limit=limit,
         )
         return {"orders": orders}
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -232,10 +246,17 @@ async def get_customer_order_history(
         customer_id = user.get("sub")
         db = get_supabase()
         order_service.db = db
+
+        await complete_ready_orders(user)
+
         orders = await order_service.get_order_history(
-            customer_id=customer_id, limit=limit
+            customer_id=customer_id,
+            limit=limit,
         )
         return {"orders": orders}
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -245,16 +266,21 @@ async def get_order_details(order_id: str, user: dict = Depends(require_auth()))
     try:
         db = get_supabase()
         order_service.db = db
+
+        await complete_ready_orders(user)
+
         order = await order_service.get_order(order_id)
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
 
         customer_id = user.get("sub")
-        user_role   = get_user_role(customer_id)  # role from DB, not user_metadata
+        user_role = get_user_role(customer_id)
+
         if order.get("customer_id") != customer_id and user_role not in ("admin", "shop_worker", "shop_owner"):
             raise HTTPException(status_code=403, detail="Access denied")
 
         return {"order": order}
+
     except HTTPException:
         raise
     except Exception as e:
@@ -267,32 +293,55 @@ async def cancel_order(order_id: str, user: dict = Depends(require_auth())):
         customer_id = user.get("sub")
         db = get_supabase()
         order_service.db = db
+
         order = await order_service.cancel_order(order_id, customer_id)
-        return {"message": "Order cancelled", "order": order}
+        return {"order": order}
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── Shop order list (owner history; no status workflow) ──────────────────────
-
 @router.get("/shops/{shop_id}/orders")
 async def get_shop_orders(
     shop_id: str,
-    user:    dict = Depends(require_shop_worker()),
-    status:  Optional[str] = None,
-    date:    Optional[str] = None,
-    limit:   int = Query(50, le=100),
+    status: Optional[str] = None,
+    limit: int = Query(100, le=200),
+    user: dict = Depends(require_shop_worker()),
 ):
     try:
+        user_id = user.get("sub")
         db = get_supabase()
         order_service.db = db
+
+        role = get_user_role(user_id)
+
+        if role != "admin":
+            shop_check = (
+                db.get_service_client()
+                .table("shops")
+                .select("id, owner_id")
+                .eq("id", shop_id)
+                .limit(1)
+                .execute()
+            )
+
+            if not shop_check.data:
+                raise HTTPException(status_code=404, detail="Shop not found")
+
+            if role == "shop_owner" and shop_check.data[0].get("owner_id") != user_id:
+                raise HTTPException(status_code=403, detail="Not authorized for this shop")
+
         orders = await order_service.get_shop_orders(
-            shop_id=shop_id, status=status, limit=limit
+            shop_id=shop_id,
+            status=status,
+            limit=limit,
         )
-        if date:
-            orders = [o for o in orders if o.get("created_at", "").startswith(date)]
+
         return {"orders": orders}
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -2,7 +2,7 @@
  * Checkout — pulls dynamic redemption config + smart chips + custom stepper
  * from /api/v1/loyalty/balance/:shopId. No more hardcoded 100pts=$1.
  */
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert,
   ActivityIndicator, Modal, Platform, KeyboardAvoidingView,
@@ -85,10 +85,9 @@ export default function CheckoutScreen() {
   const [shopLocationId,   setShopLocationId]   = useState(null);
   const [locationLoading,  setLocationLoading]  = useState(false);
 
-  // Loyalty state — driven entirely by backend
-  const [loyaltyBalance, setLoyaltyBalance] = useState(null);   // { current_balance, config, points_type }
+  const [loyaltyBalance, setLoyaltyBalance] = useState(null);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
-  const [preview,        setPreview]        = useState(null);   // last server-validated dry-run
+  const [preview,        setPreview]        = useState(null);
   const [showPointsPanel, setShowPointsPanel] = useState(false);
 
   const itemsByShop = cart.reduce((acc, item) => {
@@ -106,7 +105,6 @@ export default function CheckoutScreen() {
 
   const activeShopId = cart.length > 0 ? Object.keys(itemsByShop)[0] : null;
 
-  // ── Load shop's Square location
   useEffect(() => {
     if (!activeShopId) { setShopLocationId(null); return; }
     setLocationLoading(true);
@@ -125,7 +123,6 @@ export default function CheckoutScreen() {
     })();
   }, [activeShopId]);
 
-  // ── Load loyalty balance + config for the shop
   useEffect(() => {
     if (!activeShopId) { setLoyaltyBalance(null); return; }
     (async () => {
@@ -139,7 +136,6 @@ export default function CheckoutScreen() {
     })();
   }, [activeShopId]);
 
-  // ── Ask backend to validate + price the redemption every time it changes
   useEffect(() => {
     if (!activeShopId || subtotalCents <= 0) { setPreview(null); return; }
     let cancelled = false;
@@ -158,13 +154,15 @@ export default function CheckoutScreen() {
     return () => { cancelled = true; };
   }, [activeShopId, subtotalCents, pointsToRedeem]);
 
-  const cfg            = loyaltyBalance?.config;
-  const balance        = loyaltyBalance?.current_balance || 0;
-  const step           = preview?.step_points || cfg?.min_redemption_points || 0;
-  const maxRedeemable  = preview?.max_redeemable_points || 0;
-  const chips          = preview?.suggested_chips_points || [];
+  const cfg             = loyaltyBalance?.config;
+  const balance         = loyaltyBalance?.current_balance || 0;
+  const pendingBalance  = loyaltyBalance?.pending_balance || 0;
+  const step            = preview?.step_points || cfg?.min_redemption_points || 0;
+  const maxRedeemable   = preview?.max_redeemable_points || 0;
+  const chips           = preview?.suggested_chips_points || [];
   const pointValueCents = preview?.point_value_cents || (cfg ? cfg.points_to_dollar_value * 100 : 1);
-  const canRedeem      = balance >= (cfg?.min_redemption_points || 0) && maxRedeemable >= step;
+  const canRedeem       = balance >= (cfg?.min_redemption_points || 0) && maxRedeemable >= step;
+  const hasAnyPoints    = balance > 0 || pendingBalance > 0;
 
   const handlePay = () => {
     if (cart.length === 0) { Alert.alert('Empty Cart', 'Nothing to order!'); return; }
@@ -182,28 +180,22 @@ export default function CheckoutScreen() {
       const msg = JSON.parse(event.nativeEvent.data);
       if (msg.type !== 'nonce') return;
       setShowPaymentSheet(false);
-      // PATCH: Only call processPayment if nonce is present & non-blank
       if (!msg.nonce || !msg.nonce.trim()) {
-        Alert.alert(
-          "Payment Error",
-          "Card was not entered or tokenization failed. Please try again."
-        );
+        Alert.alert("Payment Error", "Card was not entered or tokenization failed. Please try again.");
         return;
       }
       await processPayment(msg.nonce);
-    } catch (e) { console.error('WebView message error:', e); }
+    } catch (e) {
+      console.error('WebView message error:', e);
+    }
   };
 
   const processPayment = async (nonce) => {
     setLoading(true);
     try {
-      // PATCH: Nonce check, alert user if missing/blank
       if (!nonce || !nonce.trim()) {
         setLoading(false);
-        Alert.alert(
-          "Card Not Processed",
-          "Something went wrong, please enter your card details."
-        );
+        Alert.alert("Card Not Processed", "Something went wrong, please enter your card details.");
         return;
       }
 
@@ -231,11 +223,16 @@ export default function CheckoutScreen() {
       clearCart();
       setPointsToRedeem(0);
 
-      const orderId   = result.order_id;
-      const charged   = result.charged ?? estimatedTotal;
+      const orderId    = result.order_id;
+      const charged    = result.charged ?? estimatedTotal;
+      const earnedPts  = result.points_earned || 0;
+      const pendingPts = result.points_pending || earnedPts;
+
       const pointsMsg = pointsToRedeem > 0
         ? `\n💰 Saved $${pointsDiscount.toFixed(2)} with points`
-        : `\n⭐ Earned ${result.points_earned || 0} loyalty pts`;
+        : pendingPts > 0
+          ? `\n⭐ Earned ${pendingPts} loyalty pts\n⏳ Available to redeem in about 15 minutes`
+          : `\n⭐ Earned 0 loyalty pts`;
 
       Alert.alert(
         'Order Placed! 🎉',
@@ -310,8 +307,7 @@ export default function CheckoutScreen() {
           </View>
         ))}
 
-        {/* ── Loyalty panel ─────────────────────────────────────────── */}
-        {loyaltyBalance && balance > 0 && (
+        {loyaltyBalance && hasAnyPoints && (
           <>
             <Text style={styles.sectionLabel}>LOYALTY POINTS</Text>
             <View style={styles.card}>
@@ -323,7 +319,8 @@ export default function CheckoutScreen() {
                       {pointsToRedeem > 0 ? `${pointsToRedeem} pts → −$${pointsDiscount.toFixed(2)}` : 'Redeem Points'}
                     </Text>
                     <Text style={styles.pointsToggleSub}>
-                      {balance.toLocaleString()} pts available · {(itemsByShop[activeShopId]?.shopName) || 'Shop'} rewards
+                      {balance.toLocaleString()} available
+                      {pendingBalance > 0 ? ` · ${pendingBalance.toLocaleString()} pending` : ''}
                     </Text>
                   </View>
                 </View>
@@ -334,7 +331,9 @@ export default function CheckoutScreen() {
                 <View style={styles.pointsPanel}>
                   {!canRedeem ? (
                     <Text style={styles.lockedText}>
-                      You need {cfg?.min_redemption_points || 0} pts to redeem. Keep ordering to unlock!
+                      {pendingBalance > 0 && balance <= 0
+                        ? `${pendingBalance.toLocaleString()} pts are pending and will be available in about 15 minutes.`
+                        : `You need ${cfg?.min_redemption_points || 0} available pts to redeem. Keep ordering to unlock!`}
                     </Text>
                   ) : (
                     <>

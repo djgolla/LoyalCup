@@ -8,8 +8,8 @@ import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
+import { getMyLoyalty } from '../services/loyaltyService';
 
-// Orders that count toward the customer's order tally.
 const REAL_ORDER_STATUSES = ['confirmed', 'pending', 'completed'];
 
 export default function ProfileScreen() {
@@ -18,6 +18,8 @@ export default function ProfileScreen() {
 
   const [profile,       setProfile]       = useState(null);
   const [totalPoints,   setTotalPoints]   = useState(0);
+  const [totalAvailable,setTotalAvailable]= useState(0);
+  const [totalPending,  setTotalPending]  = useState(0);
   const [shopBreakdown, setShopBreakdown] = useState([]);
   const [orderCount,    setOrderCount]    = useState(0);
   const [loading,       setLoading]       = useState(true);
@@ -26,13 +28,9 @@ export default function ProfileScreen() {
 
   const loadData = async () => {
     try {
-      const [profileResp, shopPtsResp, orderResp] = await Promise.all([
+      const [profileResp, loyaltyResp, orderResp] = await Promise.all([
         supabase.from('profiles').select('full_name, phone, avatar_url').eq('id', user.id).single(),
-        supabase.from('customer_shop_points')
-          .select('current_balance, shops(name)')
-          .eq('customer_id', user.id)
-          .gt('current_balance', 0)
-          .order('current_balance', { ascending: false }),
+        getMyLoyalty(),
         supabase.from('orders').select('id', { count: 'exact', head: true })
           .eq('customer_id', user.id).in('status', REAL_ORDER_STATUSES),
       ]);
@@ -40,12 +38,19 @@ export default function ProfileScreen() {
       setProfile(profileResp.data);
       setOrderCount(orderResp.count || 0);
 
-      const rows  = shopPtsResp.data || [];
-      const total = rows.reduce((sum, r) => sum + (r.current_balance || 0), 0);
-      setTotalPoints(total);
+      const rows = loyaltyResp?.shops || [];
+
+      const available = rows.reduce((sum, r) => sum + (r.current_balance || 0), 0);
+      const pending   = rows.reduce((sum, r) => sum + (r.pending_balance || 0), 0);
+
+      setTotalAvailable(available);
+      setTotalPending(pending);
+      setTotalPoints(available + pending);
+
       setShopBreakdown(rows.slice(0, 3).map(b => ({
         shopName: b.shops?.name || 'Shop',
-        balance:  b.current_balance || 0,
+        balance: b.current_balance || 0,
+        pending: b.pending_balance || 0,
       })));
     } catch (e) {
       console.error('[Profile] loadData error:', e);
@@ -97,7 +102,6 @@ export default function ProfileScreen() {
           <Text style={styles.userEmail}>{user?.email}</Text>
           {profile?.phone && <Text style={styles.userPhone}>{profile.phone}</Text>}
 
-          {/* Stats row — Orders + Points */}
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <Text style={styles.statValue}>{orderCount}</Text>
@@ -111,14 +115,16 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Loyalty card — total across shops */}
         <View style={styles.loyaltyCard}>
           <View style={styles.loyaltyCardHeader}>
             <Feather name="award" size={20} color="#fff" />
             <Text style={styles.loyaltyCardLabel}>LOYALTY POINTS</Text>
           </View>
           <Text style={styles.loyaltyCardPoints}>{totalPoints.toLocaleString()}</Text>
-          <Text style={styles.loyaltyCardSub}>across all your shops</Text>
+          <Text style={styles.loyaltyCardSub}>
+            {totalAvailable.toLocaleString()} available
+            {totalPending > 0 ? ` · ${totalPending.toLocaleString()} pending` : ''}
+          </Text>
 
           {shopBreakdown.length > 0 && (
             <View style={styles.loyaltyBreakdown}>
@@ -126,7 +132,10 @@ export default function ProfileScreen() {
               {shopBreakdown.map((b, i) => (
                 <View key={i} style={styles.loyaltyBreakdownRow}>
                   <Text style={styles.loyaltyBreakdownShop} numberOfLines={1}>{b.shopName}</Text>
-                  <Text style={styles.loyaltyBreakdownPts}>{b.balance.toLocaleString()} pts</Text>
+                  <Text style={styles.loyaltyBreakdownPts}>
+                    {b.balance.toLocaleString()} pts
+                    {b.pending > 0 ? ` · ${b.pending.toLocaleString()} pending` : ''}
+                  </Text>
                 </View>
               ))}
             </View>
@@ -194,7 +203,7 @@ const styles = StyleSheet.create({
   loyaltyCardSub:        { color: '#A7F3D0', fontSize: 13, marginBottom: 14 },
   loyaltyBreakdown:      { marginBottom: 14, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)', paddingTop: 12, gap: 6 },
   loyaltyBreakdownTitle: { color: 'rgba(255,255,255,0.5)', fontSize: 10, fontWeight: '700', letterSpacing: 1.2, marginBottom: 4 },
-  loyaltyBreakdownRow:   { flexDirection: 'row', justifyContent: 'space-between' },
+  loyaltyBreakdownRow:   { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
   loyaltyBreakdownShop:  { color: '#A7F3D0', fontSize: 13, flex: 1 },
   loyaltyBreakdownPts:   { color: '#FFF', fontSize: 13, fontWeight: '700' },
   loyaltyViewBtn:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 11, backgroundColor: '#FFF', borderRadius: 22 },
