@@ -1,22 +1,25 @@
 """
-POST /api/v1/payments/create
+Payments routes.
 
-Safe atomic flow:
-  1. Validate cart + shop
-  2. Validate loyalty redemption upfront
-  3. Create order in DB with status=payment_pending before any charge
-  4. Create Square order + charge card
-  5. Confirm order
-  6. Save order items
-  7. Deduct redeemed points / award pending points
-  8. Send ETA push
+CARD ONLY launch flow:
+  POST /api/v1/payments/quote
+    - Asks Square to calculate subtotal/tax/total before card entry.
+
+  POST /api/v1/payments/create
+    - Creates a pending LoyalCup order.
+    - Creates Square order.
+    - Charges Square card nonce.
+    - Confirms LoyalCup order.
+    - Awards/redeems loyalty.
 """
 import logging
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
+
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, validator
 
-from app.services.square_order_service import process_payment
+from app.services.square_order_service import process_payment, quote_order
 from app.services.notification_service import send_order_placed_push
 from app.services.loyalty_service import (
     get_balance,
@@ -51,10 +54,9 @@ class PaymentItem(BaseModel):
         return v
 
 
-class CreatePaymentRequest(BaseModel):
+class QuotePaymentRequest(BaseModel):
     shop_id: str
     items: List[PaymentItem]
-    payment_nonce: str
     loyalty_points_to_redeem: int = 0
     customer_note: Optional[str] = None
 
@@ -75,6 +77,115 @@ class CreatePaymentRequest(BaseModel):
         if v and len(v) > 500:
             raise ValueError("Customer note cannot exceed 500 characters")
         return v
+
+
+class CreatePaymentRequest(QuotePaymentRequest):
+    payment_nonce: str
+
+
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _items_data(items: List[PaymentItem]) -> List[dict]:
+    return [item.dict(exclude={"base_price"}) for item in items]
+
+
+def _subtotal_cents(items_data: List[dict]) -> int:
+    subtotal_dollars = sum(item["unit_price"] * item.get("quantity", 1) for item in items_data)
+    return int(round(subtotal_dollars * 100))
+
+
+def _subtotal_dollars(items_data: List[dict]) -> float:
+    return round(_subtotal_cents(items_data) / 100, 2)
+
+
+def _loyalty_discount_for_request(
+    *,
+    db,
+    customer_id: str,
+    shop_id: str,
+    items_data: List[dict],
+    points_to_redeem: int,
+) -> int:
+    if points_to_redeem <= 0:
+        return 0
+
+    balance = get_balance(db, customer_id, shop_id)
+
+    preview = compute_redemption(
+        config=balance["config"],
+        subtotal_cents=_subtotal_cents(items_data),
+        points_balance=balance["current_balance"],
+        requested_points=points_to_redeem,
+    )
+
+    if not preview["valid"]:
+        raise HTTPException(status_code=400, detail=preview["reason"] or "Invalid redemption")
+
+    return int(preview["discount_cents"] or 0)
+
+
+@router.post("/quote")
+async def quote_payment(
+    request: QuotePaymentRequest,
+    user: dict = Depends(require_auth()),
+):
+    """
+    Returns Square-calculated totals before showing the card screen.
+    This does not create an order and does not charge a card.
+    """
+    customer_id = user.get("sub")
+    if not customer_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
+
+    db = get_supabase()
+    sc = db.get_service_client()
+
+    shop_resp = (
+        sc.table("shops")
+        .select("id, status, name")
+        .eq("id", request.shop_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not shop_resp.data:
+        raise HTTPException(status_code=404, detail="Shop not found")
+
+    shop = shop_resp.data[0]
+
+    if shop.get("status") != "active":
+        raise HTTPException(status_code=400, detail="This shop is not currently accepting orders")
+
+    items_data = _items_data(request.items)
+
+    loyalty_discount_cents = _loyalty_discount_for_request(
+        db=db,
+        customer_id=customer_id,
+        shop_id=request.shop_id,
+        items_data=items_data,
+        points_to_redeem=request.loyalty_points_to_redeem,
+    )
+
+    try:
+        quote = await quote_order(
+            db=db,
+            shop_id=request.shop_id,
+            items=items_data,
+            loyalty_discount_cents=loyalty_discount_cents,
+            customer_note=request.customer_note,
+        )
+    except Exception as e:
+        logger.error(f"[Payment Quote] Square quote failed shop={request.shop_id}: {e}")
+        raise HTTPException(status_code=502, detail=f"Could not calculate order total: {str(e)}")
+
+    return {
+        "success": True,
+        "shop_id": request.shop_id,
+        "shop_name": shop.get("name"),
+        **quote,
+    }
 
 
 @router.post("/create")
@@ -110,26 +221,18 @@ async def create_payment(
 
     prep_minutes = int(shop.get("avg_prep_time_minutes") or 10)
     shop_name = shop.get("name", "the shop")
+    ready_at_iso = (_now_utc() + timedelta(minutes=prep_minutes)).isoformat()
 
-    items_data = [item.dict(exclude={"base_price"}) for item in request.items]
-    subtotal_dollars = sum(item["unit_price"] * item.get("quantity", 1) for item in items_data)
-    subtotal_cents = int(round(subtotal_dollars * 100))
+    items_data = _items_data(request.items)
+    subtotal_dollars = _subtotal_dollars(items_data)
 
-    loyalty_discount_cents = 0
-
-    if request.loyalty_points_to_redeem > 0:
-        balance = get_balance(db, customer_id, request.shop_id)
-        preview = compute_redemption(
-            config=balance["config"],
-            subtotal_cents=subtotal_cents,
-            points_balance=balance["current_balance"],
-            requested_points=request.loyalty_points_to_redeem,
-        )
-
-        if not preview["valid"]:
-            raise HTTPException(status_code=400, detail=preview["reason"] or "Invalid redemption")
-
-        loyalty_discount_cents = preview["discount_cents"]
+    loyalty_discount_cents = _loyalty_discount_for_request(
+        db=db,
+        customer_id=customer_id,
+        shop_id=request.shop_id,
+        items_data=items_data,
+        points_to_redeem=request.loyalty_points_to_redeem,
+    )
 
     try:
         pending_payload = {
@@ -139,11 +242,14 @@ async def create_payment(
             "subtotal": subtotal_dollars,
             "tax": 0,
             "total": 0,
+            "ready_at": ready_at_iso,
             "metadata": {
                 "pos_provider": "square",
                 "payment_method": "card_in_app",
                 "loyalty_points_redeemed": request.loyalty_points_to_redeem,
                 "customer_note": request.customer_note,
+                "prep_minutes": prep_minutes,
+                "ready_at": ready_at_iso,
             },
         }
 
@@ -160,7 +266,7 @@ async def create_payment(
         order_id = order["id"]
 
     except Exception as e:
-        logger.exception(f"[Payment] Failed to create pending order (before charge): {e}")
+        logger.exception(f"[Payment] Failed to create pending order before charge: {e}")
         raise HTTPException(status_code=500, detail="Could not create order. Card was not charged.")
 
     try:
@@ -190,6 +296,7 @@ async def create_payment(
     square_order_id = payment_result["square_order_id"]
     square_payment_id = payment_result.get("square_payment_id")
     currency = payment_result["currency"]
+
     charged_dollars = charged_cents / 100
     tax_dollars = tax_cents / 100
 
@@ -201,6 +308,8 @@ async def create_payment(
         "loyalty_points_redeemed": request.loyalty_points_to_redeem,
         "payment_method": "card_in_app" if square_payment_id else "loyalty_free",
         "customer_note": request.customer_note,
+        "prep_minutes": prep_minutes,
+        "ready_at": ready_at_iso,
     }
 
     if loyalty_discount_cents > 0:
@@ -214,6 +323,7 @@ async def create_payment(
                 "subtotal": subtotal_dollars,
                 "tax": tax_dollars,
                 "total": charged_dollars,
+                "ready_at": ready_at_iso,
                 "metadata": order_metadata,
             })
             .eq("id", order_id)
@@ -274,14 +384,16 @@ async def create_payment(
         points_available_at = award_result.get("points_available_at")
 
         if points_awarded > 0:
+            order_metadata = {
+                **order_metadata,
+                "loyalty_points_earned": points_awarded,
+                "loyalty_points_pending": points_pending,
+                "loyalty_points_available_at": points_available_at,
+            }
+
             sc.table("orders").update({
                 "loyalty_points_earned": points_awarded,
-                "metadata": {
-                    **order_metadata,
-                    "loyalty_points_earned": points_awarded,
-                    "loyalty_points_pending": points_pending,
-                    "loyalty_points_available_at": points_available_at,
-                },
+                "metadata": order_metadata,
             }).eq("id", order_id).execute()
 
     except Exception as e:
@@ -309,7 +421,7 @@ async def create_payment(
 
     logger.info(
         f"[Payment] SUCCESS order={order_id} square_payment={square_payment_id} "
-        f"charged=${charged_dollars:.2f} pts_redeemed={request.loyalty_points_to_redeem} "
+        f"charged=${charged_dollars:.2f} tax=${tax_dollars:.2f} ready_at={ready_at_iso} "
         f"pts_earned={points_awarded} pts_pending={points_pending}"
     )
 
@@ -321,6 +433,7 @@ async def create_payment(
         "tax": tax_dollars,
         "currency": currency,
         "status": "confirmed",
+        "ready_at": ready_at_iso,
         "points_earned": points_awarded,
         "points_pending": points_pending,
         "points_available_at": points_available_at,

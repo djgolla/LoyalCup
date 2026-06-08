@@ -6,14 +6,11 @@ PICKUP fulfillment block and a ticket named "MOBILE ...". The fulfillment
 block is what makes the order route into the shop's Square Orders workflow
 and print at their receipt/kitchen station like any normal online order.
 
-Reliability:
-  - Idempotency keys are derived from loyalcup_order_id so any network retry
-    of the exact same order never creates a duplicate Square order/charge.
-  - push_order_to_pos() raises on failure when the shop HAS a Square
-    connection — the caller must treat a failure as fatal so we never record
-    an order as placed when it didn't actually reach the shop.
-  - If the shop has no Square connection at all, push returns None (caller
-    decides whether that's allowed, e.g. pure in-person cash).
+Important:
+  - Square is the source of truth for tax and final charge.
+  - quote_order() uses Square CalculateOrder before the customer enters a card.
+  - process_payment() creates the actual Square order and charges the exact
+    Square-calculated amount.
 """
 import logging
 from datetime import datetime, timedelta, timezone
@@ -21,11 +18,49 @@ from typing import Any, Dict, List, Optional
 
 from app.integrations.square.adapter import SquareAdapter
 
-logger  = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 _square = SquareAdapter()
 
 
-# ── Public API ───────────────────────────────────────────────────────────────
+async def quote_order(
+    *,
+    db,
+    shop_id: str,
+    items: List[Dict[str, Any]],
+    loyalty_discount_cents: int = 0,
+    customer_note: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Ask Square to calculate the exact subtotal/tax/total before card entry.
+    Does NOT create an order. Does NOT charge a card.
+    """
+    conn = await _get_square_connection(db, shop_id)
+    prep_minutes = await _get_prep_minutes(db, shop_id)
+
+    access_token = conn["access_token"]
+    location_id = conn["location_id"]
+
+    line_items = await _build_square_line_items(db, items)
+    order_payload = _build_order_payload(
+        line_items=line_items,
+        loyalcup_order_id="quote",
+        customer_note=customer_note,
+        prep_minutes=prep_minutes,
+        include_fulfillment=False,
+    )
+
+    result = await _square.calculate_order(
+        access_token=access_token,
+        location_id=location_id,
+        order_payload=order_payload,
+    )
+
+    square_order = result.get("order", {}) or {}
+    return _totals_from_square_order(
+        square_order=square_order,
+        loyalty_discount_cents=loyalty_discount_cents,
+    )
+
 
 async def process_payment(
     *,
@@ -38,12 +73,13 @@ async def process_payment(
     customer_note: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Full atomic Square payment flow (card / loyalty-comped).
-    Creates the Square order (with PICKUP fulfillment) then charges the card.
-    Raises on any failure so the caller can fail the checkout loudly.
+    Full atomic Square payment flow.
+    Creates the Square order with PICKUP fulfillment, then charges the card.
+    Raises on any failure so caller can fail checkout loudly.
     """
     conn = await _get_square_connection(db, shop_id)
     prep_minutes = await _get_prep_minutes(db, shop_id)
+
     return await _process_square_payment(
         db=db,
         conn=conn,
@@ -66,13 +102,10 @@ async def push_order_to_pos(
     customer_note: Optional[str] = None,
 ) -> Optional[str]:
     """
-    Push an order to Square POS without charging (cash / in-person).
+    Push an order to Square POS without charging.
 
-    Returns the Square order id on success.
-    Returns None ONLY when the shop has no connected Square (nothing to push to).
-    RAISES on a real submission failure when a connection exists — the caller
-    MUST treat that as fatal so we never tell a customer the order succeeded
-    when it never reached the shop.
+    Kept only for internal compatibility. Launch checkout should use
+    /api/v1/payments/create, not manual/cash order creation.
     """
     conn_resp = (
         db.get_service_client()
@@ -83,13 +116,16 @@ async def push_order_to_pos(
         .limit(1)
         .execute()
     )
+
     if not conn_resp.data:
         logger.info(f"[POS] shop {shop_id} has no active Square — nothing to push")
         return None
 
     conn = conn_resp.data[0]
+
     if conn.get("provider") != "square":
         raise ValueError(f"POS provider '{conn.get('provider')}' is not supported")
+
     if not conn.get("location_id"):
         raise ValueError(
             "Square location not set for this shop. The owner must select a "
@@ -97,6 +133,7 @@ async def push_order_to_pos(
         )
 
     prep_minutes = await _get_prep_minutes(db, shop_id)
+
     return await _create_square_order(
         db=db,
         conn=conn,
@@ -106,8 +143,6 @@ async def push_order_to_pos(
         prep_minutes=prep_minutes,
     )
 
-
-# ── Private helpers ──────────────────────────────────────────────────────────
 
 async def _get_square_connection(db, shop_id: str) -> Dict[str, Any]:
     conn_resp = (
@@ -119,6 +154,7 @@ async def _get_square_connection(db, shop_id: str) -> Dict[str, Any]:
         .limit(1)
         .execute()
     )
+
     if not conn_resp.data:
         raise ValueError(
             f"Shop {shop_id} has no active Square connection. "
@@ -126,13 +162,16 @@ async def _get_square_connection(db, shop_id: str) -> Dict[str, Any]:
         )
 
     conn = conn_resp.data[0]
+
     if not conn.get("location_id"):
         raise ValueError(
             "Square location not set for this shop. "
             "The shop owner must select a Square location in settings."
         )
+
     if conn.get("provider") != "square":
         raise ValueError(f"Payment not supported for provider '{conn.get('provider')}'")
+
     return conn
 
 
@@ -146,11 +185,14 @@ async def _get_prep_minutes(db, shop_id: str) -> int:
             .limit(1)
             .execute()
         )
+
         if resp.data and resp.data[0].get("avg_prep_time_minutes"):
             return int(resp.data[0]["avg_prep_time_minutes"])
+
     except Exception as e:
         logger.warning(f"[POS] Could not read prep time for shop {shop_id}: {e}")
-    return 10  # safe default
+
+    return 10
 
 
 async def _build_square_line_items(
@@ -158,6 +200,7 @@ async def _build_square_line_items(
     items: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     menu_item_ids = [item["menu_item_id"] for item in items]
+
     menu_resp = (
         db.get_service_client()
         .table("menu_items")
@@ -165,11 +208,14 @@ async def _build_square_line_items(
         .in_("id", menu_item_ids)
         .execute()
     )
+
     menu_lookup: Dict[str, Dict] = {row["id"]: row for row in (menu_resp.data or [])}
 
     line_items = []
+
     for item in items:
         menu_row = menu_lookup.get(item["menu_item_id"])
+
         if not menu_row:
             logger.warning(f"[Square] menu_item {item['menu_item_id']} not in DB — skipping")
             continue
@@ -181,12 +227,12 @@ async def _build_square_line_items(
         line_item: Dict[str, Any] = {
             "quantity": str(max(1, item.get("quantity", 1))),
             "base_price_money": {
-                "amount":   unit_price_cents,
+                "amount": unit_price_cents,
                 "currency": "USD",
             },
         }
 
-        pos_id     = menu_row.get("pos_id")
+        pos_id = menu_row.get("pos_id")
         pos_source = (menu_row.get("pos_source") or "").lower()
 
         if pos_id and pos_source == "square":
@@ -196,6 +242,7 @@ async def _build_square_line_items(
 
         customizations = item.get("customizations") or []
         modifiers = []
+
         for c in customizations:
             square_mod_id = (
                 c.get("square_modifier_id")
@@ -204,6 +251,7 @@ async def _build_square_line_items(
             )
             if square_mod_id:
                 modifiers.append({"catalog_object_id": square_mod_id})
+
         if modifiers:
             line_item["modifiers"] = modifiers
 
@@ -221,37 +269,97 @@ def _build_order_payload(
     loyalcup_order_id: str,
     customer_note: Optional[str],
     prep_minutes: int,
+    include_fulfillment: bool = True,
 ) -> Dict[str, Any]:
     """
-    Build the Square order body with a PICKUP fulfillment so it lands in the
-    shop's Orders workflow / printer, and a "MOBILE" ticket name so the printed
-    receipt obviously reads as a mobile order.
+    Build the Square order body.
+
+    pricing_options.auto_apply_taxes is the key part for Square-defined taxes:
+    if the Square seller/location/catalog has taxes configured, Square applies
+    them and returns the real tax/total.
     """
-    short_id   = (loyalcup_order_id or "").replace("-", "")[:6].upper()
-    ticket     = f"MOBILE #{short_id}" if short_id else "MOBILE"
-    pickup_at  = (datetime.now(timezone.utc) + timedelta(minutes=prep_minutes)).isoformat()
+    short_id = (loyalcup_order_id or "").replace("-", "")[:6].upper()
+    ticket = f"MOBILE #{short_id}" if short_id and loyalcup_order_id != "quote" else "MOBILE"
+    pickup_at = (datetime.now(timezone.utc) + timedelta(minutes=prep_minutes)).isoformat()
 
     payload: Dict[str, Any] = {
-        "line_items":   line_items,
+        "line_items": line_items,
         "reference_id": loyalcup_order_id,
-        "ticket_name":  ticket,                 # prints on the receipt
-        "state":        "OPEN",
-        "fulfillments": [
+        "ticket_name": ticket,
+        "state": "OPEN",
+        "pricing_options": {
+            "auto_apply_taxes": True,
+            "auto_apply_discounts": True,
+        },
+    }
+
+    if include_fulfillment:
+        payload["fulfillments"] = [
             {
-                "type":  "PICKUP",
+                "type": "PICKUP",
                 "state": "PROPOSED",
                 "pickup_details": {
-                    "recipient":     {"display_name": ticket},
+                    "recipient": {"display_name": ticket},
                     "schedule_type": "ASAP",
-                    "pickup_at":     pickup_at,
-                    "note":          "Mobile order placed via LoyalCup",
+                    "pickup_at": pickup_at,
+                    "note": "Mobile order placed via LoyalCup",
                 },
             }
-        ],
-    }
+        ]
+
     if customer_note:
         payload["customer_note"] = customer_note
+
     return payload
+
+
+def _money_amount(order: Dict[str, Any], key: str) -> int:
+    return int(((order.get(key) or {}).get("amount")) or 0)
+
+
+def _money_currency(order: Dict[str, Any]) -> str:
+    return ((order.get("total_money") or {}).get("currency")) or "USD"
+
+
+def _totals_from_square_order(
+    *,
+    square_order: Dict[str, Any],
+    loyalty_discount_cents: int = 0,
+) -> Dict[str, Any]:
+    total_cents = _money_amount(square_order, "total_money")
+    tax_cents = _money_amount(square_order, "total_tax_money")
+    service_charge_cents = _money_amount(square_order, "total_service_charge_money")
+    discount_cents_from_square = _money_amount(square_order, "total_discount_money")
+    net_cents = _money_amount(square_order, "net_amount_due_money")
+    currency = _money_currency(square_order)
+
+    if net_cents <= 0:
+        net_cents = total_cents
+
+    final_charge_cents = max(0, net_cents - int(loyalty_discount_cents or 0))
+
+    subtotal_cents = max(
+        0,
+        total_cents - tax_cents - service_charge_cents,
+    )
+
+    return {
+        "subtotal_cents": subtotal_cents,
+        "tax_cents": tax_cents,
+        "service_charge_cents": service_charge_cents,
+        "square_discount_cents": discount_cents_from_square,
+        "loyalty_discount_cents": int(loyalty_discount_cents or 0),
+        "total_cents": total_cents,
+        "final_charge_cents": final_charge_cents,
+        "subtotal": subtotal_cents / 100,
+        "tax": tax_cents / 100,
+        "service_charge": service_charge_cents / 100,
+        "square_discount": discount_cents_from_square / 100,
+        "loyalty_discount": int(loyalty_discount_cents or 0) / 100,
+        "total": total_cents / 100,
+        "final_charge": final_charge_cents / 100,
+        "currency": currency,
+    }
 
 
 async def _create_square_order(
@@ -263,9 +371,8 @@ async def _create_square_order(
     customer_note: Optional[str],
     prep_minutes: int,
 ) -> str:
-    """Create the OPEN Square order (no charge). Raises on failure."""
     access_token = conn["access_token"]
-    location_id  = conn["location_id"]
+    location_id = conn["location_id"]
 
     line_items = await _build_square_line_items(db, items)
     order_payload = _build_order_payload(
@@ -273,6 +380,7 @@ async def _create_square_order(
         loyalcup_order_id=loyalcup_order_id,
         customer_note=customer_note,
         prep_minutes=prep_minutes,
+        include_fulfillment=True,
     )
 
     result = await _square.create_order(
@@ -281,7 +389,9 @@ async def _create_square_order(
         order_payload=order_payload,
         idempotency_key=f"{loyalcup_order_id}-create",
     )
+
     square_order_id = result.get("order", {}).get("id")
+
     if not square_order_id:
         raise RuntimeError("Square accepted the request but returned no order id")
 
@@ -302,7 +412,7 @@ async def _process_square_payment(
     prep_minutes: int,
 ) -> Dict[str, Any]:
     access_token = conn["access_token"]
-    location_id  = conn["location_id"]
+    location_id = conn["location_id"]
 
     line_items = await _build_square_line_items(db, items)
     order_payload = _build_order_payload(
@@ -310,45 +420,51 @@ async def _process_square_payment(
         loyalcup_order_id=loyalcup_order_id,
         customer_note=customer_note,
         prep_minutes=prep_minutes,
+        include_fulfillment=True,
     )
 
     logger.info(f"[Square] Creating order for loyalcup_order_id={loyalcup_order_id}")
+
     order_result = await _square.create_order(
         access_token=access_token,
         location_id=location_id,
         order_payload=order_payload,
         idempotency_key=f"{loyalcup_order_id}-create",
     )
-    square_order    = order_result.get("order", {})
+
+    square_order = order_result.get("order", {})
     square_order_id = square_order.get("id")
+
     if not square_order_id:
         raise RuntimeError("Square accepted the order request but returned no order id")
 
-    total_money = square_order.get("total_money", {})
-    total_cents = total_money.get("amount", 0)
-    currency    = total_money.get("currency", "USD")
-    tax_cents   = (square_order.get("total_tax_money") or {}).get("amount", 0)
-
-    charge_cents = max(0, total_cents - loyalty_discount_cents)
-
-    logger.info(
-        f"[Square] Order {square_order_id}: total={total_cents}¢  "
-        f"discount={loyalty_discount_cents}¢  charge={charge_cents}¢"
+    totals = _totals_from_square_order(
+        square_order=square_order,
+        loyalty_discount_cents=loyalty_discount_cents,
     )
 
-    # ── Free order (fully covered by loyalty) ─────────────────────────────
+    total_cents = totals["total_cents"]
+    tax_cents = totals["tax_cents"]
+    charge_cents = totals["final_charge_cents"]
+    currency = totals["currency"]
+
+    logger.info(
+        f"[Square] Order {square_order_id}: total={total_cents}¢ "
+        f"tax={tax_cents}¢ loyalty_discount={loyalty_discount_cents}¢ "
+        f"charge={charge_cents}¢"
+    )
+
     if charge_cents == 0:
         logger.info(f"[Square] Order {square_order_id} fully covered by loyalty — skipping charge")
         return {
-            "square_order_id":   square_order_id,
+            "square_order_id": square_order_id,
             "square_payment_id": None,
-            "charged_cents":     0,
-            "tax_cents":         tax_cents,
-            "total_cents":       total_cents,
-            "currency":          currency,
+            "charged_cents": 0,
+            "tax_cents": tax_cents,
+            "total_cents": total_cents,
+            "currency": currency,
         }
 
-    # ── Charge card (idempotent — a retry returns the same payment) ────────
     payment_result = await _square.charge_payment(
         access_token=access_token,
         location_id=location_id,
@@ -361,9 +477,9 @@ async def _process_square_payment(
         idempotency_key=f"{loyalcup_order_id}-charge",
     )
 
-    payment           = payment_result.get("payment", {})
+    payment = payment_result.get("payment", {})
     square_payment_id = payment.get("id")
-    payment_status    = payment.get("status")
+    payment_status = payment.get("status")
 
     if payment_status not in ("COMPLETED", "APPROVED"):
         raise RuntimeError(
@@ -376,10 +492,10 @@ async def _process_square_payment(
     )
 
     return {
-        "square_order_id":   square_order_id,
+        "square_order_id": square_order_id,
         "square_payment_id": square_payment_id,
-        "charged_cents":     charge_cents,
-        "tax_cents":         tax_cents,
-        "total_cents":       total_cents,
-        "currency":          currency,
+        "charged_cents": charge_cents,
+        "tax_cents": tax_cents,
+        "total_cents": total_cents,
+        "currency": currency,
     }
