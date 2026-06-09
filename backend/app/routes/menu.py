@@ -131,7 +131,7 @@ async def create_category(shop_id: str, category_data: CategoryCreate, user: dic
         raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
-    if not shop_service.verify_shop_ownership(shop_id, user_id):
+    if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     category = await shop_service.create_category(
@@ -155,7 +155,7 @@ async def update_category(
         raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
-    if not shop_service.verify_shop_ownership(shop_id, user_id):
+    if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     # Filter out None values
@@ -172,7 +172,7 @@ async def delete_category(shop_id: str, category_id: str, user: dict = Depends(r
         raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
-    if not shop_service.verify_shop_ownership(shop_id, user_id):
+    if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     success = await shop_service.delete_category(category_id)
@@ -191,7 +191,7 @@ async def reorder_categories(
         raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
-    if not shop_service.verify_shop_ownership(shop_id, user_id):
+    if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     orders = [{"id": c.category_id, "display_order": c.display_order} for c in category_orders]
@@ -211,7 +211,7 @@ async def create_menu_item(shop_id: str, item_data: MenuItemCreate, user: dict =
         raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
-    if not shop_service.verify_shop_ownership(shop_id, user_id):
+    if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     item = await shop_service.create_menu_item(shop_id, item_data.dict())
@@ -231,7 +231,7 @@ async def update_menu_item(
         raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
-    if not shop_service.verify_shop_ownership(shop_id, user_id):
+    if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     # Filter out None values
@@ -248,7 +248,7 @@ async def delete_menu_item(shop_id: str, item_id: str, user: dict = Depends(requ
         raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
-    if not shop_service.verify_shop_ownership(shop_id, user_id):
+    if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     success = await shop_service.delete_menu_item(item_id)
@@ -268,7 +268,7 @@ async def toggle_item_availability(
         raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
-    if not shop_service.verify_shop_ownership(shop_id, user_id):
+    if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     item = await shop_service.toggle_item_availability(item_id, availability.is_available)
@@ -288,7 +288,7 @@ async def upload_item_image(
         raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
-    if not shop_service.verify_shop_ownership(shop_id, user_id):
+    if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     file_data = await file.read()
@@ -319,7 +319,7 @@ async def create_customization_template(
         raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
-    if not shop_service.verify_shop_ownership(shop_id, user_id):
+    if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     template = await shop_service.create_customization_template(
@@ -342,7 +342,7 @@ async def update_customization_template(
         raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
-    if not shop_service.verify_shop_ownership(shop_id, user_id):
+    if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     # Filter out None values
@@ -363,7 +363,7 @@ async def delete_customization_template(
         raise HTTPException(status_code=401, detail="User ID not found in token")
     
     # Verify ownership
-    if not shop_service.verify_shop_ownership(shop_id, user_id):
+    if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     success = await shop_service.delete_customization_template(template_id)

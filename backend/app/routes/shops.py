@@ -173,7 +173,7 @@ async def update_shop(shop_id: str, shop_data: ShopUpdate, user: dict = Depends(
     user_id = user.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="User ID not found in token")
-    if not shop_service.verify_shop_ownership(shop_id, user_id):
+    if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     update_data = {k: v for k, v in shop_data.dict().items() if v is not None}
     shop = await shop_service.update_shop(shop_id, update_data)
@@ -186,7 +186,7 @@ async def delete_shop(shop_id: str, user: dict = Depends(require_auth())):
     user_id = user.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="User ID not found in token")
-    if not shop_service.verify_shop_ownership(shop_id, user_id):
+    if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     success = await shop_service.delete_shop(shop_id)
     return {"success": success}
@@ -198,7 +198,7 @@ async def upload_shop_logo(shop_id: str, file: UploadFile = File(...), user: dic
     user_id = user.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="User ID not found in token")
-    if not shop_service.verify_shop_ownership(shop_id, user_id):
+    if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     file_data = await file.read()
     logo_url  = await shop_service.upload_shop_image(shop_id, file_data, "logo")
@@ -211,7 +211,7 @@ async def upload_shop_banner(shop_id: str, file: UploadFile = File(...), user: d
     user_id = user.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="User ID not found in token")
-    if not shop_service.verify_shop_ownership(shop_id, user_id):
+    if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     file_data  = await file.read()
     banner_url = await shop_service.upload_shop_image(shop_id, file_data, "banner")
@@ -224,7 +224,7 @@ async def get_shop_analytics(shop_id: str, user: dict = Depends(require_auth()))
     user_id = user.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="User ID not found in token")
-    if not shop_service.verify_shop_ownership(shop_id, user_id):
+    if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     analytics = await shop_service.get_shop_analytics(shop_id)
     return {"analytics": analytics}

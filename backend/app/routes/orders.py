@@ -39,14 +39,49 @@ class DisabledOrderRequest(BaseModel):
     shop_id: Optional[str] = None
 
 
+def _get_profile_shop_id(sc, user_id: str) -> Optional[str]:
+    resp = (
+        sc.table("profiles")
+        .select("shop_id")
+        .eq("id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if not resp.data:
+        return None
+    return resp.data[0].get("shop_id")
+
+
+def _shop_owner_owns_shop(sc, shop_id: str, user_id: str) -> bool:
+    resp = (
+        sc.table("shops")
+        .select("id")
+        .eq("id", shop_id)
+        .eq("owner_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    return bool(resp.data)
+
+
+def _can_access_shop(sc, *, shop_id: str, user_id: str, role: str) -> bool:
+    if role == "admin":
+        return True
+
+    if role == "shop_owner":
+        return _shop_owner_owns_shop(sc, shop_id, user_id)
+
+    if role == "shop_worker":
+        return _get_profile_shop_id(sc, user_id) == shop_id
+
+    return False
+
+
 @router.post("/orders")
 async def create_order_disabled(
     request: DisabledOrderRequest,
     user: dict = Depends(require_auth()),
 ):
-    """
-    Disabled for launch. Card checkout must use POST /api/v1/payments/create.
-    """
     raise HTTPException(
         status_code=410,
         detail="Manual/cash orders are disabled. Use card checkout.",
@@ -146,11 +181,6 @@ async def _complete_ready_orders_for_query(sc, query, now_iso: str) -> dict:
 
 @router.post("/orders/complete-ready")
 async def complete_ready_orders(user: dict = Depends(require_auth())):
-    """
-    Customer/admin lazy auto-complete.
-    Mobile can call this on order detail/history refresh.
-    Non-admin users can only complete their own ready orders.
-    """
     db = get_supabase()
     sc = db.get_service_client()
 
@@ -184,10 +214,6 @@ async def complete_ready_orders(user: dict = Depends(require_auth())):
 async def complete_ready_orders_cron(
     x_order_completion_secret: Optional[str] = Header(None),
 ):
-    """
-    Cron-safe endpoint for Railway scheduled jobs.
-    Set ORDER_COMPLETION_SECRET in Railway, then call this every minute.
-    """
     expected = os.getenv("ORDER_COMPLETION_SECRET")
     if not expected:
         raise HTTPException(status_code=500, detail="ORDER_COMPLETION_SECRET is not configured")
@@ -234,7 +260,8 @@ async def get_customer_orders(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[Orders] get_customer_orders failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not fetch orders")
 
 
 @router.get("/orders/history")
@@ -258,13 +285,15 @@ async def get_customer_order_history(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[Orders] get_customer_order_history failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not fetch order history")
 
 
 @router.get("/orders/{order_id}")
 async def get_order_details(order_id: str, user: dict = Depends(require_auth())):
     try:
         db = get_supabase()
+        sc = db.get_service_client()
         order_service.db = db
 
         await complete_ready_orders(user)
@@ -273,10 +302,25 @@ async def get_order_details(order_id: str, user: dict = Depends(require_auth()))
         if not order:
             raise HTTPException(status_code=404, detail="Order not found")
 
-        customer_id = user.get("sub")
-        user_role = get_user_role(customer_id)
+        user_id = user.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Not authenticated")
 
-        if order.get("customer_id") != customer_id and user_role not in ("admin", "shop_worker", "shop_owner"):
+        user_role = get_user_role(user_id)
+        order_customer_id = order.get("customer_id")
+        order_shop_id = order.get("shop_id")
+
+        can_access = order_customer_id == user_id
+
+        if not can_access and order_shop_id:
+            can_access = _can_access_shop(
+                sc,
+                shop_id=order_shop_id,
+                user_id=user_id,
+                role=user_role,
+            )
+
+        if not can_access:
             raise HTTPException(status_code=403, detail="Access denied")
 
         return {"order": order}
@@ -284,7 +328,8 @@ async def get_order_details(order_id: str, user: dict = Depends(require_auth()))
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[Orders] get_order_details failed order={order_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not fetch order")
 
 
 @router.post("/orders/{order_id}/cancel")
@@ -300,7 +345,8 @@ async def cancel_order(order_id: str, user: dict = Depends(require_auth())):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[Orders] cancel failed order={order_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not cancel order")
 
 
 @router.get("/shops/{shop_id}/orders")
@@ -312,26 +358,28 @@ async def get_shop_orders(
 ):
     try:
         user_id = user.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+
         db = get_supabase()
+        sc = db.get_service_client()
         order_service.db = db
 
         role = get_user_role(user_id)
 
-        if role != "admin":
-            shop_check = (
-                db.get_service_client()
-                .table("shops")
-                .select("id, owner_id")
-                .eq("id", shop_id)
-                .limit(1)
-                .execute()
-            )
+        shop_check = (
+            sc.table("shops")
+            .select("id, owner_id")
+            .eq("id", shop_id)
+            .limit(1)
+            .execute()
+        )
 
-            if not shop_check.data:
-                raise HTTPException(status_code=404, detail="Shop not found")
+        if not shop_check.data:
+            raise HTTPException(status_code=404, detail="Shop not found")
 
-            if role == "shop_owner" and shop_check.data[0].get("owner_id") != user_id:
-                raise HTTPException(status_code=403, detail="Not authorized for this shop")
+        if not _can_access_shop(sc, shop_id=shop_id, user_id=user_id, role=role):
+            raise HTTPException(status_code=403, detail="Not authorized for this shop")
 
         orders = await order_service.get_shop_orders(
             shop_id=shop_id,
@@ -344,4 +392,5 @@ async def get_shop_orders(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[Orders] get_shop_orders failed shop={shop_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not fetch shop orders")
