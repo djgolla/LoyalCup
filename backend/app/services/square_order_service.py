@@ -11,6 +11,11 @@ Important:
   - quote_order() uses Square CalculateOrder before the customer enters a card.
   - process_payment() creates the actual Square order and charges the exact
     Square-calculated amount.
+
+SECURITY:
+  This service also refuses to trust client prices. Even if a caller passes
+  item["unit_price"], Square line-item prices are rebuilt from menu_items and
+  modifier_options in Supabase.
 """
 import logging
 from datetime import datetime, timedelta, timezone
@@ -195,37 +200,144 @@ async def _get_prep_minutes(db, shop_id: str) -> int:
     return 10
 
 
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except Exception:
+        return default
+
+
+def _customization_id(customization: Dict[str, Any]) -> Optional[str]:
+    return (
+        customization.get("id")
+        or customization.get("option_id")
+        or customization.get("modifier_option_id")
+    )
+
+
+def _square_modifier_id(customization: Dict[str, Any]) -> Optional[str]:
+    return (
+        customization.get("square_modifier_id")
+        or customization.get("pos_modifier_id")
+        or customization.get("modifier_id")
+        or customization.get("pos_id")
+    )
+
+
+def _customization_name(customization: Dict[str, Any]) -> str:
+    return customization.get("name") or "Customization"
+
+
 async def _build_square_line_items(
     db,
     items: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
-    menu_item_ids = [item["menu_item_id"] for item in items]
+    """
+    Build Square line items using trusted DB prices.
+
+    This intentionally ignores client-provided item["unit_price"]. The app can
+    request menu items and modifier option IDs, but pricing comes from Supabase.
+    """
+    sc = db.get_service_client()
+
+    menu_item_ids = list({item["menu_item_id"] for item in items if item.get("menu_item_id")})
+    if not menu_item_ids:
+        raise ValueError("No menu items provided")
 
     menu_resp = (
-        db.get_service_client()
-        .table("menu_items")
-        .select("id, name, base_price, pos_id, pos_source")
+        sc.table("menu_items")
+        .select(
+            "id, shop_id, name, base_price, pos_id, pos_source, "
+            "is_available, is_active, is_out_of_stock"
+        )
         .in_("id", menu_item_ids)
         .execute()
     )
 
-    menu_lookup: Dict[str, Dict] = {row["id"]: row for row in (menu_resp.data or [])}
+    menu_lookup: Dict[str, Dict[str, Any]] = {
+        row["id"]: row for row in (menu_resp.data or [])
+    }
+
+    customization_ids = []
+    for item in items:
+        for customization in item.get("customizations") or []:
+            cid = _customization_id(customization)
+            if cid:
+                customization_ids.append(str(cid))
+
+    modifier_lookup: Dict[str, Dict[str, Any]] = {}
+    if customization_ids:
+        mod_resp = (
+            sc.table("modifier_options")
+            .select("*")
+            .in_("id", list(set(customization_ids)))
+            .execute()
+        )
+        modifier_lookup = {
+            row["id"]: row for row in (mod_resp.data or [])
+        }
 
     line_items = []
 
     for item in items:
-        menu_row = menu_lookup.get(item["menu_item_id"])
+        menu_item_id = item.get("menu_item_id")
+        menu_row = menu_lookup.get(menu_item_id)
 
         if not menu_row:
-            logger.warning(f"[Square] menu_item {item['menu_item_id']} not in DB — skipping")
-            continue
+            raise ValueError("A menu item in this order no longer exists")
 
-        unit_price_cents = int(round(
-            float(item.get("unit_price") or menu_row.get("base_price") or 0) * 100
-        ))
+        if menu_row.get("is_available") is False or menu_row.get("is_active") is False:
+            raise ValueError(f"{menu_row.get('name', 'Item')} is no longer available")
+
+        if menu_row.get("is_out_of_stock") is True:
+            raise ValueError(f"{menu_row.get('name', 'Item')} is out of stock")
+
+        trusted_customizations = []
+
+        for customization in item.get("customizations") or []:
+            cid = _customization_id(customization)
+
+            if not cid:
+                continue
+
+            option_row = modifier_lookup.get(str(cid))
+            if not option_row:
+                raise ValueError("Invalid customization selected")
+
+            if option_row.get("shop_id") and option_row.get("shop_id") != menu_row.get("shop_id"):
+                raise ValueError("Customization belongs to another shop")
+
+            if option_row.get("is_active") is False:
+                raise ValueError("Customization is no longer available")
+
+            trusted_customizations.append({
+                "id": option_row.get("id"),
+                "name": option_row.get("name") or "Customization",
+                "price_adjustment": _safe_float(option_row.get("price_adjustment"), 0.0),
+                "pos_id": option_row.get("pos_id"),
+                "pos_source": option_row.get("pos_source"),
+                "square_modifier_id": (
+                    option_row.get("square_modifier_id")
+                    or option_row.get("pos_modifier_id")
+                    or option_row.get("modifier_id")
+                    or option_row.get("pos_id")
+                ),
+            })
+
+        base_price = _safe_float(menu_row.get("base_price"), 0.0)
+        modifier_total = sum(
+            _safe_float(c.get("price_adjustment"), 0.0)
+            for c in trusted_customizations
+        )
+
+        unit_price_cents = int(round((base_price + modifier_total) * 100))
+        if unit_price_cents < 0:
+            raise ValueError("Invalid item price")
 
         line_item: Dict[str, Any] = {
-            "quantity": str(max(1, item.get("quantity", 1))),
+            "quantity": str(max(1, int(item.get("quantity", 1)))),
             "base_price_money": {
                 "amount": unit_price_cents,
                 "currency": "USD",
@@ -240,20 +352,25 @@ async def _build_square_line_items(
         else:
             line_item["name"] = menu_row.get("name", "Item")
 
-        customizations = item.get("customizations") or []
         modifiers = []
+        unmapped_customization_names = []
 
-        for c in customizations:
-            square_mod_id = (
-                c.get("square_modifier_id")
-                or c.get("pos_modifier_id")
-                or c.get("modifier_id")
-            )
-            if square_mod_id:
+        for customization in trusted_customizations:
+            square_mod_id = _square_modifier_id(customization)
+
+            if square_mod_id and (customization.get("pos_source") or "").lower() == "square":
                 modifiers.append({"catalog_object_id": square_mod_id})
+            else:
+                unmapped_customization_names.append(_customization_name(customization))
 
         if modifiers:
             line_item["modifiers"] = modifiers
+
+        if trusted_customizations:
+            all_customization_names = [
+                _customization_name(c) for c in trusted_customizations
+            ]
+            line_item["note"] = "Mods: " + ", ".join(all_customization_names)
 
         line_items.append(line_item)
 

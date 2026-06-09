@@ -11,13 +11,19 @@ CARD ONLY launch flow:
     - Charges Square card nonce.
     - Confirms LoyalCup order.
     - Awards/redeems loyalty.
+
+SECURITY:
+  The mobile app may send unit_price/base_price for UI convenience, but the
+  backend NEVER trusts client prices. All checkout pricing is resolved from
+  Supabase menu_items + modifier_options using the service role before quote,
+  charge, order_items insert, loyalty redemption, and loyalty awarding.
 """
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, Field, validator
 
 from app.services.square_order_service import process_payment, quote_order
 from app.services.notification_service import send_order_placed_push
@@ -37,19 +43,25 @@ logger = logging.getLogger(__name__)
 class PaymentItem(BaseModel):
     menu_item_id: str
     quantity: int
-    unit_price: float
+
+    # Kept optional so the current app request shape does not break.
+    # These values are ignored for security.
+    unit_price: Optional[float] = None
     base_price: Optional[float] = None
-    customizations: List[dict] = []
+
+    customizations: List[dict] = Field(default_factory=list)
 
     @validator("quantity")
     def _q(cls, v):
         if v <= 0:
             raise ValueError("Quantity must be positive")
+        if v > 25:
+            raise ValueError("Quantity is too high")
         return v
 
     @validator("unit_price")
     def _p(cls, v):
-        if v < 0:
+        if v is not None and v < 0:
             raise ValueError("Unit price cannot be negative")
         return v
 
@@ -64,6 +76,8 @@ class QuotePaymentRequest(BaseModel):
     def _items(cls, v):
         if not v:
             raise ValueError("Order must have at least one item")
+        if len(v) > 50:
+            raise ValueError("Too many line items")
         return v
 
     @validator("loyalty_points_to_redeem")
@@ -87,8 +101,160 @@ def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _items_data(items: List[PaymentItem]) -> List[dict]:
-    return [item.dict(exclude={"base_price"}) for item in items]
+def _customization_id(customization: Dict[str, Any]) -> Optional[str]:
+    return (
+        customization.get("id")
+        or customization.get("option_id")
+        or customization.get("modifier_option_id")
+    )
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except Exception:
+        return default
+
+
+def _safe_bool_not_false(value: Any) -> bool:
+    return value is not False
+
+
+def _normalize_modifier_option(row: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Return only trusted DB fields needed by checkout/Square/order history.
+    Do not pass through client-provided price_adjustment/name blindly.
+    """
+    price_adjustment = _safe_float(row.get("price_adjustment"), 0.0)
+
+    return {
+        "id": row.get("id"),
+        "name": row.get("name") or "Customization",
+        "price_adjustment": price_adjustment,
+        "modifier_group_id": row.get("modifier_group_id"),
+        "pos_id": row.get("pos_id"),
+        "pos_source": row.get("pos_source"),
+        "square_modifier_id": (
+            row.get("square_modifier_id")
+            or row.get("pos_modifier_id")
+            or row.get("modifier_id")
+            or row.get("pos_id")
+        ),
+    }
+
+
+def _resolve_order_items(db, shop_id: str, items: List[PaymentItem]) -> List[dict]:
+    """
+    Security-critical price resolver.
+
+    The app can only choose:
+      - menu_item_id
+      - quantity
+      - modifier option IDs/customization IDs
+
+    The backend decides:
+      - whether item belongs to this shop
+      - whether item is available/active/in stock
+      - base price
+      - valid modifier prices
+      - final unit price
+    """
+    sc = db.get_service_client()
+
+    menu_item_ids = list({str(item.menu_item_id) for item in items if item.menu_item_id})
+    if not menu_item_ids:
+        raise HTTPException(status_code=400, detail="No valid menu items provided")
+
+    menu_resp = (
+        sc.table("menu_items")
+        .select(
+            "id, shop_id, name, base_price, is_available, is_active, "
+            "is_out_of_stock, pos_id, pos_source, modifier_group_ids"
+        )
+        .in_("id", menu_item_ids)
+        .execute()
+    )
+
+    menu_lookup = {row["id"]: row for row in (menu_resp.data or [])}
+
+    customization_ids = []
+    for item in items:
+        for customization in item.customizations or []:
+            cid = _customization_id(customization)
+            if cid:
+                customization_ids.append(str(cid))
+
+    customization_lookup: Dict[str, Dict[str, Any]] = {}
+    if customization_ids:
+        opt_resp = (
+            sc.table("modifier_options")
+            .select("*")
+            .in_("id", list(set(customization_ids)))
+            .execute()
+        )
+        customization_lookup = {row["id"]: row for row in (opt_resp.data or [])}
+
+    resolved_items = []
+
+    for item in items:
+        menu_item_id = str(item.menu_item_id)
+        menu_row = menu_lookup.get(menu_item_id)
+
+        if not menu_row:
+            raise HTTPException(status_code=400, detail="A menu item in your cart no longer exists")
+
+        if menu_row.get("shop_id") != shop_id:
+            raise HTTPException(status_code=400, detail="Cart contains an item from the wrong shop")
+
+        if menu_row.get("is_available") is False or menu_row.get("is_active") is False:
+            raise HTTPException(status_code=400, detail=f"{menu_row.get('name', 'Item')} is no longer available")
+
+        if menu_row.get("is_out_of_stock") is True:
+            raise HTTPException(status_code=400, detail=f"{menu_row.get('name', 'Item')} is out of stock")
+
+        allowed_group_ids = set(menu_row.get("modifier_group_ids") or [])
+        trusted_customizations = []
+
+        for customization in item.customizations or []:
+            cid = _customization_id(customization)
+            if not cid:
+                continue
+
+            option_row = customization_lookup.get(str(cid))
+            if not option_row:
+                raise HTTPException(status_code=400, detail="Invalid customization selected")
+
+            if option_row.get("shop_id") != shop_id:
+                raise HTTPException(status_code=400, detail="Customization belongs to another shop")
+
+            if option_row.get("is_active") is False:
+                raise HTTPException(status_code=400, detail="Customization is no longer available")
+
+            option_group_id = option_row.get("modifier_group_id")
+            if allowed_group_ids and option_group_id and option_group_id not in allowed_group_ids:
+                raise HTTPException(status_code=400, detail="Customization is not valid for this item")
+
+            trusted_customizations.append(_normalize_modifier_option(option_row))
+
+        base_price = _safe_float(menu_row.get("base_price"), 0.0)
+        mods_total = sum(_safe_float(c.get("price_adjustment"), 0.0) for c in trusted_customizations)
+        unit_price = round(base_price + mods_total, 2)
+
+        if unit_price < 0:
+            raise HTTPException(status_code=400, detail="Invalid item price")
+
+        resolved_items.append({
+            "menu_item_id": menu_item_id,
+            "quantity": max(1, int(item.quantity or 1)),
+            "unit_price": unit_price,
+            "base_price": base_price,
+            "customizations": trusted_customizations,
+            "name": menu_row.get("name"),
+        })
+
+    return resolved_items
 
 
 def _subtotal_cents(items_data: List[dict]) -> int:
@@ -144,7 +310,7 @@ async def quote_payment(
 
     shop_resp = (
         sc.table("shops")
-        .select("id, status, name")
+        .select("id, status, name, mobile_ordering_enabled")
         .eq("id", request.shop_id)
         .limit(1)
         .execute()
@@ -158,7 +324,10 @@ async def quote_payment(
     if shop.get("status") != "active":
         raise HTTPException(status_code=400, detail="This shop is not currently accepting orders")
 
-    items_data = _items_data(request.items)
+    if shop.get("mobile_ordering_enabled") is False:
+        raise HTTPException(status_code=400, detail="Mobile ordering is currently disabled for this shop")
+
+    items_data = _resolve_order_items(db, request.shop_id, request.items)
 
     loyalty_discount_cents = _loyalty_discount_for_request(
         db=db,
@@ -205,7 +374,7 @@ async def create_payment(
 
     shop_resp = (
         sc.table("shops")
-        .select("id, status, name, avg_prep_time_minutes")
+        .select("id, status, name, avg_prep_time_minutes, mobile_ordering_enabled")
         .eq("id", request.shop_id)
         .limit(1)
         .execute()
@@ -219,11 +388,14 @@ async def create_payment(
     if shop.get("status") != "active":
         raise HTTPException(status_code=400, detail="This shop is not currently accepting orders")
 
+    if shop.get("mobile_ordering_enabled") is False:
+        raise HTTPException(status_code=400, detail="Mobile ordering is currently disabled for this shop")
+
     prep_minutes = int(shop.get("avg_prep_time_minutes") or 10)
     shop_name = shop.get("name", "the shop")
     ready_at_iso = (_now_utc() + timedelta(minutes=prep_minutes)).isoformat()
 
-    items_data = _items_data(request.items)
+    items_data = _resolve_order_items(db, request.shop_id, request.items)
     subtotal_dollars = _subtotal_dollars(items_data)
 
     loyalty_discount_cents = _loyalty_discount_for_request(
@@ -250,6 +422,7 @@ async def create_payment(
                 "customer_note": request.customer_note,
                 "prep_minutes": prep_minutes,
                 "ready_at": ready_at_iso,
+                "server_priced": True,
             },
         }
 
@@ -310,6 +483,7 @@ async def create_payment(
         "customer_note": request.customer_note,
         "prep_minutes": prep_minutes,
         "ready_at": ready_at_iso,
+        "server_priced": True,
     }
 
     if loyalty_discount_cents > 0:
