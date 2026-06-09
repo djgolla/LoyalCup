@@ -1,11 +1,46 @@
 """
 Shop Service - Business logic for shop and menu management
-Handles CRUD operations, analytics, and geolocation queries
+Handles CRUD operations, analytics, and geolocation queries.
+
+SECURITY:
+Public shop/menu methods return safe public fields only. They do not expose
+owner_id, business_license, Square IDs, Stripe subscription fields, or other
+internal/private columns.
 """
 
 from typing import List, Dict, Optional, Any
 from datetime import datetime
-import os
+import math
+
+
+PUBLIC_SHOP_FIELDS = (
+    "id, name, description, logo_url, banner_url, address, city, state, "
+    "lat, lng, phone, hours, color, status, featured, website, zip, "
+    "avg_rating, review_count, mobile_ordering_enabled, avg_prep_time_minutes, "
+    "created_at"
+)
+
+OWNER_SHOP_FIELDS = (
+    "id, owner_id, name, description, logo_url, banner_url, address, city, state, "
+    "lat, lng, phone, hours, loyalty_points_per_dollar, participates_in_global_loyalty, "
+    "created_at, color, updated_at, status, featured, business_license, website, zip, "
+    "square_merchant_id, square_website_url, avg_rating, review_count, "
+    "mobile_ordering_enabled, subscription_status, avg_prep_time_minutes"
+)
+
+PUBLIC_CATEGORY_FIELDS = (
+    "id, shop_id, name, display_order, description, pos_id, pos_source, is_active"
+)
+
+PUBLIC_MENU_ITEM_FIELDS = (
+    "id, shop_id, category_id, name, description, base_price, image_url, "
+    "is_available, display_order, addons, sizes, pos_id, pos_source, "
+    "modifier_group_ids, is_active, is_out_of_stock"
+)
+
+PUBLIC_CUSTOMIZATION_TEMPLATE_FIELDS = (
+    "id, shop_id, name, type, is_required, applies_to, options"
+)
 
 
 class ShopService:
@@ -14,6 +49,27 @@ class ShopService:
     def __init__(self, supabase_client=None):
         """Initialize shop service with optional Supabase client"""
         self.db = supabase_client
+
+    def _client(self):
+        if not self.db:
+            return None
+        return self.db.get_service_client()
+
+    def _safe_shop_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Extra defensive cleanup in case a future select accidentally includes
+        private fields.
+        """
+        blocked = {
+            "owner_id",
+            "business_license",
+            "square_merchant_id",
+            "stripe_customer_id",
+            "stripe_subscription_id",
+            "subscription_price_id",
+            "subscription_status",
+        }
+        return {k: v for k, v in (row or {}).items() if k not in blocked}
     
     # ============================================================================
     # SHOP OPERATIONS
@@ -25,58 +81,91 @@ class ShopService:
         search: Optional[str] = None,
         active_only: bool = True
     ) -> List[Dict[str, Any]]:
-        """List all shops with optional filters"""
+        """List shops with optional filters. Public callers get safe fields only."""
         if not self.db:
             return []
         
         try:
-            query = self.db.get_service_client().table('shops').select('*')
+            select_fields = PUBLIC_SHOP_FIELDS if active_only else OWNER_SHOP_FIELDS
+            query = self._client().table("shops").select(select_fields)
             
             if active_only:
-                query = query.eq('status', 'active')
+                query = query.eq("status", "active")
             
             if city:
-                query = query.ilike('city', f'%{city}%')
+                query = query.ilike("city", f"%{city}%")
             
             if search:
-                query = query.or_(f'name.ilike.%{search}%,description.ilike.%{search}%')
+                safe_search = search.replace(",", " ").strip()
+                query = query.or_(f"name.ilike.%{safe_search}%,description.ilike.%{safe_search}%")
             
-            response = query.order('created_at', desc=True).execute()
-            return response.data or []
+            response = query.order("created_at", desc=True).execute()
+            rows = response.data or []
+
+            if active_only:
+                return [self._safe_shop_row(row) for row in rows]
+
+            return rows
+
         except Exception as e:
             print(f"Error listing shops: {e}")
             return []
     
     async def get_shop_by_id(self, shop_id: str) -> Optional[Dict[str, Any]]:
-        """Get shop details by ID"""
+        """Get safe public shop details by ID."""
         if not self.db:
             return None
         
         try:
-            response = self.db.get_service_client()\
-                .table('shops')\
-                .select('*')\
-                .eq('id', shop_id)\
-                .single()\
+            response = (
+                self._client()
+                .table("shops")
+                .select(PUBLIC_SHOP_FIELDS)
+                .eq("id", shop_id)
+                .eq("status", "active")
+                .single()
                 .execute()
-            return response.data
+            )
+            return self._safe_shop_row(response.data)
         except Exception as e:
             print(f"Error getting shop {shop_id}: {e}")
+            return None
+    
+    async def get_owner_shop_by_id(self, shop_id: str, owner_id: str) -> Optional[Dict[str, Any]]:
+        """Get fuller shop details for the owning shop owner only."""
+        if not self.db:
+            return None
+        
+        try:
+            response = (
+                self._client()
+                .table("shops")
+                .select(OWNER_SHOP_FIELDS)
+                .eq("id", shop_id)
+                .eq("owner_id", owner_id)
+                .single()
+                .execute()
+            )
+            return response.data
+        except Exception as e:
+            print(f"Error getting owner shop {shop_id}: {e}")
             return None
     
     async def create_shop(self, shop_data: Dict[str, Any], owner_id: str) -> Dict[str, Any]:
         """Create a new shop"""
         if not self.db:
-            shop_data['owner_id'] = owner_id
-            shop_data['created_at'] = datetime.now().isoformat()
+            shop_data["owner_id"] = owner_id
+            shop_data["created_at"] = datetime.now().isoformat()
             return shop_data
         
         try:
-            shop_data['owner_id'] = owner_id
-            response = self.db.get_service_client()\
-                .table('shops')\
-                .insert(shop_data)\
+            shop_data["owner_id"] = owner_id
+            response = (
+                self._client()
+                .table("shops")
+                .insert(shop_data)
                 .execute()
+            )
             return response.data[0] if response.data else {}
         except Exception as e:
             print(f"Error creating shop: {e}")
@@ -88,11 +177,13 @@ class ShopService:
             return shop_data
         
         try:
-            response = self.db.get_service_client()\
-                .table('shops')\
-                .update(shop_data)\
-                .eq('id', shop_id)\
+            response = (
+                self._client()
+                .table("shops")
+                .update(shop_data)
+                .eq("id", shop_id)
                 .execute()
+            )
             return response.data[0] if response.data else {}
         except Exception as e:
             print(f"Error updating shop {shop_id}: {e}")
@@ -104,11 +195,13 @@ class ShopService:
             return True
         
         try:
-            self.db.get_service_client()\
-                .table('shops')\
-                .update({'status': 'suspended'})\
-                .eq('id', shop_id)\
+            (
+                self._client()
+                .table("shops")
+                .update({"status": "suspended"})
+                .eq("id", shop_id)
                 .execute()
+            )
             return True
         except Exception as e:
             print(f"Error deleting shop {shop_id}: {e}")
@@ -126,45 +219,50 @@ class ShopService:
             }
         
         try:
-            # Check if user already owns a shop
-            existing_shop = self.db.get_service_client()\
-                .table('shops')\
-                .select('id')\
-                .eq('owner_id', user_id)\
+            existing_shop = (
+                self._client()
+                .table("shops")
+                .select("id")
+                .eq("owner_id", user_id)
                 .execute()
+            )
             
             if existing_shop.data and len(existing_shop.data) > 0:
                 raise ValueError("User already owns a shop")
             
-            # Create shop with active status
             shop_data = {
-                'name': application_data.get('name'),
-                'description': application_data.get('description'),
-                'address': application_data.get('address'),
-                'city': application_data.get('city'),
-                'state': application_data.get('state'),
-                'zip': application_data.get('zip'),
-                'phone': application_data.get('phone'),
-                'owner_id': user_id,
-                'status': 'active'
+                "name": application_data.get("name"),
+                "description": application_data.get("description"),
+                "address": application_data.get("address"),
+                "city": application_data.get("city"),
+                "state": application_data.get("state"),
+                "zip": application_data.get("zip"),
+                "phone": application_data.get("phone"),
+                "business_license": application_data.get("business_license"),
+                "website": application_data.get("website"),
+                "owner_id": user_id,
+                "status": "active",
             }
             
-            shop_response = self.db.get_service_client()\
-                .table('shops')\
-                .insert(shop_data)\
+            shop_response = (
+                self._client()
+                .table("shops")
+                .insert(shop_data)
                 .execute()
+            )
             
             if not shop_response.data or len(shop_response.data) == 0:
                 raise Exception("Failed to create shop")
             
             shop = shop_response.data[0]
             
-            # Update user role to shop_owner
-            profile_response = self.db.get_service_client()\
-                .table('profiles')\
-                .update({'role': 'shop_owner'})\
-                .eq('id', user_id)\
+            profile_response = (
+                self._client()
+                .table("profiles")
+                .update({"role": "shop_owner", "shop_id": shop.get("id")})
+                .eq("id", user_id)
                 .execute()
+            )
             
             if not profile_response.data:
                 raise Exception("Failed to update user role")
@@ -186,83 +284,109 @@ class ShopService:
         radius_km: float = 10
     ) -> List[Dict[str, Any]]:
         """
-        Find shops within radius of coordinates using PostGIS earthdistance.
-        Requires cube and earthdistance extensions enabled in database.
-        Falls back to returning all shops if geolocation fails.
+        Find shops within radius of coordinates.
+        Uses safe public fields and avoids raw SQL interpolation.
         """
         if not self.db:
             return []
-        
+
         try:
-            # Use PostGIS earthdistance for geolocation query
-            # This requires the cube and earthdistance extensions (installed in migration 004)
-            query = f"""
-                SELECT *, 
-                    earth_distance(
-                        ll_to_earth(lat, lng),
-                        ll_to_earth({lat}, {lng})
-                    ) / 1000 AS distance_km
-                FROM shops
-                WHERE status = 'active'
-                    AND lat IS NOT NULL 
-                    AND lng IS NOT NULL
-                    AND earth_box(ll_to_earth({lat}, {lng}), {radius_km * 1000}) @> ll_to_earth(lat, lng)
-                ORDER BY distance_km ASC
-                LIMIT 50;
-            """
-            response = self.db.get_service_client().rpc('execute_sql', {'query': query}).execute()
-            return response.data or []
+            lat = float(lat)
+            lng = float(lng)
+            radius_km = max(1.0, min(float(radius_km), 100.0))
+        except Exception:
+            return []
+
+        try:
+            response = (
+                self._client()
+                .table("shops")
+                .select(PUBLIC_SHOP_FIELDS)
+                .eq("status", "active")
+                .not_.is_("lat", "null")
+                .not_.is_("lng", "null")
+                .execute()
+            )
+
+            shops = response.data or []
+            with_distance = []
+
+            for shop in shops:
+                try:
+                    shop_lat = float(shop.get("lat"))
+                    shop_lng = float(shop.get("lng"))
+                    distance = self._distance_km(lat, lng, shop_lat, shop_lng)
+                    if distance <= radius_km:
+                        safe_shop = self._safe_shop_row(shop)
+                        safe_shop["distance_km"] = round(distance, 2)
+                        with_distance.append(safe_shop)
+                except Exception:
+                    continue
+
+            with_distance.sort(key=lambda s: s.get("distance_km", 999999))
+            return with_distance[:50]
+
         except Exception as e:
-            print(f"Geolocation query failed, falling back to all shops: {e}")
-            # Fallback to returning all active shops
+            print(f"Nearby shop lookup failed, falling back to all shops: {e}")
             return await self.list_shops(active_only=True)
+
+    def _distance_km(self, lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+        r = 6371.0
+        p1 = math.radians(lat1)
+        p2 = math.radians(lat2)
+        dp = math.radians(lat2 - lat1)
+        dl = math.radians(lng2 - lng1)
+
+        a = (
+            math.sin(dp / 2) ** 2
+            + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+        )
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+        return r * c
     
     async def upload_shop_image(
         self, 
         shop_id: str, 
         file_data: bytes, 
-        image_type: str  # 'logo' or 'banner'
+        image_type: str
     ) -> str:
         """Upload shop logo or banner to Supabase Storage"""
         if not self.db:
             return f"https://storage.example.com/{shop_id}/{image_type}.jpg"
         
         try:
-            # Upload to Supabase Storage
-            bucket = 'shop-images'
+            bucket = "shop-images"
             path = f"{shop_id}/{image_type}.jpg"
             
-            storage = self.db.get_service_client().storage
+            storage = self._client().storage
             
-            # Try to upload, if file exists, remove and re-upload
             try:
                 storage.from_(bucket).upload(
                     path, 
                     file_data, 
-                    {'content-type': 'image/jpeg', 'upsert': 'true'}
+                    {"content-type": "image/jpeg", "upsert": "true"}
                 )
-            except Exception as upload_error:
-                # If upload fails, try to remove and re-upload
+            except Exception:
                 try:
                     storage.from_(bucket).remove([path])
-                except:
+                except Exception:
                     pass
                 storage.from_(bucket).upload(
                     path, 
                     file_data, 
-                    {'content-type': 'image/jpeg'}
+                    {"content-type": "image/jpeg"}
                 )
             
-            # Get public URL
             url = storage.from_(bucket).get_public_url(path)
             
-            # Update database
-            field = 'logo_url' if image_type == 'logo' else 'banner_url'
-            self.db.get_service_client()\
-                .table('shops')\
-                .update({field: url})\
-                .eq('id', shop_id)\
+            field = "logo_url" if image_type == "logo" else "banner_url"
+            (
+                self._client()
+                .table("shops")
+                .update({field: url})
+                .eq("id", shop_id)
                 .execute()
+            )
             
             return url
         except Exception as e:
@@ -282,31 +406,33 @@ class ShopService:
             }
         
         try:
-            # Get total orders and revenue
-            orders_response = self.db.get_service_client()\
-                .table('orders')\
-                .select('total')\
-                .eq('shop_id', shop_id)\
-                .eq('status', 'completed')\
+            orders_response = (
+                self._client()
+                .table("orders")
+                .select("total")
+                .eq("shop_id", shop_id)
+                .eq("status", "completed")
                 .execute()
+            )
             
             orders = orders_response.data or []
             total_orders = len(orders)
-            total_revenue = sum(float(order.get('total', 0)) for order in orders)
+            total_revenue = sum(float(order.get("total", 0)) for order in orders)
             avg_order_value = total_revenue / total_orders if total_orders > 0 else 0.0
             
-            # Get today's orders
             today = datetime.now().date().isoformat()
-            today_response = self.db.get_service_client()\
-                .table('orders')\
-                .select('total')\
-                .eq('shop_id', shop_id)\
-                .gte('created_at', today)\
+            today_response = (
+                self._client()
+                .table("orders")
+                .select("total")
+                .eq("shop_id", shop_id)
+                .gte("created_at", today)
                 .execute()
+            )
             
             today_orders = today_response.data or []
             orders_today = len(today_orders)
-            revenue_today = sum(float(order.get('total', 0)) for order in today_orders)
+            revenue_today = sum(float(order.get("total", 0)) for order in today_orders)
             
             return {
                 "total_orders": total_orders,
@@ -332,17 +458,20 @@ class ShopService:
     # ============================================================================
     
     async def list_categories(self, shop_id: str) -> List[Dict[str, Any]]:
-        """Get all menu categories for a shop"""
+        """Get all public menu categories for a shop"""
         if not self.db:
             return []
         
         try:
-            response = self.db.get_service_client()\
-                .table('menu_categories')\
-                .select('*')\
-                .eq('shop_id', shop_id)\
-                .order('display_order')\
+            response = (
+                self._client()
+                .table("categories")
+                .select(PUBLIC_CATEGORY_FIELDS)
+                .eq("shop_id", shop_id)
+                .eq("is_active", True)
+                .order("display_order")
                 .execute()
+            )
             return response.data or []
         except Exception as e:
             print(f"Error listing categories for shop {shop_id}: {e}")
@@ -364,14 +493,17 @@ class ShopService:
             }
         
         try:
-            response = self.db.get_service_client()\
-                .table('menu_categories')\
+            response = (
+                self._client()
+                .table("categories")
                 .insert({
                     "shop_id": shop_id,
                     "name": name,
-                    "display_order": display_order
-                })\
+                    "display_order": display_order,
+                    "is_active": True,
+                })
                 .execute()
+            )
             return response.data[0] if response.data else {}
         except Exception as e:
             print(f"Error creating category: {e}")
@@ -387,27 +519,31 @@ class ShopService:
             return data
         
         try:
-            response = self.db.get_service_client()\
-                .table('menu_categories')\
-                .update(data)\
-                .eq('id', category_id)\
+            response = (
+                self._client()
+                .table("categories")
+                .update(data)
+                .eq("id", category_id)
                 .execute()
+            )
             return response.data[0] if response.data else {}
         except Exception as e:
             print(f"Error updating category {category_id}: {e}")
             raise
     
     async def delete_category(self, category_id: str) -> bool:
-        """Delete menu category"""
+        """Soft delete menu category"""
         if not self.db:
             return True
         
         try:
-            self.db.get_service_client()\
-                .table('menu_categories')\
-                .delete()\
-                .eq('id', category_id)\
+            (
+                self._client()
+                .table("categories")
+                .update({"is_active": False})
+                .eq("id", category_id)
                 .execute()
+            )
             return True
         except Exception as e:
             print(f"Error deleting category {category_id}: {e}")
@@ -424,11 +560,18 @@ class ShopService:
         
         try:
             for item in category_orders:
-                self.db.get_service_client()\
-                    .table('menu_categories')\
-                    .update({'display_order': item['display_order']})\
-                    .eq('id', item['category_id'])\
+                category_id = item.get("category_id") or item.get("id")
+                if not category_id:
+                    continue
+
+                (
+                    self._client()
+                    .table("categories")
+                    .update({"display_order": item["display_order"]})
+                    .eq("id", category_id)
+                    .eq("shop_id", shop_id)
                     .execute()
+                )
             return True
         except Exception as e:
             print(f"Error reordering categories: {e}")
@@ -443,37 +586,43 @@ class ShopService:
         shop_id: str, 
         category_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        """Get menu items for a shop, optionally filtered by category"""
+        """Get public menu items for a shop, optionally filtered by category"""
         if not self.db:
             return []
         
         try:
-            query = self.db.get_service_client()\
-                .table('menu_items')\
-                .select('*')\
-                .eq('shop_id', shop_id)
+            query = (
+                self._client()
+                .table("menu_items")
+                .select(PUBLIC_MENU_ITEM_FIELDS)
+                .eq("shop_id", shop_id)
+                .eq("is_active", True)
+            )
             
             if category_id:
-                query = query.eq('category_id', category_id)
+                query = query.eq("category_id", category_id)
             
-            response = query.order('display_order').execute()
+            response = query.order("display_order").execute()
             return response.data or []
         except Exception as e:
             print(f"Error listing menu items for shop {shop_id}: {e}")
             return []
     
     async def get_menu_item(self, item_id: str) -> Optional[Dict[str, Any]]:
-        """Get menu item details"""
+        """Get public menu item details"""
         if not self.db:
             return None
         
         try:
-            response = self.db.get_service_client()\
-                .table('menu_items')\
-                .select('*')\
-                .eq('id', item_id)\
-                .single()\
+            response = (
+                self._client()
+                .table("menu_items")
+                .select(PUBLIC_MENU_ITEM_FIELDS)
+                .eq("id", item_id)
+                .eq("is_active", True)
+                .single()
                 .execute()
+            )
             return response.data
         except Exception as e:
             print(f"Error getting menu item {item_id}: {e}")
@@ -486,16 +635,18 @@ class ShopService:
     ) -> Dict[str, Any]:
         """Create a menu item"""
         if not self.db:
-            item_data['shop_id'] = shop_id
-            item_data['created_at'] = datetime.now().isoformat()
+            item_data["shop_id"] = shop_id
+            item_data["created_at"] = datetime.now().isoformat()
             return item_data
         
         try:
-            item_data['shop_id'] = shop_id
-            response = self.db.get_service_client()\
-                .table('menu_items')\
-                .insert(item_data)\
+            item_data["shop_id"] = shop_id
+            response = (
+                self._client()
+                .table("menu_items")
+                .insert(item_data)
                 .execute()
+            )
             return response.data[0] if response.data else {}
         except Exception as e:
             print(f"Error creating menu item: {e}")
@@ -511,27 +662,31 @@ class ShopService:
             return item_data
         
         try:
-            response = self.db.get_service_client()\
-                .table('menu_items')\
-                .update(item_data)\
-                .eq('id', item_id)\
+            response = (
+                self._client()
+                .table("menu_items")
+                .update(item_data)
+                .eq("id", item_id)
                 .execute()
+            )
             return response.data[0] if response.data else {}
         except Exception as e:
             print(f"Error updating menu item {item_id}: {e}")
             raise
     
     async def delete_menu_item(self, item_id: str) -> bool:
-        """Delete menu item"""
+        """Soft delete menu item"""
         if not self.db:
             return True
         
         try:
-            self.db.get_service_client()\
-                .table('menu_items')\
-                .delete()\
-                .eq('id', item_id)\
+            (
+                self._client()
+                .table("menu_items")
+                .update({"is_active": False, "is_available": False})
+                .eq("id", item_id)
                 .execute()
+            )
             return True
         except Exception as e:
             print(f"Error deleting menu item {item_id}: {e}")
@@ -547,11 +702,13 @@ class ShopService:
             return {"id": item_id, "is_available": is_available}
         
         try:
-            response = self.db.get_service_client()\
-                .table('menu_items')\
-                .update({'is_available': is_available})\
-                .eq('id', item_id)\
+            response = (
+                self._client()
+                .table("menu_items")
+                .update({"is_available": is_available})
+                .eq("id", item_id)
                 .execute()
+            )
             return response.data[0] if response.data else {}
         except Exception as e:
             print(f"Error toggling availability for item {item_id}: {e}")
@@ -568,40 +725,38 @@ class ShopService:
             return f"https://storage.example.com/items/{item_id}.jpg"
         
         try:
-            # Upload to Supabase Storage
-            bucket = 'shop-images'
+            bucket = "shop-images"
             path = f"{shop_id}/menu/{item_id}.jpg"
             
-            storage = self.db.get_service_client().storage
+            storage = self._client().storage
             
-            # Try to upload, if file exists, remove and re-upload
             try:
                 storage.from_(bucket).upload(
                     path, 
                     file_data, 
-                    {'content-type': 'image/jpeg', 'upsert': 'true'}
+                    {"content-type": "image/jpeg", "upsert": "true"}
                 )
-            except Exception as upload_error:
-                # If upload fails, try to remove and re-upload
+            except Exception:
                 try:
                     storage.from_(bucket).remove([path])
-                except:
+                except Exception:
                     pass
                 storage.from_(bucket).upload(
                     path, 
                     file_data, 
-                    {'content-type': 'image/jpeg'}
+                    {"content-type": "image/jpeg"}
                 )
             
-            # Get public URL
             url = storage.from_(bucket).get_public_url(path)
             
-            # Update database
-            self.db.get_service_client()\
-                .table('menu_items')\
-                .update({'image_url': url})\
-                .eq('id', item_id)\
+            (
+                self._client()
+                .table("menu_items")
+                .update({"image_url": url})
+                .eq("id", item_id)
+                .eq("shop_id", shop_id)
                 .execute()
+            )
             
             return url
         except Exception as e:
@@ -616,16 +771,18 @@ class ShopService:
         self, 
         shop_id: str
     ) -> List[Dict[str, Any]]:
-        """Get all customization templates for a shop"""
+        """Get all public customization templates for a shop"""
         if not self.db:
             return []
         
         try:
-            response = self.db.get_service_client()\
-                .table('customization_templates')\
-                .select('*')\
-                .eq('shop_id', shop_id)\
+            response = (
+                self._client()
+                .table("customization_templates")
+                .select(PUBLIC_CUSTOMIZATION_TEMPLATE_FIELDS)
+                .eq("shop_id", shop_id)
                 .execute()
+            )
             return response.data or []
         except Exception as e:
             print(f"Error listing customization templates for shop {shop_id}: {e}")
@@ -638,15 +795,17 @@ class ShopService:
     ) -> Dict[str, Any]:
         """Create a customization template"""
         if not self.db:
-            template_data['shop_id'] = shop_id
+            template_data["shop_id"] = shop_id
             return template_data
         
         try:
-            template_data['shop_id'] = shop_id
-            response = self.db.get_service_client()\
-                .table('customization_templates')\
-                .insert(template_data)\
+            template_data["shop_id"] = shop_id
+            response = (
+                self._client()
+                .table("customization_templates")
+                .insert(template_data)
                 .execute()
+            )
             return response.data[0] if response.data else {}
         except Exception as e:
             print(f"Error creating customization template: {e}")
@@ -662,11 +821,13 @@ class ShopService:
             return template_data
         
         try:
-            response = self.db.get_service_client()\
-                .table('customization_templates')\
-                .update(template_data)\
-                .eq('id', template_id)\
+            response = (
+                self._client()
+                .table("customization_templates")
+                .update(template_data)
+                .eq("id", template_id)
                 .execute()
+            )
             return response.data[0] if response.data else {}
         except Exception as e:
             print(f"Error updating customization template {template_id}: {e}")
@@ -678,11 +839,13 @@ class ShopService:
             return True
         
         try:
-            self.db.get_service_client()\
-                .table('customization_templates')\
-                .delete()\
-                .eq('id', template_id)\
+            (
+                self._client()
+                .table("customization_templates")
+                .delete()
+                .eq("id", template_id)
                 .execute()
+            )
             return True
         except Exception as e:
             print(f"Error deleting customization template {template_id}: {e}")
@@ -698,14 +861,15 @@ class ShopService:
             return []
         
         try:
-            # Query the popular_menu_items view created in migration 004
-            response = self.db.get_service_client()\
-                .table('popular_menu_items')\
-                .select('*')\
-                .eq('shop_id', shop_id)\
-                .order('order_count', desc=True)\
-                .limit(limit)\
+            response = (
+                self._client()
+                .table("popular_menu_items")
+                .select("*")
+                .eq("shop_id", shop_id)
+                .order("order_count", desc=True)
+                .limit(limit)
                 .execute()
+            )
             return response.data or []
         except Exception as e:
             print(f"Error getting top items: {e}")
@@ -714,18 +878,20 @@ class ShopService:
     async def verify_shop_ownership(self, shop_id: str, user_id: str) -> bool:
         """Verify that user owns the shop"""
         if not self.db:
-            return True  # Allow in testing without DB
+            return True
         
         try:
-            response = self.db.get_service_client()\
-                .table('shops')\
-                .select('owner_id')\
-                .eq('id', shop_id)\
-                .single()\
+            response = (
+                self._client()
+                .table("shops")
+                .select("owner_id")
+                .eq("id", shop_id)
+                .single()
                 .execute()
+            )
             
             if response.data:
-                return response.data['owner_id'] == user_id
+                return response.data["owner_id"] == user_id
             return False
         except Exception as e:
             print(f"Error verifying shop ownership: {e}")
@@ -737,15 +903,17 @@ class ShopService:
             return False
         
         try:
-            response = self.db.get_service_client()\
-                .table('profiles')\
-                .select('role')\
-                .eq('id', user_id)\
-                .single()\
+            response = (
+                self._client()
+                .table("profiles")
+                .select("role")
+                .eq("id", user_id)
+                .single()
                 .execute()
+            )
             
             if response.data:
-                return response.data['role'] == 'admin'
+                return response.data["role"] == "admin"
             return False
         except Exception as e:
             print(f"Error checking admin status: {e}")

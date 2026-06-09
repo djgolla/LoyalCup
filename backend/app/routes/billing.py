@@ -12,7 +12,6 @@ import logging
 import httpx
 import stripe
 from fastapi import APIRouter, HTTPException, Depends, Request, Header
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
 
@@ -33,15 +32,13 @@ class CreateCheckoutRequest(BaseModel):
 
 
 async def _geocode_shop(shop_id: str, address: str, city: str, state: str, zip_code: str, db) -> None:
-    """
-    Geocode a shop's address via Nominatim and write lat/lng back to the DB.
-    Fully non-fatal — if it fails for any reason the shop still goes live.
-    """
     parts = [p for p in [address, city, state, zip_code] if p]
     if not parts:
         logger.warning(f"[Billing] Shop {shop_id} has no address to geocode")
         return
+
     query = ", ".join(parts)
+
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:
             resp = await client.get(
@@ -50,6 +47,7 @@ async def _geocode_shop(shop_id: str, address: str, city: str, state: str, zip_c
                 headers={"User-Agent": "LoyalCup/1.0"},
             )
             data = resp.json()
+
         if data:
             lat = float(data[0]["lat"])
             lng = float(data[0]["lon"])
@@ -59,6 +57,7 @@ async def _geocode_shop(shop_id: str, address: str, city: str, state: str, zip_c
             logger.info(f"[Billing] Shop {shop_id} geocoded → {lat}, {lng}")
         else:
             logger.warning(f"[Billing] Nominatim returned no results for shop {shop_id}: '{query}'")
+
     except Exception as e:
         logger.warning(f"[Billing] Geocoding failed for shop {shop_id} (non-fatal): {e}")
 
@@ -75,17 +74,21 @@ async def create_checkout_session(
         raise HTTPException(status_code=401, detail="Invalid token")
     if not PRICE_ID:
         raise HTTPException(status_code=500, detail="Subscription price not configured")
+    if not settings.stripe_secret_key:
+        raise HTTPException(status_code=500, detail="Stripe is not configured")
 
     db = get_supabase()
+    sc = db.get_service_client()
+
     shop_resp = (
-        db.get_service_client()
-        .table("shops")
+        sc.table("shops")
         .select("id, name, stripe_customer_id, stripe_subscription_id, status")
         .eq("owner_id", user_id)
         .order("created_at", desc=True)
         .limit(1)
         .execute()
     )
+
     if not shop_resp.data:
         raise HTTPException(
             status_code=404,
@@ -107,7 +110,8 @@ async def create_checkout_session(
                 metadata={"shop_id": shop["id"], "owner_id": user_id},
             )
             stripe_customer_id = customer.id
-            db.get_service_client().table("shops").update(
+
+            sc.table("shops").update(
                 {"stripe_customer_id": stripe_customer_id}
             ).eq("id", shop["id"]).execute()
 
@@ -141,13 +145,14 @@ async def create_checkout_session(
 
         session = stripe.checkout.Session.create(**session_params)
         logger.info(f"[Billing] Checkout session created for shop {shop['id']}")
+
         return {"checkout_url": session.url, "session_id": session.id}
 
     except HTTPException:
         raise
     except stripe.StripeError as e:
-        logger.error(f"[Billing] Stripe error: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to create checkout: {str(e)}")
+        logger.error(f"[Billing] Stripe error creating checkout: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create checkout")
 
 
 @router.post("/webhook")
@@ -155,6 +160,10 @@ async def stripe_webhook(
     request: Request,
     stripe_signature: str = Header(None, alias="stripe-signature"),
 ):
+    if not WEBHOOK_SECRET:
+        logger.error("[Billing] STRIPE_WEBHOOK_SECRET not configured")
+        raise HTTPException(status_code=500, detail="Webhook not configured")
+
     payload = await request.body()
 
     try:
@@ -167,7 +176,9 @@ async def stripe_webhook(
         raise HTTPException(status_code=400, detail="Webhook error")
 
     db = get_supabase()
+    sc = db.get_service_client()
     event_type = event["type"]
+
     logger.info(f"[Billing] Webhook received: {event_type}")
 
     if event_type == "checkout.session.completed":
@@ -197,7 +208,7 @@ async def stripe_webhook(
             logger.warning(f"[Billing] Could not retrieve subscription {subscription_id}: {e}")
             price_id = PRICE_ID
 
-        db.get_service_client().table("shops").update({
+        sc.table("shops").update({
             "stripe_subscription_id": subscription_id,
             "subscription_status": "active",
             "subscription_price_id": price_id,
@@ -206,29 +217,32 @@ async def stripe_webhook(
 
         if owner_id:
             try:
+                sc.table("profiles").update({
+                    "role": "shop_owner",
+                    "shop_id": shop_id,
+                }).eq("id", owner_id).execute()
+
                 db.get_service_client().auth.admin.update_user_by_id(
                     owner_id,
                     {"user_metadata": {"role": "shop_owner"}},
                 )
+
                 logger.info(f"[Billing] User {owner_id} promoted to shop_owner")
             except Exception as e:
                 logger.warning(f"[Billing] Could not promote user role: {e}")
 
         logger.info(f"[Billing] Shop {shop_id} ACTIVATED ✓")
 
-        # ── Geocode the shop's address now that it's going live ───────────────
-        # Fetch the address fields we need (they were entered during onboarding)
         try:
             addr_resp = (
-                db.get_service_client()
-                .table("shops")
+                sc.table("shops")
                 .select("address, city, state, zip, lat, lng")
                 .eq("id", shop_id)
                 .single()
                 .execute()
             )
             addr = addr_resp.data or {}
-            # Only geocode if we don't already have coordinates
+
             if addr.get("lat") is None and addr.get("lng") is None:
                 await _geocode_shop(
                     shop_id=shop_id,
@@ -246,6 +260,7 @@ async def stripe_webhook(
     elif event_type == "customer.subscription.updated":
         sub = event["data"]["object"]
         shop_id = sub["metadata"].get("shop_id")
+
         if shop_id:
             stripe_status = sub["status"]
             shop_status_map = {
@@ -254,40 +269,49 @@ async def stripe_webhook(
                 "canceled": "cancelled",
                 "unpaid": "suspended",
             }
+
             update = {"subscription_status": stripe_status}
+
             if stripe_status in ("canceled", "unpaid"):
                 update["status"] = shop_status_map.get(stripe_status, "suspended")
-            db.get_service_client().table("shops").update(update).eq("id", shop_id).execute()
+
+            sc.table("shops").update(update).eq("id", shop_id).execute()
             logger.info(f"[Billing] Shop {shop_id} subscription → {stripe_status}")
 
     elif event_type == "customer.subscription.deleted":
         sub = event["data"]["object"]
         shop_id = sub["metadata"].get("shop_id")
+
         if shop_id:
-            db.get_service_client().table("shops").update({
+            sc.table("shops").update({
                 "subscription_status": "cancelled",
                 "stripe_subscription_id": None,
                 "status": "cancelled",
             }).eq("id", shop_id).execute()
+
             logger.info(f"[Billing] Shop {shop_id} subscription cancelled")
 
     elif event_type == "invoice.payment_failed":
         invoice = event["data"]["object"]
         customer_id = invoice.get("customer")
+
         if customer_id:
-            db.get_service_client().table("shops").update({
+            sc.table("shops").update({
                 "subscription_status": "past_due",
             }).eq("stripe_customer_id", customer_id).execute()
+
             logger.warning(f"[Billing] Payment failed for customer {customer_id}")
 
     elif event_type == "invoice.payment_succeeded":
         invoice = event["data"]["object"]
         customer_id = invoice.get("customer")
+
         if customer_id and invoice.get("billing_reason") == "subscription_cycle":
-            db.get_service_client().table("shops").update({
+            sc.table("shops").update({
                 "subscription_status": "active",
                 "status": "active",
             }).eq("stripe_customer_id", customer_id).execute()
+
             logger.info(f"[Billing] Renewal payment succeeded for {customer_id}")
 
     return {"received": True}
@@ -296,23 +320,27 @@ async def stripe_webhook(
 @router.get("/status")
 async def get_subscription_status(user: dict = Depends(require_auth())):
     user_id = user.get("sub")
+
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 
     db = get_supabase()
+    sc = db.get_service_client()
+
     shop_resp = (
-        db.get_service_client()
-        .table("shops")
+        sc.table("shops")
         .select("id, subscription_status, stripe_subscription_id, stripe_customer_id, status")
         .eq("owner_id", user_id)
         .order("created_at", desc=True)
         .limit(1)
         .execute()
     )
+
     if not shop_resp.data:
         raise HTTPException(status_code=404, detail="Shop not found")
 
     shop = shop_resp.data[0]
+
     return {
         "subscribed": shop.get("status") == "active",
         "status": shop.get("subscription_status") or "none",
@@ -324,19 +352,22 @@ async def get_subscription_status(user: dict = Depends(require_auth())):
 @router.post("/portal")
 async def create_billing_portal(user: dict = Depends(require_auth())):
     user_id = user.get("sub")
+
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 
     db = get_supabase()
+    sc = db.get_service_client()
+
     shop_resp = (
-        db.get_service_client()
-        .table("shops")
+        sc.table("shops")
         .select("id, stripe_customer_id")
         .eq("owner_id", user_id)
         .order("created_at", desc=True)
         .limit(1)
         .execute()
     )
+
     if not shop_resp.data or not shop_resp.data[0].get("stripe_customer_id"):
         raise HTTPException(status_code=404, detail="No billing account found")
 
@@ -346,5 +377,7 @@ async def create_billing_portal(user: dict = Depends(require_auth())):
             return_url=f"{settings.frontend_url}/shop-owner/settings",
         )
         return {"portal_url": portal.url}
+
     except stripe.StripeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[Billing] Portal error: {e}")
+        raise HTTPException(status_code=500, detail="Could not create billing portal")
