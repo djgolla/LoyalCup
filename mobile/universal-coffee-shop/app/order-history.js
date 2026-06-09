@@ -76,8 +76,8 @@ const OrderCard = ({ order, onPress, onReorder, isActive }) => {
           : <View style={styles.shopLogoPlaceholder}><Feather name="coffee" size={13} color="#00704A" /></View>
         }
         <Text style={styles.shopName} numberOfLines={1}>{shopName}</Text>
-        <View style={[styles.statusBadge, { backgroundColor: isCancelled ? '#fef2f2' : isActive ? '#fffbeb' : '#f9fafb' }]}>
-          <Text style={[styles.statusText, { color: isCancelled ? '#dc2626' : isActive ? '#d97706' : '#6b7280' }]}>
+        <View style={[styles.statusBadge, { backgroundColor: isCancelled ? '#fef2f2' : isActive ? '#E8F5E9' : '#f9fafb' }]}>
+          <Text style={[styles.statusText, { color: isCancelled ? '#dc2626' : isActive ? '#00704A' : '#6b7280' }]}>
             {isCancelled ? 'Cancelled' : isActive ? 'Placed' : 'Completed'}
           </Text>
         </View>
@@ -278,11 +278,11 @@ const styles = StyleSheet.create({
   sectionHeaderRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   sectionLabel:       { fontSize: 11, fontWeight: '800', color: '#9ca3af', letterSpacing: 1.2 },
   activePulse:        { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  activeDot:          { width: 7, height: 7, borderRadius: 4, backgroundColor: '#d97706' },
-  activeCount:        { fontSize: 11, fontWeight: '700', color: '#d97706' },
+  activeDot:          { width: 7, height: 7, borderRadius: 4, backgroundColor: '#00704A' },
+  activeCount:        { fontSize: 11, fontWeight: '700', color: '#00704A' },
   card:               { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1.5, borderColor: '#F0F0F0', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 1 },
-  cardActive:         { borderColor: '#d97706', borderWidth: 1.5 },
-  etaBanner:          { backgroundColor: '#d97706', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 12, alignItems: 'center' },
+  cardActive:         { borderColor: '#00704A', borderWidth: 1.5 },
+  etaBanner:          { backgroundColor: '#00704A', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 12, alignItems: 'center' },
   etaBannerText:      { color: '#FFF', fontWeight: '800', fontSize: 13 },
   shopRow:            { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   shopLogo:           { width: 26, height: 26, borderRadius: 13, marginRight: 8 },
