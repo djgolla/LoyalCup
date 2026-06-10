@@ -1,6 +1,7 @@
 import { createContext, useState, useEffect, useContext, useRef } from "react";
 import { useAuth } from "./AuthContext";
 import { getShop, getBillingStatus } from "../api/shops";
+import { getPosStatus } from "../services/posService";
 
 export const ShopContext = createContext();
 
@@ -78,18 +79,58 @@ export function ShopProvider({ children }) {
         const shopResponse = await getShop(shopId);
         publicShop = shopResponse?.shop || null;
       } catch (shopErr) {
-        // This can happen before the shop is active because public shop detail
-        // only exposes active shops. We still keep a minimal shop object from
-        // profile/billing so subscribe/onboarding does not break.
+        // Public shop detail may fail before active/public visibility.
+        // Keep onboarding alive using billing/profile shop id.
         console.warn("[ShopContext] public shop load failed:", shopErr.message);
       }
 
+      let posStatus = null;
+
+      try {
+        posStatus = await getPosStatus(shopId, "square");
+      } catch (posErr) {
+        console.warn("[ShopContext] POS status failed:", posErr.message);
+      }
+
+      const squareConnected =
+        posStatus?.connected === true ||
+        posStatus?.status === "connected" ||
+        posStatus?.status === "active" ||
+        posStatus?.provider === "square" ||
+        !!posStatus?.merchant_id ||
+        !!posStatus?.location_id;
+
       setShop({
         ...(publicShop || {}),
+
         id: shopId,
-        status: billing?.shop_status || publicShop?.status || null,
-        subscription_status: billing?.status || publicShop?.subscription_status || null,
-        stripe_subscription_id: billing?.subscription_id || null,
+
+        status:
+          billing?.shop_status ||
+          publicShop?.status ||
+          null,
+
+        subscription_status:
+          billing?.status ||
+          publicShop?.subscription_status ||
+          null,
+
+        stripe_subscription_id:
+          billing?.subscription_id ||
+          null,
+
+        // SECURITY NOTE:
+        // We do NOT expose the real Square merchant ID from the DB anymore.
+        // This is only a compatibility flag for old frontend layout checks
+        // that were doing `if (!shop.square_merchant_id) lock page`.
+        square_merchant_id: squareConnected ? "connected" : null,
+
+        // New safe flags for frontend checks.
+        pos_connected: squareConnected,
+        pos_provider: "square",
+        pos_status: posStatus?.status || null,
+        pos_needs_reauth: posStatus?.needs_reauth === true || posStatus?.status === "reauth_required",
+        square_location_id: posStatus?.location_id || null,
       });
     } catch (err) {
       console.error("ShopContext unexpected error:", err);
