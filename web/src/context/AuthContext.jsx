@@ -3,10 +3,40 @@ import supabase from "../lib/supabase";
 
 export const AuthContext = createContext();
 
+const API_BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL.replace(/\/$/, "")}/api/v1`
+  : "/api/v1";
+
+async function fetchProfile(accessToken) {
+  if (!accessToken) return null;
+
+  const res = await fetch(`${API_BASE}/auth/me`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!res.ok) return null;
+  return res.json();
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const syncSession = useCallback(async (newSession) => {
+    setSession(newSession);
+    setUser(newSession?.user ?? null);
+
+    if (newSession?.access_token) {
+      const p = await fetchProfile(newSession.access_token);
+      setProfile(p);
+    } else {
+      setProfile(null);
+    }
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -24,18 +54,16 @@ export function AuthProvider({ children }) {
         }
 
         if (isMounted) {
-          setSession(currentSession);
-          setUser(currentSession?.user ?? null);
+          await syncSession(currentSession);
           setLoading(false);
         }
 
         const {
           data: { subscription },
-        } = supabase.auth.onAuthStateChange((event, newSession) => {
+        } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
           if (!isMounted) return;
 
-          setSession(newSession);
-          setUser(newSession?.user ?? null);
+          await syncSession(newSession);
           setLoading(false);
         });
 
@@ -46,6 +74,7 @@ export function AuthProvider({ children }) {
         if (isMounted) {
           setSession(null);
           setUser(null);
+          setProfile(null);
           setLoading(false);
         }
       }
@@ -60,7 +89,7 @@ export function AuthProvider({ children }) {
         authSubscription.unsubscribe();
       }
     };
-  }, []);
+  }, [syncSession]);
 
   const login = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -69,6 +98,8 @@ export function AuthProvider({ children }) {
     });
 
     if (error) throw error;
+
+    await syncSession(data.session);
     return data;
   };
 
@@ -91,6 +122,7 @@ export function AuthProvider({ children }) {
 
     setSession(null);
     setUser(null);
+    setProfile(null);
   };
 
   const signInWithGoogle = async () => {
@@ -108,28 +140,48 @@ export function AuthProvider({ children }) {
 
       if (error) throw error;
 
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
-
+      await syncSession(data.session);
       return data.session;
     } catch (e) {
       console.warn("[Auth] Session refresh failed:", e.message);
       return null;
     }
+  }, [syncSession]);
+
+  const refreshProfile = useCallback(async () => {
+    try {
+      const {
+        data: { session: freshSession },
+      } = await supabase.auth.getSession();
+
+      if (!freshSession?.access_token) {
+        setProfile(null);
+        return null;
+      }
+
+      const p = await fetchProfile(freshSession.access_token);
+      setProfile(p);
+      return p;
+    } catch (e) {
+      console.warn("[Auth] Profile refresh failed:", e.message);
+      return null;
+    }
   }, []);
 
-  const hasRole = (roles) => {
-    if (!user) return false;
+  const getRole = () => {
+    return profile?.role || "customer";
+  };
 
-    const userRole = user.user_metadata?.role || "customer";
+  const hasRole = (roles) => {
+    const role = getRole();
 
     return Array.isArray(roles)
-      ? roles.includes(userRole)
-      : userRole === roles;
+      ? roles.includes(role)
+      : role === roles;
   };
 
   const getRedirectPath = (role) => {
-    const userRole = role || user?.user_metadata?.role || "customer";
+    const userRole = role || getRole();
 
     switch (userRole) {
       case "admin":
@@ -147,6 +199,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider
       value={{
         user,
+        profile,
         session,
         loading,
         login,
@@ -154,7 +207,9 @@ export function AuthProvider({ children }) {
         logout,
         signInWithGoogle,
         refreshSession,
+        refreshProfile,
         hasRole,
+        getRole,
         getRedirectPath,
         isAuthenticated: !!user,
       }}

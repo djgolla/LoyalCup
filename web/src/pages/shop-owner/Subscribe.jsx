@@ -23,10 +23,34 @@ export default function Subscribe() {
   const [subscribed, setSubscribed] = useState(false);
   const [session, setSession] = useState(null);
   const [sessionLoading, setSessionLoading] = useState(true);
+  const [billingStatus, setBillingStatus] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const pollIntervalRef = useRef(null);
   const pollTimeoutRef = useRef(null);
   const toastShownRef = useRef(false);
+
+  const loadBillingStatus = async () => {
+    try {
+      const { data: { session: freshSession } } = await supabase.auth.getSession();
+      if (!freshSession?.access_token) return null;
+
+      const res = await fetch(`${API}/api/v1/billing/status`, {
+        headers: {
+          Authorization: `Bearer ${freshSession.access_token}`,
+        },
+      });
+
+      if (!res.ok) return null;
+
+      const data = await res.json();
+      setBillingStatus(data);
+      setSubscribed(data?.subscribed === true || data?.status === 'active' || data?.shop_status === 'active');
+      return data;
+    } catch (e) {
+      console.warn('[Subscribe] billing status failed:', e.message);
+      return null;
+    }
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
@@ -52,6 +76,7 @@ export default function Subscribe() {
       toast.success('🎉 Payment received! Setting up your account...');
 
       pollIntervalRef.current = setInterval(async () => {
+        await loadBillingStatus();
         await loadShop();
       }, 800);
 
@@ -83,10 +108,20 @@ export default function Subscribe() {
   }, [isProcessing, shop?.status, navigate]);
 
   useEffect(() => {
-    if (shop?.subscription_status === 'active' || shop?.status === 'active') {
+    loadBillingStatus();
+  }, [session?.access_token]);
+
+  useEffect(() => {
+    if (
+      billingStatus?.subscribed === true ||
+      billingStatus?.status === 'active' ||
+      billingStatus?.shop_status === 'active' ||
+      shop?.subscription_status === 'active' ||
+      shop?.status === 'active'
+    ) {
       setSubscribed(true);
     }
-  }, [shop]);
+  }, [billingStatus, shop]);
 
   if (isProcessing) {
     return (

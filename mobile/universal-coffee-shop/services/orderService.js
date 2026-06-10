@@ -1,125 +1,71 @@
 /**
- * orderService — all order mutations go through the FastAPI backend.
- * Reads hit Supabase directly for speed.
+ * orderService — all order mutations AND reads go through FastAPI.
  *
- * There is no order-status tracking. Orders are sent straight to the shop's
- * Square POS and the customer is shown an ETA. No realtime status subscription.
- *
- * createOrder     → POST /api/v1/payments/create  (card charge + order creation, atomic)
- * createCashOrder → POST /api/v1/orders           (no charge, cash/in-person)
+ * Direct Supabase order reads can break when SQL is tightened and can expose
+ * more join data than the app needs. Backend enforces ownership and shop access.
  */
 import { supabase } from '../lib/supabase';
 import { apiClient } from './apiClient';
 
+async function getToken() {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token || null;
+}
+
 export const orderService = {
-  /**
-   * Create + pay for an order via backend using a Square card nonce.
-   * MUST go to /api/v1/payments/create — NOT the cash/manual orders endpoint.
-   * The backend creates the DB record before charging the card, and only
-   * confirms the order once Square has accepted it.
-   *
-   * items: [{ menu_item_id, quantity, unit_price, base_price, customizations }]
-   */
   createOrder: async (shopId, items, paymentNonce, options = {}) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
+    const token = await getToken();
     if (!token) throw new Error('Not authenticated — please log in again');
     if (!paymentNonce) throw new Error('Payment nonce required');
 
     const orderItems = items.map(item => ({
-      menu_item_id:   item.id || item.menu_item_id,
-      quantity:       Math.max(1, item.quantity || 1),
-      unit_price:     parseFloat(item.price || item.unit_price || item.base_price) || 0,
-      base_price:     parseFloat(item.price || item.base_price) || 0,
+      menu_item_id: item.id?.includes(':') ? item.id.split(':')[1] : (item.id || item.menu_item_id),
+      quantity: Math.max(1, item.quantity || 1),
+      // Backend ignores client price for security. Kept for legacy request shape.
+      unit_price: parseFloat(item.price || item.unit_price || item.base_price) || 0,
+      base_price: parseFloat(item.price || item.base_price) || 0,
       customizations: item.customizations || [],
     }));
 
-    const response = await apiClient.post('/api/v1/payments/create', {
-      shop_id:                  shopId,
-      items:                    orderItems,
-      payment_nonce:            paymentNonce,
+    return apiClient.post('/api/v1/payments/create', {
+      shop_id: shopId,
+      items: orderItems,
+      payment_nonce: paymentNonce,
       loyalty_points_to_redeem: options.loyaltyPointsToRedeem || 0,
-      customer_note:            options.customerNote || null,
-    }, token);
-
-    return response;
-  },
-
-  /**
-   * Create a cash / manual order — no card charge.
-   * Used for in-person / pay-at-counter flows.
-   * Routes to POST /api/v1/orders (the cash endpoint).
-   *
-   * items: [{ menu_item_id, quantity, base_price, customizations }]
-   */
-  createCashOrder: async (shopId, items, options = {}) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
-    if (!token) throw new Error('Not authenticated — please log in again');
-
-    const orderItems = items.map(item => ({
-      menu_item_id:   item.id || item.menu_item_id,
-      quantity:       Math.max(1, item.quantity || 1),
-      base_price:     parseFloat(item.price || item.base_price) || 0,
-      customizations: item.customizations || [],
-    }));
-
-    const response = await apiClient.post('/api/v1/orders', {
-      shop_id:       shopId,
-      items:         orderItems,
       customer_note: options.customerNote || null,
     }, token);
-
-    return response;
   },
 
-  /** Get a single order with shop + items (direct Supabase — fast) */
+  createCashOrder: async () => {
+    throw new Error('Cash/manual orders are disabled. Use card checkout.');
+  },
+
   getOrder: async (orderId) => {
-    const { data, error } = await supabase
-      .from('orders')
-      .select(`
-        *,
-        shops (name, logo_url, address, avg_prep_time_minutes),
-        order_items (
-          *,
-          menu_items (name, description, image_url)
-        )
-      `)
-      .eq('id', orderId)
-      .single();
+    const token = await getToken();
+    if (!token) throw new Error('Not authenticated');
 
-    if (error) throw error;
-    return data;
+    const res = await apiClient.get(`/api/v1/orders/${orderId}`, token);
+    return res.order || null;
   },
 
-  /** Get the current user's order history */
   getOrderHistory: async (params = {}) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    const token = await getToken();
+    if (!token) throw new Error('Not authenticated');
 
-    let query = supabase
-      .from('orders')
-      .select(`
-        *,
-        shops (name, logo_url, avg_prep_time_minutes),
-        order_items (quantity, unit_price, menu_items(name, image_url))
-      `)
-      .eq('customer_id', user.id)
-      .order('created_at', { ascending: false });
+    const query = new URLSearchParams();
+    if (params.limit) query.set('limit', String(params.limit));
+    if (params.status) query.set('status', params.status);
 
-    if (params.status) query = query.eq('status', params.status);
-    if (params.limit)  query = query.limit(params.limit);
-    else               query = query.limit(20);
+    const path = query.toString()
+      ? `/api/v1/orders/history?${query.toString()}`
+      : '/api/v1/orders/history';
 
-    const { data, error } = await query;
-    if (error) throw error;
-    return data || [];
+    const res = await apiClient.get(path, token);
+    return res.orders || [];
   },
 
-  /** Cancel a newly placed order (only allowed right after placing). */
   cancelOrder: async (orderId) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
+    const token = await getToken();
     if (!token) throw new Error('Not authenticated');
 
     const response = await apiClient.post(`/api/v1/orders/${orderId}/cancel`, {}, token);

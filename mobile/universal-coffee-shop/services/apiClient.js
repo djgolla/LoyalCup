@@ -11,7 +11,7 @@ const BASE_URL =
 
 async function request(method, path, body, token) {
   const headers = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (token) headers.Authorization = `Bearer ${token}`;
 
   const opts = { method, headers };
   if (body && method !== 'GET') opts.body = JSON.stringify(body);
@@ -23,16 +23,17 @@ async function request(method, path, body, token) {
     const msg = data?.detail || data?.message || `Request failed (${res.status})`;
     const err = new Error(msg);
     err.status = res.status;
-    err.data   = data;
+    err.data = data;
     throw err;
   }
+
   return data;
 }
 
 export const apiClient = {
-  get:    (path, token)        => request('GET',    path, null, token),
-  post:   (path, body, token)  => request('POST',   path, body, token),
-  put:    (path, body, token)  => request('PUT',    path, body, token),
-  patch:  (path, body, token)  => request('PATCH',  path, body, token),
-  delete: (path, token)        => request('DELETE', path, null, token),
+  get: (path, token) => request('GET', path, null, token),
+  post: (path, body, token) => request('POST', path, body, token),
+  put: (path, body, token) => request('PUT', path, body, token),
+  patch: (path, body, token) => request('PATCH', path, body, token),
+  delete: (path, token) => request('DELETE', path, null, token),
 };
