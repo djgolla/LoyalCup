@@ -159,7 +159,8 @@ const ShopHero = ({ bannerUrl, logoUrl, shopName }) => {
 
 export default function ShopDetailScreen() {
   const router                    = useRouter();
-  const { id }                    = useLocalSearchParams();
+  const params                    = useLocalSearchParams();
+  const id                        = Array.isArray(params.id) ? params.id[0] : params.id;
   const { addItem, getItemCount } = useCart();
   const insets                    = useSafeAreaInsets();
 
@@ -177,9 +178,17 @@ export default function ShopDetailScreen() {
   const [selectedMods, setSelectedMods] = useState({});
   const [quantity,     setQuantity]     = useState(1);
 
-  useEffect(() => { loadShopData(); }, [id]);
+  useEffect(() => {
+    if (!id) {
+      setLoading(false);
+      return;
+    }
+    loadShopData();
+  }, [id]);
 
   const loadShopData = async () => {
+    if (!id) return;
+
     try {
       console.log('[ShopDetail] Loading shop data for ID:', id);
       const data = await shopService.getShopWithMenu(id);

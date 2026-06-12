@@ -17,6 +17,7 @@ function RootLayoutNav() {
   const router = useRouter();
   const notificationListener = useRef();
   const responseListener = useRef();
+  const hadAuthenticatedUser = useRef(false);
 
   // Auth-based routing
   useEffect(() => {
@@ -32,6 +33,7 @@ function RootLayoutNav() {
   // Push notifications
   useEffect(() => {
     if (user) {
+      hadAuthenticatedUser.current = true;
       // Register & save token when user logs in
       registerForPushNotifications();
 
@@ -47,9 +49,10 @@ function RootLayoutNav() {
           router.push(`/order/${orderId}`);
         }
       });
-    } else {
+    } else if (hadAuthenticatedUser.current) {
       // User logged out — clear token
       clearPushToken();
+      hadAuthenticatedUser.current = false;
     }
 
     return () => {

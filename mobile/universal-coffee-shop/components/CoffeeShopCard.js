@@ -9,10 +9,17 @@ export default function CoffeeShopCard({ shop }) {
   const router = useRouter();
   const [isFavorited, setIsFavorited] = useState(false);
 
+  if (!shop) return null;
+
+  const openShop = () => {
+    if (!shop.id) return;
+    router.push(`/shop/${shop.id}`);
+  };
+
   return (
     <TouchableOpacity 
       style={styles.card}
-      onPress={() => router.push(`/shop/${shop.id}`)}
+      onPress={openShop}
       activeOpacity={0.7}>
       
       <View style={[styles.logoContainer, { backgroundColor: shop.color || '#F5F5F5' }]}>

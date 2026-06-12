@@ -11,6 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import WebView from 'react-native-webview';
 import { useCart } from '../context/CartContext';
 import { shopService } from '../services/shopService';
+import CoffeeShopCard from '../components/CoffeeShopCard';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -159,11 +160,13 @@ const ShopHero = ({ bannerUrl, logoUrl, shopName }) => {
 
 export default function ShopDetailScreen() {
   const router                    = useRouter();
-  const { id }                    = useLocalSearchParams();
+  const params                    = useLocalSearchParams();
+  const id                        = Array.isArray(params.id) ? params.id[0] : params.id;
   const { addItem, getItemCount } = useCart();
   const insets                    = useSafeAreaInsets();
 
   const [shop,             setShop]             = useState(null);
+  const [shops,            setShops]            = useState([]);
   const [categories,       setCategories]       = useState([]);
   const [menuItems,        setMenuItems]        = useState([]);
   const [modifierGroups,   setModifierGroups]   = useState([]);
@@ -177,9 +180,30 @@ export default function ShopDetailScreen() {
   const [selectedMods, setSelectedMods] = useState({});
   const [quantity,     setQuantity]     = useState(1);
 
-  useEffect(() => { loadShopData(); }, [id]);
+  useEffect(() => {
+    if (!id) {
+      loadHomeData();
+      return;
+    }
+    loadShopData();
+  }, [id]);
+
+  const loadHomeData = async () => {
+    try {
+      setLoading(true);
+      const data = await shopService.getShops();
+      setShops(data || []);
+    } catch (e) {
+      console.error('[Home] loadHomeData error:', e);
+      Alert.alert('Error', 'Failed to load shops. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadShopData = async () => {
+    if (!id) return;
+
     try {
       console.log('[ShopDetail] Loading shop data for ID:', id);
       const data = await shopService.getShopWithMenu(id);
@@ -199,6 +223,11 @@ export default function ShopDetailScreen() {
   };
 
   const handleRefresh = async () => { setRefreshing(true); await loadShopData(); setRefreshing(false); };
+  const handleHomeRefresh = async () => {
+    setRefreshing(true);
+    await loadHomeData();
+    setRefreshing(false);
+  };
 
   const openModifierModal = (item) => {
     setSelectedItem(item);
@@ -273,6 +302,35 @@ export default function ShopDetailScreen() {
   if (loading) return (
     <SafeAreaView style={styles.container} edges={['top','bottom']}>
       <View style={styles.centered}><ActivityIndicator size="large" color="#00704A" /></View>
+    </SafeAreaView>
+  );
+
+  if (!id) return (
+    <SafeAreaView style={styles.container} edges={['top','bottom']}>
+      <ScrollView
+        style={styles.homeScroll}
+        contentContainerStyle={styles.homeContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleHomeRefresh} />}
+      >
+        <View style={styles.homeHeader}>
+          <Text style={styles.homeTitle}>LoyalCup</Text>
+          <TouchableOpacity style={styles.homeCartButton} onPress={() => router.push('/cart')}>
+            <Feather name="shopping-bag" size={21} color="#00704A" />
+            {cartCount > 0 && <View style={styles.cartBadge}><Text style={styles.cartBadgeText}>{cartCount}</Text></View>}
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.homeSubtitle}>Find your next coffee stop</Text>
+
+        {shops.length === 0 ? (
+          <View style={styles.emptyMenu}>
+            <Feather name="coffee" size={48} color="#DDD" />
+            <Text style={styles.emptyMenuText}>No shops available</Text>
+          </View>
+        ) : (
+          shops.map(shopItem => <CoffeeShopCard key={shopItem.id} shop={shopItem} />)
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 
@@ -485,6 +543,13 @@ const styles = StyleSheet.create({
   errorText:  { fontSize: 18, fontWeight: '600', color: '#000', marginTop: 12 },
   btn:        { marginTop: 16, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#00704A', borderRadius: 10 },
   btnText:    { color: '#FFF', fontWeight: '700' },
+
+  homeScroll:     { flex: 1 },
+  homeContent:    { padding: 16, paddingBottom: 28 },
+  homeHeader:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  homeTitle:      { fontSize: 30, fontWeight: '900', color: '#00704A' },
+  homeSubtitle:   { fontSize: 15, color: '#666', marginBottom: 18 },
+  homeCartButton: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E8F5E9', position: 'relative' },
 
   header:        { position: 'absolute', left: 0, right: 0, zIndex: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16 },
   headerBtn:     { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center', position: 'relative', backgroundColor: 'rgba(0,0,0,0.42)' },
