@@ -6,8 +6,9 @@ import {
 } from "lucide-react";
 import { useShop } from "../../context/ShopContext";
 import { toast } from "sonner";
+import { API_ORIGIN } from "../../api/client";
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API = API_ORIGIN || "http://localhost:8000";
 
 async function authFetch(url, opts = {}) {
   const { default: supabase } = await import("../../lib/supabase");

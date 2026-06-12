@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Store, MapPin, Phone, Mail, Globe, FileText, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import supabase from '../../lib/supabase';
+import { apiUrl } from '../../api/client';
 
 export default function ShopApplication() {
   const navigate = useNavigate();
@@ -71,7 +72,7 @@ export default function ShopApplication() {
         if (!session?.access_token) throw new Error('Failed to create account session');
       }
 
-      const response = await fetch('/api/v1/shops/apply', {
+      const response = await fetch(apiUrl('/api/v1/shops/apply'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

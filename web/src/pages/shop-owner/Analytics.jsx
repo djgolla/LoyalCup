@@ -7,6 +7,7 @@ import {
 import { useShop } from '../../context/ShopContext';
 import supabase from '../../lib/supabase';
 import { getShopOrders } from '../../api/orders';
+import { apiUrl } from '../../api/client';
 import { toast } from 'sonner';
 
 const StatCard = ({ icon: Icon, title, value, sub, color, delay }) => (
@@ -165,7 +166,7 @@ export default function Analytics() {
       setRepeatRate(repeatPct);
 
       // ── Avg rating ────────────────────────────────────────────────────────
-      const reviewResp = await fetch(`/api/v1/shops/${shopId}/reviews?limit=100`);
+      const reviewResp = await fetch(apiUrl(`/api/v1/shops/${shopId}/reviews?limit=100`));
       const reviewData = await reviewResp.json().catch(() => ({}));
       const reviews = (reviewData.reviews || [])
         .filter(review => new Date(review.created_at) >= startDate);

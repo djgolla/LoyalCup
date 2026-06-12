@@ -2,8 +2,9 @@
  * Auth API functions for communicating with backend auth endpoints.
  */
 import supabase from './supabase';
+import { API_ORIGIN } from '../api/client';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = API_ORIGIN || 'http://localhost:8000';
 
 /**
  * Register a new user

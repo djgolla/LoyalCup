@@ -5,26 +5,16 @@
  *                    token = session.access_token
  */
 
-const API_BASE = '/api/v1';
+import { API_V1, parseJsonResponse } from './client';
+
+const API_BASE = API_V1;
 
 const authHeaders = (token) => ({
   'Content-Type': 'application/json',
   ...(token ? { Authorization: `Bearer ${token}` } : {}),
 });
 
-async function parseResponse(response) {
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    const message = data?.detail || data?.message || `Request failed (${response.status})`;
-    const error = new Error(message);
-    error.status = response.status;
-    error.data = data;
-    throw error;
-  }
-
-  return data;
-}
+const parseResponse = parseJsonResponse;
 
 // ============================================================================
 // PUBLIC ENDPOINTS

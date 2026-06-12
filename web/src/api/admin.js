@@ -1,24 +1,26 @@
 // Admin API client
 // All endpoints require admin authentication
 
-const API_BASE = "/api/v1/admin";
+import { API_V1, parseJsonResponse } from "./client";
+
+const API_BASE = `${API_V1}/admin`;
 
 // Dashboard
 export const getDashboardStats = async () => {
   const response = await fetch(`${API_BASE}/dashboard`);
-  return response.json();
+  return parseJsonResponse(response);
 };
 
 // Shop management
 export const listShops = async (filters = {}) => {
   const params = new URLSearchParams(filters);
   const response = await fetch(`${API_BASE}/shops?${params}`);
-  return response.json();
+  return parseJsonResponse(response);
 };
 
 export const getShopDetails = async (shopId) => {
   const response = await fetch(`${API_BASE}/shops/${shopId}`);
-  return response.json();
+  return parseJsonResponse(response);
 };
 
 export const updateShopStatus = async (shopId, status) => {
@@ -27,33 +29,33 @@ export const updateShopStatus = async (shopId, status) => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
   });
-  return response.json();
+  return parseJsonResponse(response);
 };
 
 export const toggleShopFeatured = async (shopId) => {
   const response = await fetch(`${API_BASE}/shops/${shopId}/featured`, {
     method: "PUT",
   });
-  return response.json();
+  return parseJsonResponse(response);
 };
 
 export const deleteShop = async (shopId) => {
   const response = await fetch(`${API_BASE}/shops/${shopId}`, {
     method: "DELETE",
   });
-  return response.json();
+  return parseJsonResponse(response);
 };
 
 // User management
 export const listUsers = async (filters = {}) => {
   const params = new URLSearchParams(filters);
   const response = await fetch(`${API_BASE}/users?${params}`);
-  return response.json();
+  return parseJsonResponse(response);
 };
 
 export const getUserDetails = async (userId) => {
   const response = await fetch(`${API_BASE}/users/${userId}`);
-  return response.json();
+  return parseJsonResponse(response);
 };
 
 export const updateUserRole = async (userId, role) => {
@@ -62,7 +64,7 @@ export const updateUserRole = async (userId, role) => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ role }),
   });
-  return response.json();
+  return parseJsonResponse(response);
 };
 
 export const updateUserStatus = async (userId, status) => {
@@ -71,41 +73,41 @@ export const updateUserStatus = async (userId, status) => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
   });
-  return response.json();
+  return parseJsonResponse(response);
 };
 
 export const deleteUser = async (userId) => {
   const response = await fetch(`${API_BASE}/users/${userId}`, {
     method: "DELETE",
   });
-  return response.json();
+  return parseJsonResponse(response);
 };
 
 // Analytics
 export const getAnalyticsOverview = async (days = 30) => {
   const response = await fetch(`${API_BASE}/analytics/overview?days=${days}`);
-  return response.json();
+  return parseJsonResponse(response);
 };
 
 export const getOrderAnalytics = async (period = "month") => {
   const response = await fetch(`${API_BASE}/analytics/orders?period=${period}`);
-  return response.json();
+  return parseJsonResponse(response);
 };
 
 export const getRevenueAnalytics = async (period = "month") => {
   const response = await fetch(`${API_BASE}/analytics/revenue?period=${period}`);
-  return response.json();
+  return parseJsonResponse(response);
 };
 
 export const getGrowthAnalytics = async () => {
   const response = await fetch(`${API_BASE}/analytics/growth`);
-  return response.json();
+  return parseJsonResponse(response);
 };
 
 // Platform settings
 export const getPlatformSettings = async () => {
   const response = await fetch(`${API_BASE}/settings`);
-  return response.json();
+  return parseJsonResponse(response);
 };
 
 export const updatePlatformSettings = async (settings) => {
@@ -114,12 +116,12 @@ export const updatePlatformSettings = async (settings) => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ settings }),
   });
-  return response.json();
+  return parseJsonResponse(response);
 };
 
 // Audit log
 export const getAuditLog = async (filters = {}) => {
   const params = new URLSearchParams(filters);
   const response = await fetch(`${API_BASE}/audit-log?${params}`);
-  return response.json();
+  return parseJsonResponse(response);
 };

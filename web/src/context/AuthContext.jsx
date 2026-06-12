@@ -1,11 +1,10 @@
 import { createContext, useState, useEffect, useContext, useCallback } from "react";
 import supabase from "../lib/supabase";
+import { API_V1 } from "../api/client";
 
 export const AuthContext = createContext();
 
-const API_BASE = import.meta.env.VITE_API_URL
-  ? `${import.meta.env.VITE_API_URL.replace(/\/$/, "")}/api/v1`
-  : "/api/v1";
+const API_BASE = API_V1;
 
 async function fetchProfile(accessToken) {
   if (!accessToken) return null;

@@ -4,8 +4,9 @@
  */
 
 import supabase from '../lib/supabase';
+import { API_V1, parseJsonResponse } from './client';
 
-const API_BASE = '/api/v1/shops';
+const API_BASE = `${API_V1}/shops`;
 
 async function getToken() {
   const { data: { session } } = await supabase.auth.getSession();
@@ -21,14 +22,7 @@ const authHeaders = async (json = true) => {
 };
 
 async function parseResponse(response) {
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(data?.detail || data?.message || `Request failed (${response.status})`);
-    error.status = response.status;
-    error.data = data;
-    throw error;
-  }
-  return data;
+  return parseJsonResponse(response);
 }
 
 // ============================================================================

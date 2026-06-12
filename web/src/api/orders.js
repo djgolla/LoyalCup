@@ -6,7 +6,9 @@
  * shop's Square POS and customers get an ETA. No status updates / no polling.
  */
 
-const API_BASE = '/api/v1';
+import { API_V1, parseJsonResponse } from './client';
+
+const API_BASE = API_V1;
 
 const authHeaders = (token) => ({
   'Content-Type': 'application/json',
@@ -24,21 +26,21 @@ export async function getCustomerOrders(token, status) {
   const response = await fetch(`${API_BASE}/orders?${params}`, {
     headers: authHeaders(token),
   });
-  return response.json();
+  return parseJsonResponse(response);
 }
 
 export async function getOrder(orderId, token) {
   const response = await fetch(`${API_BASE}/orders/${orderId}`, {
     headers: authHeaders(token),
   });
-  return response.json();
+  return parseJsonResponse(response);
 }
 
 export async function getOrderHistory(token) {
   const response = await fetch(`${API_BASE}/orders/history`, {
     headers: authHeaders(token),
   });
-  return response.json();
+  return parseJsonResponse(response);
 }
 
 export async function cancelOrder(orderId, token) {
@@ -46,7 +48,7 @@ export async function cancelOrder(orderId, token) {
     method:  'POST',
     headers: authHeaders(token),
   });
-  return response.json();
+  return parseJsonResponse(response);
 }
 
 // ============================================================================
@@ -59,5 +61,5 @@ export async function getShopOrders(shopId, token, filters = {}) {
   const response = await fetch(`${API_BASE}/shops/${shopId}/orders?${params}`, {
     headers: authHeaders(token),
   });
-  return response.json();
+  return parseJsonResponse(response);
 }

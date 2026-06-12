@@ -2,8 +2,9 @@ import { Mail, Phone, Send } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '../../context/AuthContext';
+import { API_ORIGIN } from '../../api/client';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://api.loyalcupapp.com';
+const API_URL = API_ORIGIN || 'https://api.loyalcupapp.com';
 
 export default function Contact() {
   const { user, getRole } = useAuth();

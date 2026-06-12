@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Star, MessageSquare, TrendingUp, Loader2 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
+import { apiUrl, parseJsonResponse } from '../../api/client';
 
 const StarRow = ({ rating, max = 5, size = 18 }) => (
   <div className="flex gap-0.5">
@@ -41,9 +42,8 @@ export default function Reviews() {
     try {
       setError(null);
       
-      const response = await fetch(`/api/v1/shops/${shopId}/reviews?limit=100`);
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data?.detail || 'Failed to load reviews');
+      const response = await fetch(apiUrl(`/api/v1/shops/${shopId}/reviews?limit=100`));
+      const data = await parseJsonResponse(response);
 
       const mergedReviews = (data.reviews || []).map(review => ({
         ...review,

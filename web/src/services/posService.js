@@ -1,9 +1,7 @@
 import supabase from "../lib/supabase";
+import { API_ORIGIN, parseJsonResponse } from "../api/client";
 
-const API_BASE =
-  import.meta.env.VITE_API_BASE_URL ||
-  import.meta.env.VITE_API_URL ||
-  "http://localhost:8000";
+const API_BASE = API_ORIGIN || "http://localhost:8000";
 
 async function getAuthHeaders() {
   const { data: { session } } = await supabase.auth.getSession();
@@ -13,15 +11,16 @@ async function getAuthHeaders() {
 }
 
 async function handleResponse(res, defaultMsg) {
-  if (res.ok) return res.json();
-  let err = {};
-  try { err = await res.json(); } catch { /* not json */ }
-  const message = err.detail || err.message || defaultMsg;
-  const error   = new Error(message);
-  error.status      = res.status;
-  error.needsReauth =
-    res.status === 401 && /reconnect|expired|reauth/i.test(message || "");
-  throw error;
+  try {
+    return await parseJsonResponse(res);
+  } catch (error) {
+    if (!error.message || error.message === "Backend returned a non-JSON response") {
+      error.message = defaultMsg;
+    }
+    error.needsReauth =
+      error.status === 401 && /reconnect|expired|reauth/i.test(error.message || "");
+    throw error;
+  }
 }
 
 /**

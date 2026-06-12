@@ -9,8 +9,9 @@ import { useShop } from '../../context/ShopContext';
 import { useAuth } from '../../context/AuthContext';
 import supabase from '../../lib/supabase';
 import PageLoader from '../../components/ui/PageLoader';
+import { API_ORIGIN } from '../../api/client';
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API = API_ORIGIN || 'http://localhost:8000';
 
 export default function Subscribe() {
   const navigate = useNavigate();

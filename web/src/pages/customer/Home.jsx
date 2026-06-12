@@ -5,6 +5,7 @@ import {
   Coffee, Gift, Smartphone, ArrowRight,
   Sparkles, Download, Star, MapPin, Zap
 } from 'lucide-react';
+import { apiUrl, parseJsonResponse } from '../../api/client';
 
 const FloatingCoffee = ({ delay = 0, style = {} }) => (
   <motion.div
@@ -108,9 +109,9 @@ export default function Home() {
   useEffect(() => {
     (async () => {
       try {
-        const response = await fetch('/api/v1/shops/stats/public');
-        const data = await response.json();
-        if (response.ok) setStats(data);
+        const response = await fetch(apiUrl('/api/v1/shops/stats/public'));
+        const data = await parseJsonResponse(response);
+        setStats(data);
       } catch {
         // If RPCs don't exist yet, silently show 0s — no crash
       } finally {

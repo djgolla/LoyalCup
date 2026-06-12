@@ -12,14 +12,13 @@ import {
 import { useShop } from "../../context/ShopContext";
 import supabase from "../../lib/supabase";
 import Loading from "../../components/Loading";
-
-const API_BASE = import.meta.env.VITE_API_URL || "";
+import { apiUrl, parseJsonResponse } from "../../api/client";
 
 // ── authed fetch helper ─────────────────────────────────────────────────────
 async function authedFetch(path, opts = {}) {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(apiUrl(path), {
     ...opts,
     headers: {
       "Content-Type": "application/json",
@@ -27,9 +26,7 @@ async function authedFetch(path, opts = {}) {
       ...(opts.headers || {}),
     },
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.detail || data?.message || `Request failed (${res.status})`);
-  return data;
+  return parseJsonResponse(res);
 }
 
 export default function LoyaltySettings() {
