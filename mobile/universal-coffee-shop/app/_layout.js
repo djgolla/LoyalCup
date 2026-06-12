@@ -15,52 +15,55 @@ function RootLayoutNav() {
   const { user, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
-  const notificationListener = useRef();
-  const responseListener = useRef();
-  const hadAuthenticatedUser = useRef(false);
+  const notificationListener = useRef(null);
+  const responseListener = useRef(null);
+  const hadUserRef = useRef(false);
 
   // Auth-based routing
   useEffect(() => {
     if (loading) return;
+
     const currentScreen = segments[0];
+
     if (!user && currentScreen !== 'launch' && currentScreen !== 'login' && currentScreen !== 'signup') {
       router.replace('/launch');
     } else if (user && (currentScreen === 'launch' || currentScreen === 'login' || currentScreen === 'signup' || !currentScreen)) {
       router.replace('/home');
     }
-  }, [user, loading, segments]);
+  }, [user, loading, segments, router]);
 
   // Push notifications
   useEffect(() => {
+    if (loading) return;
+
     if (user) {
-      hadAuthenticatedUser.current = true;
-      // Register & save token when user logs in
+      hadUserRef.current = true;
+
       registerForPushNotifications();
 
-      // Listen for foreground notifications
-      notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+      notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {
         console.log('[Push] Received:', notification);
       });
 
-      // Handle tap on notification — navigate to order screen
-      responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+      responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
         const orderId = response.notification.request.content.data?.order_id;
         if (orderId) {
           router.push(`/order/${orderId}`);
         }
       });
-    } else if (hadAuthenticatedUser.current) {
-      // User logged out — clear token
+    } else if (hadUserRef.current) {
+      // Only clear after a real logged-in user logs out.
       clearPushToken();
-      hadAuthenticatedUser.current = false;
+      hadUserRef.current = false;
     }
 
     return () => {
-      // Use .remove() — the modern API for expo-notifications subscriptions
-      notificationListener.current?.remove();
-      responseListener.current?.remove();
+      notificationListener.current?.remove?.();
+      responseListener.current?.remove?.();
+      notificationListener.current = null;
+      responseListener.current = null;
     };
-  }, [user]);
+  }, [user, loading, router]);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>

@@ -159,8 +159,9 @@ const ShopHero = ({ bannerUrl, logoUrl, shopName }) => {
 
 export default function ShopDetailScreen() {
   const router                    = useRouter();
-  const params                    = useLocalSearchParams();
-  const id                        = Array.isArray(params.id) ? params.id[0] : params.id;
+  const { id }                    = useLocalSearchParams();
+  const shopId                    = Array.isArray(id) ? id[0] : id;
+  const hasValidShopId            = !!shopId && shopId !== 'undefined' && shopId !== 'null';
   const { addItem, getItemCount } = useCart();
   const insets                    = useSafeAreaInsets();
 
@@ -179,26 +180,37 @@ export default function ShopDetailScreen() {
   const [quantity,     setQuantity]     = useState(1);
 
   useEffect(() => {
-    if (!id) {
+    if (!hasValidShopId) {
+      console.warn('[ShopDetail] Missing/invalid shop id, skipping fetch:', id);
+      setShop(null);
+      setCategories([]);
+      setMenuItems([]);
+      setModifierGroups([]);
+      setOffers([]);
       setLoading(false);
       return;
     }
+
     loadShopData();
-  }, [id]);
+  }, [shopId]);
 
   const loadShopData = async () => {
-    if (!id) return;
+    if (!hasValidShopId) {
+      setLoading(false);
+      return;
+    }
 
     try {
-      console.log('[ShopDetail] Loading shop data for ID:', id);
-      const data = await shopService.getShopWithMenu(id);
+      setLoading(true);
+      console.log('[ShopDetail] Loading shop data for ID:', shopId);
+      const data = await shopService.getShopWithMenu(shopId);
       console.log('[ShopDetail] Shop loaded:', data.shop?.name);
-      setShop(data.shop);
+
+      setShop(data.shop || null);
       setCategories(data.categories || []);
       setMenuItems(data.items || []);
       setModifierGroups(data.modifierGroups || []);
       setOffers(data.offers || []);
-
     } catch (e) {
       console.error('[ShopDetail] loadShopData FATAL error:', e);
       Alert.alert('Error', 'Failed to load shop. Please try again.');
@@ -208,6 +220,7 @@ export default function ShopDetailScreen() {
   };
 
   const handleRefresh = async () => {
+    if (!hasValidShopId) return;
     setRefreshing(true);
     await loadShopData();
     setRefreshing(false);
@@ -240,11 +253,11 @@ export default function ShopDetailScreen() {
     const extraPrice     = customizations.reduce((s, c) => s + (parseFloat(c.price_adjustment) || 0), 0);
     const unitPrice      = parseFloat(selectedItem.base_price) + extraPrice;
     addItem({
-      id:             `${id}:${selectedItem.id}`,
+      id:             `${shopId}:${selectedItem.id}`,      
       name:           selectedItem.name,
       price:          unitPrice,
       quantity,
-      shopId:         id,
+      shopId:         shopId,
       shopName:       shop?.name,
       image_url:      selectedItem.image_url,
       customizations,
@@ -472,7 +485,7 @@ export default function ShopDetailScreen() {
                             </Text>
                           </View>
                         </View>
-                        {(group.modifier_options || []).map(opt => {
+                        {(group.modifier_options || group.options || []).map(opt => {
                           const sel = selected.some(o => o.id === opt.id);
                           return (
                             <TouchableOpacity key={opt.id} style={[styles.modOption, sel && styles.modOptionSel]} onPress={() => toggleMod(group.id, opt, isRadio)}>

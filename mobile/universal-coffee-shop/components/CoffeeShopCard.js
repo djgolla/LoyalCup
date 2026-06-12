@@ -9,23 +9,41 @@ export default function CoffeeShopCard({ shop }) {
   const router = useRouter();
   const [isFavorited, setIsFavorited] = useState(false);
 
-  if (!shop) return null;
+  const shopId = shop?.id || shop?.shop_id;
 
-  const openShop = () => {
-    if (!shop.id) return;
-    router.push(`/shop/${shop.id}`);
+  const handlePress = () => {
+    if (!shopId || shopId === 'undefined' || shopId === 'null') {
+      console.warn('[CoffeeShopCard] Missing shop id, not navigating:', shop);
+      return;
+    }
+
+    console.log('[CoffeeShopCard] opening shop:', {
+      id: shopId,
+      name: shop?.name,
+      status: shop?.status,
+    });
+
+    router.push(`/shop/${shopId}`);
   };
 
+  const handleFavoritePress = (event) => {
+    event?.stopPropagation?.();
+    setIsFavorited((prev) => !prev);
+  };
+
+  const rating = shop?.avg_rating || shop?.rating || 4.5;
+  const reviewCount = shop?.review_count || shop?.reviews_count || 0;
+
   return (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.card}
-      onPress={openShop}
-      activeOpacity={0.7}>
-      
-      <View style={[styles.logoContainer, { backgroundColor: shop.color || '#F5F5F5' }]}>
-        {shop.logo_url ? (
-          <Image 
-            source={{ uri: shop.logo_url }} 
+      onPress={handlePress}
+      activeOpacity={0.7}
+    >
+      <View style={[styles.logoContainer, { backgroundColor: shop?.color || '#F5F5F5' }]}>
+        {shop?.logo_url ? (
+          <Image
+            source={{ uri: shop.logo_url }}
             style={styles.logo}
             resizeMode="cover"
           />
@@ -35,30 +53,39 @@ export default function CoffeeShopCard({ shop }) {
           </View>
         )}
       </View>
-      
+
       <View style={styles.cardContent}>
-        <Text style={styles.shopName} numberOfLines={1}>{shop.name}</Text>
+        <Text style={styles.shopName} numberOfLines={1}>
+          {shop?.name || 'Coffee Shop'}
+        </Text>
+
         <View style={styles.infoRow}>
           <Feather name="map-pin" size={14} color="#666" />
           <Text style={styles.locationText} numberOfLines={1}>
-            {shop.city || shop.address || 'Nearby'}
+            {shop?.city || shop?.address || 'Nearby'}
           </Text>
         </View>
+
         <View style={styles.ratingRow}>
           <Feather name="star" size={14} color="#FFB800" />
-          <Text style={styles.ratingText}>4.5</Text>
-          <Text style={styles.reviewCount}>(120)</Text>
+          <Text style={styles.ratingText}>
+            {Number(rating || 0).toFixed(1)}
+          </Text>
+          <Text style={styles.reviewCount}>
+            ({reviewCount})
+          </Text>
         </View>
       </View>
 
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.favoriteButton}
-        onPress={() => setIsFavorited(!isFavorited)}>
-        <Feather 
-          name={isFavorited ? "heart" : "heart"} 
-          size={20} 
-          color={isFavorited ? "#FF0000" : "#999"}
-          fill={isFavorited ? "#FF0000" : "none"}
+        onPress={handleFavoritePress}
+      >
+        <Feather
+          name="heart"
+          size={20}
+          color={isFavorited ? '#FF0000' : '#999'}
+          fill={isFavorited ? '#FF0000' : 'none'}
         />
       </TouchableOpacity>
     </TouchableOpacity>
