@@ -11,6 +11,8 @@ function normalizeMenuResponse(payload) {
   const shop = payload?.shop || null;
   const categories = payload?.menu?.categories || [];
   const rawItems = payload?.menu?.items || [];
+  const modifierGroups = payload?.menu?.modifier_groups || [];
+  const offers = payload?.menu?.offers || [];
 
   const items = rawItems.map(item => ({
     ...item,
@@ -24,7 +26,7 @@ function normalizeMenuResponse(payload) {
     category_id: item.category_id,
   }));
 
-  return { shop, categories, items };
+  return { shop, categories, items, modifierGroups, offers };
 }
 
 export const shopService = {

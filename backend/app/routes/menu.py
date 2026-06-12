@@ -23,11 +23,13 @@ router = APIRouter(
 
 class CategoryCreate(BaseModel):
     name: str
+    description: Optional[str] = None
     display_order: int = 0
 
 
 class CategoryUpdate(BaseModel):
     name: Optional[str] = None
+    description: Optional[str] = None
     display_order: Optional[int] = None
 
 
@@ -41,7 +43,10 @@ class MenuItemCreate(BaseModel):
     description: Optional[str] = None
     category_id: Optional[str] = None
     base_price: float
+    image_url: Optional[str] = None
     is_available: bool = True
+    is_out_of_stock: bool = False
+    modifier_group_ids: List[str] = []
     display_order: int = 0
 
 
@@ -50,7 +55,10 @@ class MenuItemUpdate(BaseModel):
     description: Optional[str] = None
     category_id: Optional[str] = None
     base_price: Optional[float] = None
+    image_url: Optional[str] = None
     is_available: Optional[bool] = None
+    is_out_of_stock: Optional[bool] = None
+    modifier_group_ids: Optional[List[str]] = None
     display_order: Optional[int] = None
 
 
@@ -72,6 +80,19 @@ class CustomizationTemplateUpdate(BaseModel):
 
 class ItemAvailability(BaseModel):
     is_available: bool
+
+
+class ModifierGroupCreate(BaseModel):
+    name: str
+    min_selections: int = 0
+    max_selections: Optional[int] = None
+
+
+class ModifierGroupUpdate(BaseModel):
+    name: Optional[str] = None
+    min_selections: Optional[int] = None
+    max_selections: Optional[int] = None
+    options: Optional[List[Dict[str, Any]]] = None
 
 
 # ============================================================================
@@ -139,6 +160,11 @@ async def create_category(shop_id: str, category_data: CategoryCreate, user: dic
         category_data.name, 
         category_data.display_order
     )
+    if category_data.description:
+        category = await shop_service.update_category(
+            category.get("id"),
+            {"description": category_data.description},
+        )
     return {"category": category}
 
 
@@ -294,6 +320,70 @@ async def upload_item_image(
     file_data = await file.read()
     image_url = await shop_service.upload_item_image(item_id, file_data, shop_id)
     return {"image_url": image_url}
+
+
+# ============================================================================
+# SHOP OWNER ENDPOINTS - MODIFIER GROUPS
+# ============================================================================
+
+@router.get("/{shop_id}/modifier-groups")
+async def get_modifier_groups(shop_id: str):
+    groups = await shop_service.list_modifier_groups(shop_id)
+    return {"groups": groups}
+
+
+@router.post("/{shop_id}/modifier-groups")
+async def create_modifier_group(
+    shop_id: str,
+    group_data: ModifierGroupCreate,
+    user: dict = Depends(require_auth()),
+):
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
+    if not await shop_service.verify_shop_ownership(shop_id, user_id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    group = await shop_service.create_modifier_group(shop_id, group_data.dict())
+    return {"group": group}
+
+
+@router.put("/{shop_id}/modifier-groups/{group_id}")
+async def update_modifier_group(
+    shop_id: str,
+    group_id: str,
+    group_data: ModifierGroupUpdate,
+    user: dict = Depends(require_auth()),
+):
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
+    if not await shop_service.verify_shop_ownership(shop_id, user_id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    raw = group_data.dict(exclude_unset=True)
+    options = raw.pop("options", None)
+    update_data = {k: v for k, v in raw.items() if v is not None}
+    group = await shop_service.update_modifier_group(group_id, update_data) if update_data else {}
+    if options is not None:
+        await shop_service.sync_modifier_options(shop_id, group_id, options)
+    groups = await shop_service.list_modifier_groups(shop_id)
+    current = next((g for g in groups if g.get("id") == group_id), None)
+    return {"group": current or group}
+
+
+@router.delete("/{shop_id}/modifier-groups/{group_id}")
+async def delete_modifier_group(
+    shop_id: str,
+    group_id: str,
+    user: dict = Depends(require_auth()),
+):
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
+    if not await shop_service.verify_shop_ownership(shop_id, user_id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    success = await shop_service.delete_modifier_group(group_id)
+    return {"success": success}
 
 
 # ============================================================================

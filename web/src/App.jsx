@@ -51,7 +51,7 @@ import { ShopProvider }   from "./context/ShopContext";
 import PageLoader         from "./components/ui/PageLoader";
 
 function RoleRedirect({ children }) {
-  const { user, loading } = useAuth();
+  const { user, loading, getRole } = useAuth();
   const location = useLocation();
   
   // Don't redirect on reset-password page
@@ -64,7 +64,7 @@ function RoleRedirect({ children }) {
   
   // Don't redirect if user just has a session (might be from reset link)
   if (user && location.pathname === '/') {
-    const role = user.user_metadata?.role;
+    const role = getRole();
     if (role === "shop_owner") return <Navigate to="/shop-owner/dashboard" replace />;
     if (role === "admin") return <Navigate to="/" replace />;
   }

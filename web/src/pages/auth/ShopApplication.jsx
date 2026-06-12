@@ -41,12 +41,10 @@ export default function ShopApplication() {
     setLoading(true);
     try {
       const { data: { session: existingSession } } = await supabase.auth.getSession();
-      let userId;
-      let userEmail = formData.email;
+      let session = existingSession;
 
       if (existingSession) {
-        userId = existingSession.user.id;
-        userEmail = existingSession.user.email;
+        session = existingSession;
       } else {
         const tempPassword = formData.password;
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
@@ -65,32 +63,33 @@ export default function ShopApplication() {
             password: tempPassword,
           });
           if (signInError) throw signInError;
-          userId = signInData.user?.id;
+          session = signInData.session;
         } else {
-          userId = signUpData.user?.id;
+          session = signUpData.session;
         }
 
-        if (!userId) throw new Error('Failed to create account');
+        if (!session?.access_token) throw new Error('Failed to create account session');
       }
 
-      const { error: shopError } = await supabase
-        .from('shops')
-        .insert({
-          owner_id:    userId,
-          name:        formData.businessName,
+      const response = await fetch('/api/v1/shops/apply', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          name: formData.businessName,
           description: formData.description || null,
-          address:     formData.address,
-          city:        formData.city,
-          state:       formData.state,
-          zip:         formData.zip,
-          phone:       formData.phone,
-          website:     formData.website || null,
-          status:      'pending_payment',
-        })
-        .select('id')
-        .single();
-
-      if (shopError) throw shopError;
+          address: formData.address,
+          city: formData.city,
+          state: formData.state,
+          zip: formData.zip,
+          phone: formData.phone,
+          website: formData.website || null,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.detail || 'Failed to submit application');
 
       toast.success('Almost there! Complete your subscription to go live.');
       navigate('/shop-owner/subscribe');

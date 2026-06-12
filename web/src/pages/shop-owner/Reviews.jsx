@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Star, MessageSquare, TrendingUp, Loader2 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
-import supabase from '../../lib/supabase';
 
 const StarRow = ({ rating, max = 5, size = 18 }) => (
   <div className="flex gap-0.5">
@@ -42,59 +41,14 @@ export default function Reviews() {
     try {
       setError(null);
       
-      // Fetch reviews for this shop
-      const { data: reviewsData, error: reviewsError } = await supabase
-        .from('reviews')
-        .select('id, shop_id, user_id, order_id, rating, body, created_at, updated_at')
-        .eq('shop_id', shopId)
-        .order('created_at', { ascending: false });
+      const response = await fetch(`/api/v1/shops/${shopId}/reviews?limit=100`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.detail || 'Failed to load reviews');
 
-      if (reviewsError) {
-        console.error('[Reviews] Reviews fetch error:', reviewsError);
-        throw reviewsError;
-      }
-
-      console.log('[Reviews] reviewsData:', reviewsData);
-
-      if (!reviewsData || reviewsData.length === 0) {
-        setReviews([]);
-        return;
-      }
-
-      // Get unique user_ids from reviews
-      const userIds = [...new Set(reviewsData.map(r => r.user_id))];
-      console.log('[Reviews] userIds to fetch:', userIds);
-
-      // Fetch all reviewer profiles
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, full_name, avatar_url, email')
-        .in('id', userIds);
-
-      console.log('[Reviews] profilesData:', profilesData);
-      console.log('[Reviews] profilesError:', profilesError);
-
-      if (profilesError) {
-        console.error('[Reviews] Profiles fetch error:', profilesError);
-        throw profilesError;
-      }
-
-      // Map profiles by ID for easy lookup
-      const profilesMap = {};
-      (profilesData || []).forEach(p => {
-        profilesMap[p.id] = p;
-      });
-
-      console.log('[Reviews] profilesMap:', profilesMap);
-
-      // Merge reviews with reviewer info
-      const mergedReviews = reviewsData.map(review => ({
+      const mergedReviews = (data.reviews || []).map(review => ({
         ...review,
-        reviewer: profilesMap[review.user_id] || { full_name: 'Anonymous', avatar_url: null },
+        reviewer: review.reviewer || { full_name: 'Anonymous', avatar_url: null },
       }));
-
-      console.log('[Reviews] mergedReviews:', mergedReviews);
-
       setReviews(mergedReviews);
     } catch (e) {
       console.error('[Reviews] Load error:', e);

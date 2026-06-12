@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import supabase from "../../lib/supabase";
 import { getPosStatus } from "../../services/posService";
+import { getMenuItems } from "../../api/menu";
+import { getShopOrders } from "../../api/orders";
 import { toast } from "sonner";
 
 // ── Sub-components ─────────────────────────────────────────────────────────
@@ -141,26 +143,33 @@ export default function ShopOwnerDashboard() {
       today.setHours(0, 0, 0, 0);
       const todayISO = today.toISOString();
 
-      const [ordersResp, menuResp, activeResp, recentResp, pendingResp] = await Promise.all([
-        supabase.from("orders").select("total").eq("shop_id", shopId).gte("created_at", todayISO),
-        supabase.from("menu_items").select("*", { count: "exact", head: true }).eq("shop_id", shopId),
-        supabase.from("menu_items").select("*", { count: "exact", head: true }).eq("shop_id", shopId).eq("is_available", true),
-        supabase.from("orders").select("id, created_at, total, status, order_items(count)").eq("shop_id", shopId).order("created_at", { ascending: false }).limit(6),
-        supabase.from("orders").select("*", { count: "exact", head: true }).eq("shop_id", shopId).in("status", ["confirmed", "preparing"]),
+      const { data: { session } } = await supabase.auth.getSession();
+      const [ordersResp, menuResp] = await Promise.all([
+        getShopOrders(shopId, session?.access_token),
+        getMenuItems(shopId),
       ]);
 
-      const revenueToday = (ordersResp.data || []).reduce(
+      const orders = ordersResp.orders || [];
+      const menuItems = menuResp.items || [];
+      const todayOrders = orders.filter(order => new Date(order.created_at) >= today);
+      const activeItems = menuItems.filter(item => item.is_available);
+      const pendingOrders = orders.filter(order => ["confirmed", "preparing", "pending"].includes(order.status));
+      const recentOrders = [...orders]
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, 6);
+
+      const revenueToday = todayOrders.reduce(
         (sum, o) => sum + parseFloat(o.total || 0), 0
       );
 
       setStats({
-        ordersToday:     ordersResp.data?.length || 0,
+        ordersToday:     todayOrders.length,
         revenueToday,
-        totalMenuItems:  menuResp.count || 0,
-        activeMenuItems: activeResp.count || 0,
-        pendingOrders:   pendingResp.count || 0,
+        totalMenuItems:  menuItems.length,
+        activeMenuItems: activeItems.length,
+        pendingOrders:   pendingOrders.length,
       });
-      setRecentOrders(recentResp.data || []);
+      setRecentOrders(recentOrders);
     } catch (err) {
       console.error("Dashboard load error:", err);
       toast.error("Failed to load dashboard data");

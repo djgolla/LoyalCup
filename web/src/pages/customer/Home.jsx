@@ -5,7 +5,6 @@ import {
   Coffee, Gift, Smartphone, ArrowRight,
   Sparkles, Download, Star, MapPin, Zap
 } from 'lucide-react';
-import supabase from '../../lib/supabase';
 
 const FloatingCoffee = ({ delay = 0, style = {} }) => (
   <motion.div
@@ -109,18 +108,9 @@ export default function Home() {
   useEffect(() => {
     (async () => {
       try {
-        // Use RPC functions for order/user counts — these bypass RLS safely.
-        // Active shop count is public via RLS so direct query is fine.
-        const [shopsRes, orderRes, userRes] = await Promise.all([
-          supabase.from('shops').select('*', { count: 'exact', head: true }).eq('status', 'active'),
-          supabase.rpc('get_order_count'),
-          supabase.rpc('get_user_count'),
-        ]);
-        setStats({
-          shopCount:  shopsRes.count ?? 0,
-          orderCount: orderRes.data  ?? 0,
-          userCount:  userRes.data   ?? 0,
-        });
+        const response = await fetch('/api/v1/shops/stats/public');
+        const data = await response.json();
+        if (response.ok) setStats(data);
       } catch {
         // If RPCs don't exist yet, silently show 0s — no crash
       } finally {

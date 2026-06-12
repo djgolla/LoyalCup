@@ -1,7 +1,12 @@
 /**
- * Shop Service - Supabase integration for shops
+ * Shop Service - backend API integration for shops
  */
-import supabase from '../lib/supabase';
+import {
+  listShops as apiListShops,
+  findNearbyShops as apiFindNearbyShops,
+  getShop as apiGetShop,
+  getShopMenu as apiGetShopMenu,
+} from '../api/shops';
 
 export const shopService = {
   /**
@@ -9,23 +14,8 @@ export const shopService = {
    */
   async getShops(filters = {}) {
     try {
-      let query = supabase
-        .from('shops')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (filters.city) {
-        query = query.ilike('city', `%${filters.city}%`);
-      }
-
-      if (filters.search) {
-        query = query.or(`name.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-      return data || [];
+      const data = await apiListShops(filters);
+      return data?.shops || [];
     } catch (error) {
       console.error('Error fetching shops:', error);
       return [];
@@ -39,23 +29,9 @@ export const shopService = {
    */
   async getNearbyShops(lat, lng, radius = 10) {
     try {
-      // Note: For true geospatial queries, you'd need PostGIS
-      // This is a simplified version
-      const { data, error } = await supabase
-        .from('shops')
-        .select('*')
-        .not('lat', 'is', null)
-        .not('lng', 'is', null);
-
-      if (error) throw error;
-
-      // Filter by radius client-side (not ideal for production)
-      const filtered = data?.filter(shop => {
-        const distance = calculateDistance(lat, lng, shop.lat, shop.lng);
-        return distance <= radius;
-      }) || [];
-
-      return filtered;
+      const radiusKm = radius > 1000 ? radius / 1000 : radius;
+      const data = await apiFindNearbyShops(lat, lng, radiusKm);
+      return data?.shops || [];
     } catch (error) {
       console.error('Error fetching nearby shops:', error);
       return [];
@@ -67,14 +43,8 @@ export const shopService = {
    */
   async getShop(shopId) {
     try {
-      const { data, error } = await supabase
-        .from('shops')
-        .select('*')
-        .eq('id', shopId)
-        .single();
-
-      if (error) throw error;
-      return data;
+      const data = await apiGetShop(shopId);
+      return data?.shop || null;
     } catch (error) {
       console.error('Error fetching shop:', error);
       return null;
@@ -86,21 +56,9 @@ export const shopService = {
    */
   async getShopMenu(shopId) {
     try {
-      const { data: categories, error: catError } = await supabase
-        .from('categories')  // ← FIXED BACK TO 'categories'
-        .select('*')
-        .eq('shop_id', shopId)
-        .order('display_order', { ascending: true });
-
-      if (catError) throw catError;
-
-      const { data: items, error: itemError } = await supabase
-        .from('menu_items')
-        .select('*')
-        .eq('shop_id', shopId)
-        .order('display_order', { ascending: true });
-
-      if (itemError) throw itemError;
+      const data = await apiGetShopMenu(shopId);
+      const categories = Object.values(data?.menu || {}).map(entry => entry.category);
+      const items = Object.values(data?.menu || {}).flatMap(entry => entry.items || []);
 
       // Group items by category
       const menu = categories.map(category => ({
@@ -115,22 +73,3 @@ export const shopService = {
     }
   }
 };
-
-/**
- * Calculate distance between two coordinates in miles
- */
-function calculateDistance(lat1, lon1, lat2, lon2) {
-  const R = 3959; // Earth's radius in miles
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-function toRad(deg) {
-  return deg * (Math.PI / 180);
-}

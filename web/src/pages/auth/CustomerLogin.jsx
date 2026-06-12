@@ -6,7 +6,7 @@ import { toast } from "sonner";
 export default function CustomerLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const { login } = useAuth();
+  const { login, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -14,10 +14,11 @@ export default function CustomerLogin() {
     e.preventDefault();
 
     try {
-      const { user } = await login(email, password);
+      await login(email, password);
+      const profile = await refreshProfile();
       toast.success("Welcome back!");
       
-      const userRole = user?.user_metadata?.role || 'customer';
+      const userRole = profile?.role || 'customer';
       
       if (userRole === 'admin') {
         navigate('/admin/dashboard');

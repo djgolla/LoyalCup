@@ -9,8 +9,8 @@ import { Feather } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import WebView from 'react-native-webview';
-import { useCart } from '../../context/CartContext';
-import { supabase } from '../../lib/supabase';
+import { useCart } from '../context/CartContext';
+import { shopService } from '../services/shopService';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -182,82 +182,13 @@ export default function ShopDetailScreen() {
   const loadShopData = async () => {
     try {
       console.log('[ShopDetail] Loading shop data for ID:', id);
-
-      const shopResp = await supabase.from('shops').select('*').eq('id', id).single();
-      if (shopResp.error) {
-        console.error('[ShopDetail] Shop error:', shopResp.error);
-        throw shopResp.error;
-      }
-      console.log('[ShopDetail] Shop loaded:', shopResp.data?.name);
-      setShop(shopResp.data);
-
-      const catResp = await supabase
-        .from('categories')
-        .select('*')
-        .eq('shop_id', id)
-        .order('display_order', { ascending: true });
-      
-      if (catResp.error) {
-        console.warn('[ShopDetail] Categories error (RLS?):', catResp.error.message);
-      } else {
-        console.log('[ShopDetail] Categories loaded:', catResp.data?.length || 0);
-        setCategories(catResp.data || []);
-      }
-
-      const itemResp = await supabase
-        .from('menu_items')
-        .select('*')
-        .eq('shop_id', id)
-        .eq('is_available', true)
-        .order('display_order', { ascending: true });
-      
-      if (itemResp.error) {
-        console.warn('[ShopDetail] Menu items error (RLS?):', itemResp.error.message);
-      } else {
-        console.log('[ShopDetail] Menu items loaded:', itemResp.data?.length || 0);
-        setMenuItems(itemResp.data || []);
-      }
-
-      const modGroupResp = await supabase
-        .from('modifier_groups')
-        .select('*')
-        .eq('shop_id', id)
-        .eq('is_active', true);
-      
-      if (modGroupResp.error) {
-        console.warn('[ShopDetail] Modifier groups error:', modGroupResp.error.message);
-      } else {
-        console.log('[ShopDetail] Modifier groups loaded:', modGroupResp.data?.length || 0);
-        
-        const modOptResp = await supabase
-          .from('modifier_options')
-          .select('*')
-          .eq('shop_id', id)
-          .eq('is_active', true);
-        
-        if (!modOptResp.error) {
-          const options = modOptResp.data || [];
-          const groups = (modGroupResp.data || []).map(g => ({
-            ...g,
-            modifier_options: options.filter(o => o.modifier_group_id === g.id),
-          }));
-          setModifierGroups(groups);
-        }
-      }
-
-      const offersResp = await supabase
-        .from('shop_offers')
-        .select('*')
-        .eq('shop_id', id)
-        .eq('is_active', true)
-        .gte('expires_at', new Date().toISOString());
-      
-      if (offersResp.error) {
-        console.warn('[ShopDetail] Offers error:', offersResp.error.message);
-      } else {
-        console.log('[ShopDetail] Offers loaded:', offersResp.data?.length || 0);
-        setOffers(offersResp.data || []);
-      }
+      const data = await shopService.getShopWithMenu(id);
+      console.log('[ShopDetail] Shop loaded:', data.shop?.name);
+      setShop(data.shop);
+      setCategories(data.categories || []);
+      setMenuItems(data.items || []);
+      setModifierGroups(data.modifierGroups || []);
+      setOffers(data.offers || []);
 
     } catch (e) {
       console.error('[ShopDetail] loadShopData FATAL error:', e);

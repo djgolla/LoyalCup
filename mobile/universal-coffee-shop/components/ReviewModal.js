@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { supabase } from '../lib/supabase';
+import { apiClient } from '../services/apiClient';
 
 export default function ReviewModal({ visible, orderId, shopId, shopName, onClose, onSubmitted }) {
   const [rating, setRating] = useState(0);
@@ -26,18 +26,12 @@ export default function ReviewModal({ visible, orderId, shopId, shopName, onClos
     setSubmitting(true);
     setError('');
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not logged in');
-
-      const { error: dbErr } = await supabase.from('reviews').upsert({
+      await apiClient.post('/api/v1/reviews', {
         shop_id: shopId,
-        user_id: user.id,
         order_id: orderId,
         rating,
         body: body.trim() || null,
-      }, { onConflict: 'user_id,order_id' });
-
-      if (dbErr) throw dbErr;
+      });
       reset();
       onSubmitted?.();
     } catch (e) {

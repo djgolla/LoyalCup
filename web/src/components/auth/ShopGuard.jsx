@@ -2,7 +2,7 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 
 export default function ShopGuard({ children }) {
-  const { user } = useAuth();
+  const { user, getRole } = useAuth();
 
   // in real app would check if user owns or works at this shop
   // for now just check if they have the right role
@@ -10,7 +10,7 @@ export default function ShopGuard({ children }) {
     return <Navigate to="/login" replace />;
   }
 
-  const userRole = user.user_metadata?.role || 'customer';
+  const userRole = getRole();
   const hasAccess = userRole === "shop_owner" || userRole === "shop_worker" || userRole === "admin";
 
   if (!hasAccess) {

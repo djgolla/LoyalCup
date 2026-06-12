@@ -13,7 +13,7 @@ const SETUP_ROUTES = [
 
 export default function ShopOwnerLayout() {
   const { shop, loading } = useShop();
-  const { user } = useAuth();
+  const { user, getRole } = useAuth();
   const location  = useLocation();
   const navigate  = useNavigate();
 
@@ -30,7 +30,7 @@ export default function ShopOwnerLayout() {
   }
 
   if (!shop) {
-    const role = user?.user_metadata?.role;
+    const role = user ? getRole() : null;
     if (role === 'applicant' || role === 'shop_owner') {
       return <Navigate to="/shop-owner/subscribe" replace />;
     }

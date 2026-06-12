@@ -7,10 +7,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
 import { getMyLoyalty } from '../services/loyaltyService';
-
-const REAL_ORDER_STATUSES = ['confirmed', 'pending', 'completed'];
+import { apiClient } from '../services/apiClient';
 
 export default function ProfileScreen() {
   const router            = useRouter();
@@ -29,13 +27,12 @@ export default function ProfileScreen() {
   const loadData = async () => {
     try {
       const [profileResp, loyaltyResp, orderResp] = await Promise.all([
-        supabase.from('profiles').select('full_name, phone, avatar_url').eq('id', user.id).single(),
+        apiClient.get('/api/v1/users/profile'),
         getMyLoyalty(),
-        supabase.from('orders').select('id', { count: 'exact', head: true })
-          .eq('customer_id', user.id).in('status', REAL_ORDER_STATUSES),
+        apiClient.get('/api/v1/users/order-count'),
       ]);
 
-      setProfile(profileResp.data);
+      setProfile(profileResp);
       setOrderCount(orderResp.count || 0);
 
       const rows = loyaltyResp?.shops || [];

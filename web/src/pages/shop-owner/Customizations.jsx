@@ -6,7 +6,12 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useShop } from '../../context/ShopContext';
-import supabase from '../../lib/supabase';
+import {
+  createModifierGroup,
+  deleteModifierGroup,
+  getModifierGroups,
+  updateModifierGroup,
+} from '../../api/menu';
 
 // ─── Option Row ───────────────────────────────────────────────────────────────
 function OptionRow({ option, onUpdate, onDelete }) {
@@ -273,13 +278,8 @@ export default function Customizations() {
   const loadGroups = async () => {
     setLoading(true);
     try {
-      const { data: groupData, error: gErr } = await supabase
-        .from('modifier_groups').select('*').eq('shop_id', shopId).eq('is_active', true).order('created_at', { ascending: true });
-      if (gErr) throw gErr;
-      const { data: optData, error: oErr } = await supabase
-        .from('modifier_options').select('*').eq('shop_id', shopId).eq('is_active', true).order('created_at', { ascending: true });
-      if (oErr) throw oErr;
-      setGroups((groupData || []).map(g => ({ ...g, options: (optData || []).filter(o => o.modifier_group_id === g.id) })));
+      const data = await getModifierGroups(shopId);
+      setGroups(data?.groups || []);
     } catch (err) {
       toast.error('Failed to load modifier groups: ' + err.message);
     } finally {
@@ -290,11 +290,8 @@ export default function Customizations() {
   const handleCreateGroup = async () => {
     if (!newGroupName.trim()) return;
     try {
-      const { data, error } = await supabase.from('modifier_groups')
-        .insert({ shop_id: shopId, name: newGroupName.trim(), min_selections: 0, max_selections: null, is_active: true })
-        .select().single();
-      if (error) throw error;
-      setGroups(prev => [...prev, { ...data, options: [] }]);
+      const data = await createModifierGroup(shopId, { name: newGroupName.trim(), min_selections: 0, max_selections: null });
+      setGroups(prev => [...prev, { ...data.group, options: [] }]);
       setNewGroupName('');
       setCreating(false);
       toast.success('Modifier group created');
@@ -305,25 +302,12 @@ export default function Customizations() {
 
   const handleSaveGroup = async (draft) => {
     try {
-      const { error: gErr } = await supabase.from('modifier_groups')
-        .update({ name: draft.name, min_selections: draft.min_selections ?? 0, max_selections: draft.max_selections ?? null })
-        .eq('id', draft.id);
-      if (gErr) throw gErr;
-
-      const { data: existingOpts } = await supabase.from('modifier_options').select('id').eq('modifier_group_id', draft.id);
-      const existingIds = new Set((existingOpts || []).map(o => o.id));
-      const draftIds = new Set(draft.options.filter(o => !o.id?.startsWith('new-')).map(o => o.id));
-      const toDelete = [...existingIds].filter(id => !draftIds.has(id));
-
-      if (toDelete.length) await supabase.from('modifier_options').update({ is_active: false }).in('id', toDelete);
-
-      for (const opt of draft.options) {
-        if (opt.id?.startsWith('new-')) {
-          await supabase.from('modifier_options').insert({ modifier_group_id: draft.id, shop_id: shopId, name: opt.name, price_adjustment: opt.price_adjustment ?? 0, is_active: true });
-        } else {
-          await supabase.from('modifier_options').update({ name: opt.name, price_adjustment: opt.price_adjustment ?? 0 }).eq('id', opt.id);
-        }
-      }
+      await updateModifierGroup(shopId, draft.id, {
+        name: draft.name,
+        min_selections: draft.min_selections ?? 0,
+        max_selections: draft.max_selections ?? null,
+        options: draft.options,
+      });
 
       toast.success('Group saved!');
       await loadGroups();
@@ -336,7 +320,7 @@ export default function Customizations() {
   const handleDeleteGroup = async (groupId) => {
     if (!confirm('Delete this modifier group? It will be removed from all menu items.')) return;
     try {
-      await supabase.from('modifier_groups').update({ is_active: false }).eq('id', groupId);
+      await deleteModifierGroup(shopId, groupId);
       setGroups(prev => prev.filter(g => g.id !== groupId));
       toast.success('Group deleted');
     } catch (err) {

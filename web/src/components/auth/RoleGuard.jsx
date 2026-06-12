@@ -3,7 +3,7 @@ import { useAuth } from "../../context/AuthContext";
 import PageLoader from "../ui/PageLoader";
 
 export default function RoleGuard({ children, roles }) {
-  const { user, loading, hasRole } = useAuth();
+  const { user, loading, hasRole, getRole } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -15,7 +15,7 @@ export default function RoleGuard({ children, roles }) {
   }
 
   if (!hasRole(roles)) {
-    const userRole = user.user_metadata?.role || "customer";
+    const userRole = getRole();
 
     const redirectPath =
       userRole === "admin"

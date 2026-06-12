@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import { apiClient } from '../services/apiClient';
 
 export default function SettingsScreen() {
   const router       = useRouter();
@@ -52,12 +53,8 @@ export default function SettingsScreen() {
   const loadProfile = async () => {
     try {
       if (user?.id) {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('full_name')
-          .eq('id', user.id)
-          .single();
-        if (!error && data) setProfileName(data.full_name || '');
+        const data = await apiClient.get('/api/v1/users/profile');
+        if (data) setProfileName(data.full_name || '');
       }
       if (user?.email) setProfileEmail(user.email);
     } catch (e) {
@@ -93,11 +90,7 @@ export default function SettingsScreen() {
     if (!user?.id) return;
     setSavingProfile(true);
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ full_name: profileName })
-        .eq('id', user.id);
-      if (error) throw error;
+      await apiClient.put('/api/v1/users/profile', { full_name: profileName });
       Alert.alert('Success', 'Profile updated successfully');
       setEditProfileVisible(false);
     } catch (e) {

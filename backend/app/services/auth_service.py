@@ -140,8 +140,9 @@ class AuthService:
         Update user profile.
         """
         try:
-            # Remove fields that shouldn't be updated directly
-            allowed_fields = ["full_name", "avatar_url"]
+            # Remove fields that shouldn't be updated directly. Role/status
+            # changes only happen through admin endpoints.
+            allowed_fields = ["full_name", "avatar_url", "phone", "push_token"]
             filtered_data = {k: v for k, v in update_data.items() if k in allowed_fields}
             
             profile = self.supabase.table("profiles").update(filtered_data).eq("id", user_id).execute()

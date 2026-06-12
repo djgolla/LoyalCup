@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import supabase from '../../lib/supabase';
+import { getShopOrders } from '../../api/orders';
 import { toast } from 'sonner';
 
 const StatCard = ({ icon: Icon, title, value, sub, color, delay }) => (
@@ -96,23 +97,10 @@ export default function Analytics() {
       else if (timeRange === 'month') startDate.setMonth(now.getMonth() - 1);
       else if (timeRange === 'year')  startDate.setFullYear(now.getFullYear() - 1);
 
-      // ── Orders + joined order_items + menu_items ──────────────────────────
-      const { data: orders, error: ordErr } = await supabase
-        .from('orders')
-        .select(`
-          id, total, subtotal, tax, created_at, customer_id, status,
-          order_items (
-            quantity, unit_price, total_price,
-            menu_items (id, name, image_url)
-          )
-        `)
-        .eq('shop_id', shopId)
-        .gte('created_at', startDate.toISOString())
-        .neq('status', 'cancelled');
-
-      if (ordErr) throw ordErr;
-
-      const safeOrders = orders || [];
+      const { data: { session } } = await supabase.auth.getSession();
+      const ordersResp = await getShopOrders(shopId, session?.access_token);
+      const safeOrders = (ordersResp.orders || [])
+        .filter(order => new Date(order.created_at) >= startDate && order.status !== 'cancelled');
 
       // ── Core stats ────────────────────────────────────────────────────────
       const totalRevenue   = safeOrders.reduce((s, o) => s + parseFloat(o.total || 0), 0);
@@ -126,8 +114,8 @@ export default function Analytics() {
       const itemMap = {};
       safeOrders.forEach(order => {
         (order.order_items || []).forEach(oi => {
-          const name      = oi.menu_items?.name  || 'Unknown';
-          const imageUrl  = oi.menu_items?.image_url || null;
+          const name      = oi.menu_items?.name || oi.name || 'Unknown';
+          const imageUrl  = oi.menu_items?.image_url || oi.image_url || null;
           const qty       = oi.quantity  || 1;
           const revenue   = parseFloat(oi.total_price || 0) || (parseFloat(oi.unit_price || 0) * qty);
           if (!itemMap[name]) itemMap[name] = { name, image_url: imageUrl, totalQty: 0, revenue: 0 };
@@ -177,11 +165,10 @@ export default function Analytics() {
       setRepeatRate(repeatPct);
 
       // ── Avg rating ────────────────────────────────────────────────────────
-      const { data: reviews } = await supabase
-        .from('reviews')
-        .select('rating')
-        .eq('shop_id', shopId)
-        .gte('created_at', startDate.toISOString());
+      const reviewResp = await fetch(`/api/v1/shops/${shopId}/reviews?limit=100`);
+      const reviewData = await reviewResp.json().catch(() => ({}));
+      const reviews = (reviewData.reviews || [])
+        .filter(review => new Date(review.created_at) >= startDate);
       if (reviews && reviews.length > 0) {
         const avg = reviews.reduce((s, r) => s + (r.rating || 0), 0) / reviews.length;
         setAvgRating(avg.toFixed(1));

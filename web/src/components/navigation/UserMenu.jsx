@@ -5,13 +5,13 @@ import { useAuth } from "../../context/AuthContext";
 
 export default function UserMenu() {
   const [isOpen, setIsOpen] = useState(false);
-  const { user, logout } = useAuth();
+  const { user, logout, getRole, profile } = useAuth();
   const navigate = useNavigate();
 
   if (!user) return null;
 
-  const role        = user.user_metadata?.role || "customer";
-  const displayName = user.user_metadata?.full_name || user.email;
+  const role        = getRole();
+  const displayName = profile?.full_name || user.email;
 
   const handleLogout = async () => {
     setIsOpen(false);

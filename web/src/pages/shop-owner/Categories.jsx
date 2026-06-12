@@ -4,7 +4,7 @@ import {
   Plus, Edit2, Trash2, FolderOpen, X, Check, Sparkles
 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
-import supabase from '../../lib/supabase';
+import { createCategory, deleteCategory, getCategories, updateCategory } from '../../api/menu';
 import { toast } from 'sonner';
 
 const CategoryCard = ({ category, onEdit, onDelete, delay }) => (
@@ -145,14 +145,8 @@ export default function Categories() {
     if (!shopId) return;
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .eq('shop_id', shopId)
-        .eq('is_active', true)
-        .order('display_order', { ascending: true });
-      if (error) throw error;
-      setCategories(data || []);
+      const data = await getCategories(shopId);
+      setCategories(data?.categories || []);
     } catch (err) {
       console.error('Failed to load categories:', err);
       toast.error('Failed to load categories: ' + err.message);
@@ -164,27 +158,18 @@ export default function Categories() {
   const handleSave = async (formData) => {
     try {
       if (editingCategory) {
-        const { error } = await supabase
-          .from('categories')
-          .update({
+        await updateCategory(shopId, editingCategory.id, {
             name: formData.name,
             description: formData.description || null,
             is_active: true,
-          })
-          .eq('id', editingCategory.id);
-        if (error) throw error;
+          });
         toast.success('Category updated!');
       } else {
-        const { error } = await supabase
-          .from('categories')
-          .insert([{
+        await createCategory(shopId, {
             name: formData.name,
             description: formData.description || null,
-            shop_id: shopId,
             display_order: categories.length,
-            is_active: true,
-          }]);
-        if (error) throw error;
+          });
         toast.success('Category added!');
       }
       setShowModal(false);
@@ -199,11 +184,7 @@ export default function Categories() {
   const handleDelete = async (category) => {
     if (!confirm(`Delete "${category.name}"? Menu items in this category won't be deleted.`)) return;
     try {
-      const { error } = await supabase
-        .from('categories')
-        .update({ is_active: false })
-        .eq('id', category.id);
-      if (error) throw error;
+      await deleteCategory(shopId, category.id);
       toast.success('Category deleted!');
       loadCategories();
     } catch (err) {

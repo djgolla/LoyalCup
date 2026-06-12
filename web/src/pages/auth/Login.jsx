@@ -13,16 +13,17 @@ export default function Login() {
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotCooldown, setForgotCooldown] = useState(0);
-  const { login } = useAuth();
+  const { login, refreshProfile } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
-      const { user } = await login(email, password);
+      await login(email, password);
+      const profile = await refreshProfile();
       toast.success("Welcome back!");
-      const role = user?.user_metadata?.role;
+      const role = profile?.role;
       if (role === "admin") navigate("/admin/dashboard");
       else if (role === "shop_owner") navigate("/shop-owner/dashboard");
       else {
@@ -52,32 +53,6 @@ export default function Login() {
 
     setForgotLoading(true);
     try {
-      // First, verify email exists in system
-      const { data, error: lookupError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('email', forgotEmail.toLowerCase())
-        .single();
-
-      if (lookupError || !data) {
-        // Don't reveal if email exists - security best practice
-        toast.success('If that email exists, a reset link has been sent');
-        setForgotEmail('');
-        setShowForgotPassword(false);
-        // Start 30s cooldown
-        setForgotCooldown(30);
-        const interval = setInterval(() => {
-          setForgotCooldown(prev => {
-            if (prev <= 1) {
-              clearInterval(interval);
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
-        return;
-      }
-
       // Send reset link
       const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
         redirectTo: `${window.location.origin}/reset-password`,
@@ -85,7 +60,7 @@ export default function Login() {
 
       if (error) throw error;
 
-      toast.success('Password reset link sent to your email!');
+      toast.success('If that email exists, a reset link has been sent');
       setForgotEmail('');
       setShowForgotPassword(false);
       

@@ -38,6 +38,21 @@ PUBLIC_MENU_ITEM_FIELDS = (
     "modifier_group_ids, is_active, is_out_of_stock"
 )
 
+PUBLIC_MODIFIER_GROUP_FIELDS = (
+    "id, shop_id, name, min_selections, max_selections, pos_id, pos_source, "
+    "is_active, created_at"
+)
+
+PUBLIC_MODIFIER_OPTION_FIELDS = (
+    "id, shop_id, modifier_group_id, name, price_adjustment, pos_id, pos_source, "
+    "is_active, created_at"
+)
+
+PUBLIC_SHOP_OFFER_FIELDS = (
+    "id, shop_id, title, description, discount_type, discount_value, "
+    "starts_at, expires_at, is_active, created_at"
+)
+
 PUBLIC_CUSTOMIZATION_TEMPLATE_FIELDS = (
     "id, shop_id, name, type, is_required, applies_to, options"
 )
@@ -241,7 +256,7 @@ class ShopService:
                 "business_license": application_data.get("business_license"),
                 "website": application_data.get("website"),
                 "owner_id": user_id,
-                "status": "active",
+                "status": "pending_payment",
             }
             
             shop_response = (
@@ -256,11 +271,20 @@ class ShopService:
             
             shop = shop_response.data[0]
             
+            email = application_data.get("email")
+            if not email:
+                raise Exception("Missing authenticated user email")
+
             profile_response = (
                 self._client()
                 .table("profiles")
-                .update({"role": "shop_owner", "shop_id": shop.get("id")})
-                .eq("id", user_id)
+                .upsert({
+                    "id": user_id,
+                    "email": email,
+                    "full_name": application_data.get("name"),
+                    "role": "applicant",
+                    "shop_id": shop.get("id"),
+                })
                 .execute()
             )
             
@@ -269,7 +293,7 @@ class ShopService:
             
             return {
                 "shop": shop,
-                "message": "Shop application approved! Welcome to LoyalCup."
+                "message": "Shop application created. Complete your subscription to go live."
             }
         except ValueError as e:
             raise e
@@ -392,6 +416,31 @@ class ShopService:
         except Exception as e:
             print(f"Error uploading shop image: {e}")
             raise
+
+    async def upload_shop_asset(
+        self,
+        shop_id: str,
+        file_data: bytes,
+        file_name: str,
+        content_type: str = "image/jpeg",
+    ) -> str:
+        """Upload an owner-managed image and return its public URL."""
+        if not self.db:
+            return f"https://storage.example.com/{shop_id}/{file_name}"
+
+        safe_name = "".join(c for c in file_name if c.isalnum() or c in ("-", "_", "."))
+        if not safe_name:
+            safe_name = "image.jpg"
+
+        bucket = "shop-images"
+        path = f"{shop_id}/uploads/{int(datetime.now().timestamp())}-{safe_name}"
+        storage = self._client().storage
+        storage.from_(bucket).upload(
+            path,
+            file_data,
+            {"content-type": content_type or "image/jpeg", "upsert": "false"},
+        )
+        return storage.from_(bucket).get_public_url(path)
     
     async def get_shop_analytics(self, shop_id: str) -> Dict[str, Any]:
         """Get shop analytics (orders, revenue, etc.)"""
@@ -606,6 +655,139 @@ class ShopService:
             return response.data or []
         except Exception as e:
             print(f"Error listing menu items for shop {shop_id}: {e}")
+            return []
+
+    async def list_modifier_groups(self, shop_id: str) -> List[Dict[str, Any]]:
+        """Get active modifier groups with their active options."""
+        if not self.db:
+            return []
+
+        try:
+            group_resp = (
+                self._client()
+                .table("modifier_groups")
+                .select(PUBLIC_MODIFIER_GROUP_FIELDS)
+                .eq("shop_id", shop_id)
+                .eq("is_active", True)
+                .order("created_at")
+                .execute()
+            )
+            option_resp = (
+                self._client()
+                .table("modifier_options")
+                .select(PUBLIC_MODIFIER_OPTION_FIELDS)
+                .eq("shop_id", shop_id)
+                .eq("is_active", True)
+                .order("created_at")
+                .execute()
+            )
+
+            options = option_resp.data or []
+            return [
+                {
+                    **group,
+                    "options": [
+                        option
+                        for option in options
+                        if option.get("modifier_group_id") == group.get("id")
+                    ],
+                    "modifier_options": [
+                        option
+                        for option in options
+                        if option.get("modifier_group_id") == group.get("id")
+                    ],
+                }
+                for group in (group_resp.data or [])
+            ]
+        except Exception as e:
+            print(f"Error listing modifier groups for shop {shop_id}: {e}")
+            return []
+
+    async def create_modifier_group(self, shop_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        if not self.db:
+            return {"shop_id": shop_id, **data}
+        payload = {
+            "shop_id": shop_id,
+            "name": data.get("name"),
+            "min_selections": data.get("min_selections", 0),
+            "max_selections": data.get("max_selections"),
+            "is_active": True,
+        }
+        resp = self._client().table("modifier_groups").insert(payload).execute()
+        return resp.data[0] if resp.data else {}
+
+    async def update_modifier_group(self, group_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        if not self.db:
+            return data
+        resp = self._client().table("modifier_groups").update(data).eq("id", group_id).execute()
+        return resp.data[0] if resp.data else {}
+
+    async def delete_modifier_group(self, group_id: str) -> bool:
+        if not self.db:
+            return True
+        self._client().table("modifier_groups").update({"is_active": False}).eq("id", group_id).execute()
+        return True
+
+    async def sync_modifier_options(
+        self,
+        shop_id: str,
+        group_id: str,
+        options: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        if not self.db:
+            return options
+
+        existing = (
+            self._client()
+            .table("modifier_options")
+            .select("id")
+            .eq("modifier_group_id", group_id)
+            .execute()
+        )
+        existing_ids = {row["id"] for row in (existing.data or [])}
+        draft_ids = {
+            option.get("id")
+            for option in options
+            if option.get("id") and not str(option.get("id")).startswith("new-")
+        }
+        for option_id in existing_ids - draft_ids:
+            self._client().table("modifier_options").update({"is_active": False}).eq("id", option_id).execute()
+
+        saved = []
+        for option in options:
+            payload = {
+                "name": option.get("name"),
+                "price_adjustment": option.get("price_adjustment", 0),
+                "is_active": True,
+            }
+            option_id = option.get("id")
+            if option_id and not str(option_id).startswith("new-"):
+                resp = self._client().table("modifier_options").update(payload).eq("id", option_id).execute()
+            else:
+                resp = self._client().table("modifier_options").insert({
+                    **payload,
+                    "shop_id": shop_id,
+                    "modifier_group_id": group_id,
+                }).execute()
+            if resp.data:
+                saved.append(resp.data[0])
+        return saved
+
+    async def list_shop_offers(self, shop_id: str) -> List[Dict[str, Any]]:
+        if not self.db:
+            return []
+        try:
+            resp = (
+                self._client()
+                .table("shop_offers")
+                .select(PUBLIC_SHOP_OFFER_FIELDS)
+                .eq("shop_id", shop_id)
+                .eq("is_active", True)
+                .execute()
+            )
+            return resp.data or []
+        except Exception as e:
+            print(f"Error listing offers for shop {shop_id}: {e}")
             return []
     
     async def get_menu_item(self, item_id: str) -> Optional[Dict[str, Any]]:

@@ -52,6 +52,8 @@ class ShopCreate(BaseModel):
 class ShopUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    logo_url: Optional[str] = None
+    banner_url: Optional[str] = None
     address: Optional[str] = None
     city: Optional[str] = None
     state: Optional[str] = None
@@ -61,6 +63,9 @@ class ShopUpdate(BaseModel):
     hours: Optional[Dict[str, Any]] = None
     loyalty_points_per_dollar: Optional[int] = None
     participates_in_global_loyalty: Optional[bool] = None
+    mobile_ordering_enabled: Optional[bool] = None
+    website: Optional[str] = None
+    zip: Optional[str] = None
     avg_prep_time_minutes: Optional[int] = None
 
     @validator("avg_prep_time_minutes")
@@ -106,17 +111,41 @@ async def find_nearby_shops(
     return {"shops": shops}
 
 
+@router.get("/stats/public")
+async def get_public_stats():
+    """Small public homepage counters via backend service role."""
+    db = get_supabase()
+    sc = db.get_service_client()
+
+    shops = sc.table("shops").select("id", count="exact").eq("status", "active").execute()
+    orders = sc.table("orders").select("id", count="exact").neq("status", "cancelled").execute()
+    users = sc.table("profiles").select("id", count="exact").eq("status", "active").execute()
+
+    return {
+        "shopCount": shops.count or 0,
+        "orderCount": orders.count or 0,
+        "userCount": users.count or 0,
+    }
+
+
 @router.get("/{shop_id}")
 async def get_shop(shop_id: str):
     """Get shop details with full menu"""
     shop = await shop_service.get_shop_by_id(shop_id)
     if not shop:
         raise HTTPException(status_code=404, detail="Shop not found")
-    items      = await shop_service.list_menu_items(shop_id)
+    items = await shop_service.list_menu_items(shop_id)
     categories = await shop_service.list_categories(shop_id)
+    modifier_groups = await shop_service.list_modifier_groups(shop_id)
+    offers = await shop_service.list_shop_offers(shop_id)
     return {
         "shop": shop,
-        "menu": {"categories": categories, "items": items}
+        "menu": {
+            "categories": categories,
+            "items": items,
+            "modifier_groups": modifier_groups,
+            "offers": offers,
+        }
     }
 
 
@@ -144,7 +173,10 @@ async def apply_shop_owner(
             raise HTTPException(status_code=401, detail="Invalid user token")
         result = await shop_service.create_shop_application(
             user_id=user_id,
-            application_data=application.dict()
+            application_data={
+                **application.dict(),
+                "email": token_payload.get("email"),
+            }
         )
         return result
     except ValueError as e:
@@ -216,6 +248,31 @@ async def upload_shop_banner(shop_id: str, file: UploadFile = File(...), user: d
     file_data  = await file.read()
     banner_url = await shop_service.upload_shop_image(shop_id, file_data, "banner")
     return {"banner_url": banner_url}
+
+
+@router.post("/{shop_id}/asset")
+async def upload_shop_asset(shop_id: str, file: UploadFile = File(...), user: dict = Depends(require_auth())):
+    """Upload an owner-managed image without exposing storage write access to clients."""
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
+    if not await shop_service.verify_shop_ownership(shop_id, user_id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if file.content_type and not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image uploads are allowed")
+
+    file_data = await file.read()
+    if len(file_data) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image must be less than 5MB")
+
+    url = await shop_service.upload_shop_asset(
+        shop_id,
+        file_data,
+        file.filename or "image.jpg",
+        file.content_type or "image/jpeg",
+    )
+    return {"url": url}
 
 
 @router.get("/{shop_id}/analytics")

@@ -11,7 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
+import { apiClient } from '../services/apiClient';
 import { useFavorites } from '../hooks/useFavorites';
 
 export default function FavoritesScreen() {
@@ -34,14 +34,11 @@ export default function FavoritesScreen() {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('shops')
-        .select('id, name, description, address, city, state, logo_url, hours, avg_rating')
-        .in('id', ids)
-        .eq('status', 'active');
-
-      if (error) throw error;
-      setShops(data || []);
+      const data = await apiClient.get('/api/v1/users/favorites');
+      const favoriteShops = (data.favorites || [])
+        .map(row => row.shop)
+        .filter(shop => shop && ids.includes(shop.id));
+      setShops(favoriteShops);
     } catch (e) {
       console.error('[Favorites] loadShops error:', e);
     } finally {

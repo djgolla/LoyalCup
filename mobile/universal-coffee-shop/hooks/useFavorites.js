@@ -1,10 +1,10 @@
 /**
- * useFavorites — reads/writes customer_favorites in Supabase.
+ * useFavorites — reads/writes favorites through FastAPI.
  * Exposes: favoriteIds (Set), isFavorite(shopId), toggle(shop), loading
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
+import { apiClient } from '../services/apiClient';
 
 export function useFavorites() {
   const { user } = useAuth();
@@ -14,12 +14,8 @@ export function useFavorites() {
   const load = useCallback(async () => {
     if (!user?.id) { setLoading(false); return; }
     try {
-      const { data, error } = await supabase
-        .from('customer_favorites')
-        .select('shop_id')
-        .eq('customer_id', user.id);
-      if (error) throw error;
-      setFavoriteIds(new Set((data || []).map(r => r.shop_id)));
+      const data = await apiClient.get('/api/v1/users/favorites');
+      setFavoriteIds(new Set((data.favorites || []).map(r => r.shop_id)));
     } catch (e) {
       console.error('[useFavorites] load error:', e);
     } finally {
@@ -48,17 +44,9 @@ export function useFavorites() {
 
     try {
       if (alreadyFav) {
-        const { error } = await supabase
-          .from('customer_favorites')
-          .delete()
-          .eq('customer_id', user.id)
-          .eq('shop_id', shopId);
-        if (error) throw error;
+        await apiClient.delete(`/api/v1/users/favorites/${shopId}`);
       } else {
-        const { error } = await supabase
-          .from('customer_favorites')
-          .insert({ customer_id: user.id, shop_id: shopId });
-        if (error) throw error;
+        await apiClient.post('/api/v1/users/favorites', { shop_id: shopId });
       }
     } catch (e) {
       console.error('[useFavorites] toggle error:', e);

@@ -3,6 +3,7 @@
  * All requests attach the Supabase JWT as a Bearer token.
  */
 import Constants from 'expo-constants';
+import { supabase } from '../lib/supabase';
 
 const BASE_URL =
   Constants.expoConfig?.extra?.apiUrl ||
@@ -11,7 +12,12 @@ const BASE_URL =
 
 async function request(method, path, body, token) {
   const headers = { 'Content-Type': 'application/json' };
-  if (token) headers.Authorization = `Bearer ${token}`;
+  let authToken = token;
+  if (!authToken) {
+    const { data: { session } } = await supabase.auth.getSession();
+    authToken = session?.access_token || null;
+  }
+  if (authToken) headers.Authorization = `Bearer ${authToken}`;
 
   const opts = { method, headers };
   if (body && method !== 'GET') opts.body = JSON.stringify(body);

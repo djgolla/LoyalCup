@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import supabase from '../../lib/supabase';
+import { updateShop, uploadShopAsset } from '../../api/shops';
 import { toast } from 'sonner';
 
 const DEFAULT_HOURS = {
@@ -94,13 +95,10 @@ export default function ShopSettings() {
     if (!file || !shopId) return;
     try {
       setUploading(type);
-      const fileExt  = file.name.split('.').pop();
-      const fileName = `${shopId}/${type}-${Date.now()}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage.from('shop-images').upload(fileName, file);
-      if (uploadError) throw uploadError;
-      const { data: { publicUrl } } = supabase.storage.from('shop-images').getPublicUrl(fileName);
+      const { data: { session } } = await supabase.auth.getSession();
+      const result = await uploadShopAsset(shopId, file, session?.access_token);
       const field = type === 'logo' ? 'logo_url' : 'banner_url';
-      setFormData(prev => ({ ...prev, [field]: publicUrl }));
+      setFormData(prev => ({ ...prev, [field]: result.url }));
       toast.success('Image uploaded!');
     } catch {
       toast.error('Failed to upload image');
@@ -174,7 +172,8 @@ export default function ShopSettings() {
         }
       }
 
-      const { error } = await supabase.from('shops').update({
+      const { data: { session } } = await supabase.auth.getSession();
+      await updateShop(shopId, {
         name:                    formData.name,
         description:             formData.description             || null,
         address:                 formData.address                 || null,
@@ -188,11 +187,8 @@ export default function ShopSettings() {
         hours:                   formData.hours,
         mobile_ordering_enabled: formData.mobile_ordering_enabled,
         avg_prep_time_minutes:   prep,
-        updated_at:              new Date().toISOString(),
         ...geoUpdate,
-      }).eq('id', shopId);
-
-      if (error) throw error;
+      }, session?.access_token);
 
       setSavedAddress(newAddressStr);
       toast.success('Settings saved!');

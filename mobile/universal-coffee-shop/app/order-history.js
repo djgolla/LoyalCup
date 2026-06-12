@@ -16,8 +16,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { supabase } from '../lib/supabase';
 import { useCart } from '../context/CartContext';
+import { orderService } from '../services/orderService';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -38,7 +38,7 @@ const formatDate = (d) => {
 };
 
 const normalizeItems = (order) =>
-  (order.order_items || []).map(oi => ({
+  (order.order_items || order.items || []).map(oi => ({
     name:       oi.menu_items?.name || 'Item',
     image_url:  oi.menu_items?.image_url,
     quantity:   oi.quantity || 1,
@@ -134,26 +134,7 @@ export default function OrderHistoryScreen() {
 
   const loadOrders = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          id, status, total, subtotal, created_at, shop_id, metadata,
-          shops ( name, logo_url, avg_prep_time_minutes ),
-          order_items (
-            quantity, unit_price, menu_item_id, customizations,
-            menu_items ( name, image_url, id )
-          )
-        `)
-        .eq('customer_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(60);
-
-      if (error) throw error;
-
-      const all = data || [];
+      const all = await orderService.getOrderHistory({ limit: 60 });
       setActiveOrders(all.filter(o => ACTIVE_STATUSES.includes(o.status)));
       setPastOrders(all.filter(o => COMPLETED_STATUSES.includes(o.status)));
     } catch (e) {

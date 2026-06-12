@@ -5,9 +5,9 @@ import { useAuth } from "../../context/AuthContext";
 
 export default function MobileMenu() {
   const [isOpen, setIsOpen] = useState(false);
-  const { user, logout } = useAuth();
+  const { user, logout, getRole } = useAuth();
   const navigate = useNavigate();
-  const role = user?.user_metadata?.role;
+  const role = user ? getRole() : null;
 
   const close = () => setIsOpen(false);
 

@@ -6,6 +6,7 @@ import { Upload, X, Loader2 } from "lucide-react";
 import supabase from "../../lib/supabase";
 import { toast } from "sonner";
 import { useShop } from "../../context/ShopContext";
+import { uploadShopAsset } from "../../api/shops";
 
 export default function ImageUploader({ onUpload, currentImage, label = "Upload Image" }) {
   const { shopId } = useShop();
@@ -40,24 +41,10 @@ export default function ImageUploader({ onUpload, currentImage, label = "Upload 
         return;
       }
 
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${shopId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const { data: { session } } = await supabase.auth.getSession();
+      const result = await uploadShopAsset(shopId, file, session?.access_token);
 
-      const { data, error } = await supabase.storage
-        .from('shop-images')
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: false
-        });
-
-      if (error) throw error;
-
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('shop-images')
-        .getPublicUrl(data.path);
-
-      onUpload(file, publicUrl);
+      onUpload(file, result.url);
       toast.success("Image uploaded successfully");
     } catch (error) {
       console.error("Upload error:", error);

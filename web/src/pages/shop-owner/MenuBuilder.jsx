@@ -7,6 +7,15 @@ import {
 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import supabase from '../../lib/supabase';
+import {
+  createMenuItem,
+  deleteMenuItem,
+  getCategories,
+  getMenuItems,
+  getModifierGroups,
+  updateMenuItem,
+} from '../../api/menu';
+import { uploadShopAsset } from '../../api/shops';
 import { toast } from 'sonner';
 
 // ─── Grid Card ────────────────────────────────────────────────────────────────
@@ -210,12 +219,9 @@ const MenuItemModal = ({ item, onClose, onSave, categories, modifierGroups }) =>
     if (!file) return;
     try {
       setUploading(true);
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${shopId}/${Date.now()}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage.from('shop-images').upload(fileName, file);
-      if (uploadError) throw uploadError;
-      const { data: { publicUrl } } = supabase.storage.from('shop-images').getPublicUrl(fileName);
-      setFormData(fd => ({ ...fd, image_url: publicUrl }));
+      const { data: { session } } = await supabase.auth.getSession();
+      const result = await uploadShopAsset(shopId, file, session?.access_token);
+      setFormData(fd => ({ ...fd, image_url: result.url }));
       toast.success('Image uploaded!');
     } catch (err) {
       toast.error('Upload failed: ' + err.message);
@@ -444,20 +450,15 @@ export default function MenuBuilder() {
     if (!shopId) return;
     setLoading(true);
     try {
-      const [catRes, itemRes, groupRes, optRes] = await Promise.all([
-        // ← 'categories' — the actual table name, with display_order sort
-        supabase.from('categories').select('*').eq('shop_id', shopId).order('display_order', { ascending: true }),
-        supabase.from('menu_items').select('*').eq('shop_id', shopId).eq('is_active', true).order('display_order', { ascending: true }).order('created_at', { ascending: false }),
-        supabase.from('modifier_groups').select('*').eq('shop_id', shopId).eq('is_active', true),
-        supabase.from('modifier_options').select('*').eq('shop_id', shopId).eq('is_active', true),
+      const [catRes, itemRes, groupRes] = await Promise.all([
+        getCategories(shopId),
+        getMenuItems(shopId),
+        getModifierGroups(shopId),
       ]);
-      if (catRes.error) throw catRes.error;
-      if (itemRes.error) throw itemRes.error;
 
-      const cats = catRes.data || [];
-      const opts = optRes.data || [];
-      const groups = (groupRes.data || []).map(g => ({ ...g, options: opts.filter(o => o.modifier_group_id === g.id) }));
-      const items = (itemRes.data || []).map(item => ({
+      const cats = catRes.categories || [];
+      const groups = groupRes.groups || [];
+      const items = (itemRes.items || []).map(item => ({
         ...item,
         category_name: cats.find(c => c.id === item.category_id)?.name,
         modifier_group_ids: item.modifier_group_ids || [],
@@ -488,12 +489,10 @@ export default function MenuBuilder() {
         modifier_group_ids: formData.modifier_group_ids || [],
       };
       if (editingItem) {
-        const { error } = await supabase.from('menu_items').update(payload).eq('id', editingItem.id);
-        if (error) throw error;
+        await updateMenuItem(shopId, editingItem.id, payload);
         toast.success('Item updated!');
       } else {
-        const { error } = await supabase.from('menu_items').insert([{ ...payload, shop_id: shopId, is_active: true }]);
-        if (error) throw error;
+        await createMenuItem(shopId, payload);
         toast.success('Item added!');
       }
       setShowModal(false);
@@ -507,8 +506,7 @@ export default function MenuBuilder() {
   const handleDelete = async (item) => {
     if (!confirm(`Delete "${item.name}"?`)) return;
     try {
-      const { error } = await supabase.from('menu_items').update({ is_active: false }).eq('id', item.id);
-      if (error) throw error;
+      await deleteMenuItem(shopId, item.id);
       toast.success('Item deleted');
       loadData();
     } catch (err) {
@@ -518,8 +516,7 @@ export default function MenuBuilder() {
 
   const handleToggle = async (item) => {
     try {
-      const { error } = await supabase.from('menu_items').update({ is_available: !item.is_available }).eq('id', item.id);
-      if (error) throw error;
+      await updateMenuItem(shopId, item.id, { is_available: !item.is_available });
       toast.success(item.is_available ? 'Item hidden' : 'Item now visible');
       loadData();
     } catch (err) {
@@ -529,8 +526,7 @@ export default function MenuBuilder() {
 
   const handleToggleStock = async (item) => {
     try {
-      const { error } = await supabase.from('menu_items').update({ is_out_of_stock: !item.is_out_of_stock }).eq('id', item.id);
-      if (error) throw error;
+      await updateMenuItem(shopId, item.id, { is_out_of_stock: !item.is_out_of_stock });
       toast.success(item.is_out_of_stock ? 'Marked in stock' : 'Marked out of stock');
       loadData();
     } catch (err) {

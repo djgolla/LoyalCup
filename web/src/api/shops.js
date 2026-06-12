@@ -127,6 +127,19 @@ export async function uploadShopBanner(shopId, file, token) {
   return parseResponse(response);
 }
 
+export async function uploadShopAsset(shopId, file, token) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${API_BASE}/shops/${shopId}/asset`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  return parseResponse(response);
+}
+
 export async function getShopAnalytics(shopId, token) {
   const response = await fetch(`${API_BASE}/shops/${shopId}/analytics`, {
     headers: authHeaders(token),

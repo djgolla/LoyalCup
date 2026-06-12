@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import supabase from '../../lib/supabase';
+import { getShopOrders } from '../../api/orders';
 import { toast } from 'sonner';
 
 // ─── Status config (display only — no workflow) ─────────────────────────────
@@ -279,21 +280,9 @@ export default function Orders() {
   const loadOrders = useCallback(async () => {
     if (!shopId) return;
     try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          order_items (
-            id, quantity, unit_price, total_price, customizations,
-            menu_items (name, image_url)
-          )
-        `)
-        .eq('shop_id', shopId)
-        .in('status', VISIBLE_STATUSES)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setOrders(data || []);
+      const { data: { session } } = await supabase.auth.getSession();
+      const data = await getShopOrders(shopId, session?.access_token);
+      setOrders((data.orders || []).filter(order => VISIBLE_STATUSES.includes(order.status)));
     } catch (err) {
       console.error('Failed to load orders:', err);
       toast.error('Failed to load orders');
@@ -306,23 +295,8 @@ export default function Orders() {
     if (!shopId) return;
     loadOrders();
 
-    const channel = supabase
-      .channel(`shop-orders-${shopId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'orders', filter: `shop_id=eq.${shopId}` },
-        (payload) => {
-          if (VISIBLE_STATUSES.includes(payload.new?.status)) {
-            loadOrders();
-            if (payload.eventType === 'INSERT') {
-              toast.success('🔔 New mobile order — check your printer!', { duration: 6000 });
-            }
-          }
-        }
-      )
-      .subscribe();
-
-    return () => supabase.removeChannel(channel);
+    const interval = window.setInterval(loadOrders, 15000);
+    return () => window.clearInterval(interval);
   }, [shopId, loadOrders]);
 
   const filteredOrders = orders.filter(order => {

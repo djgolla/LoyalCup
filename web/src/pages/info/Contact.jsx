@@ -6,8 +6,8 @@ import { useAuth } from '../../context/AuthContext';
 const API_URL = import.meta.env.VITE_API_URL || 'https://api.loyalcupapp.com';
 
 export default function Contact() {
-  const { user } = useAuth();
-  const role = user?.user_metadata?.role;
+  const { user, getRole } = useAuth();
+  const role = user ? getRole() : null;
   const isShopOwner = role === 'shop_owner';
 
   const [formData, setFormData] = useState({

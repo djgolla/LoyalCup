@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
-import { supabase } from '../lib/supabase';
+import { apiClient } from './apiClient';
 
 // How notifications appear when app is in foreground
 Notifications.setNotificationHandler({
@@ -53,16 +53,8 @@ export async function registerForPushNotifications() {
     const token = tokenData.data;
     console.log('[Push] Expo push token:', token);
 
-    // Save to Supabase profiles table
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ push_token: token })
-        .eq('id', user.id);
-      if (error) console.warn('[Push] Failed to save token:', error.message);
-      else console.log('[Push] Token saved to profile');
-    }
+    await apiClient.put('/api/v1/users/profile', { push_token: token });
+    console.log('[Push] Token saved to profile');
 
     return token;
   } catch (err) {
@@ -76,10 +68,7 @@ export async function registerForPushNotifications() {
  */
 export async function clearPushToken() {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await supabase.from('profiles').update({ push_token: null }).eq('id', user.id);
-    }
+    await apiClient.put('/api/v1/users/profile', { push_token: null });
   } catch (err) {
     console.warn('[Push] Failed to clear token:', err);
   }
