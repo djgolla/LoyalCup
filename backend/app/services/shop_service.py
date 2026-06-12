@@ -20,6 +20,17 @@ PUBLIC_SHOP_FIELDS = (
     "created_at"
 )
 
+COMPAT_SHOP_FIELDS = (
+    "id, name, description, logo_url, banner_url, address, city, state, "
+    "lat, lng, phone, hours, status, featured, average_rating, review_count, "
+    "created_at"
+)
+
+LEGACY_SHOP_FIELDS = (
+    "id, name, description, logo_url, banner_url, address, city, state, "
+    "lat, lng, phone, hours, created_at"
+)
+
 OWNER_SHOP_FIELDS = (
     "id, owner_id, name, description, logo_url, banner_url, address, city, state, "
     "lat, lng, phone, hours, loyalty_points_per_dollar, participates_in_global_loyalty, "
@@ -28,14 +39,33 @@ OWNER_SHOP_FIELDS = (
     "mobile_ordering_enabled, subscription_status, avg_prep_time_minutes"
 )
 
+COMPAT_OWNER_SHOP_FIELDS = (
+    "id, owner_id, name, description, logo_url, banner_url, address, city, state, "
+    "lat, lng, phone, hours, loyalty_points_per_dollar, participates_in_global_loyalty, "
+    "created_at, status, featured, business_license, average_rating, review_count"
+)
+
+LEGACY_OWNER_SHOP_FIELDS = (
+    "id, owner_id, name, description, logo_url, banner_url, address, city, state, "
+    "lat, lng, phone, hours, loyalty_points_per_dollar, participates_in_global_loyalty, "
+    "created_at"
+)
+
 PUBLIC_CATEGORY_FIELDS = (
     "id, shop_id, name, display_order, description, pos_id, pos_source, is_active"
 )
+
+LEGACY_CATEGORY_FIELDS = "id, shop_id, name, display_order"
 
 PUBLIC_MENU_ITEM_FIELDS = (
     "id, shop_id, category_id, name, description, base_price, image_url, "
     "is_available, display_order, addons, sizes, pos_id, pos_source, "
     "modifier_group_ids, is_active, is_out_of_stock"
+)
+
+LEGACY_MENU_ITEM_FIELDS = (
+    "id, shop_id, category_id, name, description, base_price, image_url, "
+    "is_available, display_order, created_at"
 )
 
 PUBLIC_MODIFIER_GROUP_FIELDS = (
@@ -84,7 +114,110 @@ class ShopService:
             "subscription_price_id",
             "subscription_status",
         }
-        return {k: v for k, v in (row or {}).items() if k not in blocked}
+        cleaned = {k: v for k, v in (row or {}).items() if k not in blocked}
+        if "avg_rating" not in cleaned:
+            cleaned["avg_rating"] = cleaned.get("average_rating")
+        cleaned.setdefault("review_count", 0)
+        cleaned.setdefault("status", "active")
+        cleaned.setdefault("featured", False)
+        cleaned.setdefault("mobile_ordering_enabled", True)
+        cleaned.setdefault("avg_prep_time_minutes", None)
+        cleaned.pop("average_rating", None)
+        return cleaned
+
+    def _normalize_category_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        category = dict(row or {})
+        category.setdefault("description", None)
+        category.setdefault("pos_id", None)
+        category.setdefault("pos_source", None)
+        category.setdefault("is_active", True)
+        category.setdefault("display_order", 0)
+        return category
+
+    def _normalize_menu_item_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        item = dict(row or {})
+        is_available = item.get("is_available")
+        if is_available is None:
+            is_available = True
+            item["is_available"] = True
+        item.setdefault("addons", [])
+        item.setdefault("sizes", [])
+        item.setdefault("pos_id", None)
+        item.setdefault("pos_source", None)
+        item.setdefault("modifier_group_ids", [])
+        item.setdefault("is_active", True)
+        item.setdefault("is_out_of_stock", not bool(is_available))
+        item.setdefault("display_order", 0)
+        return item
+
+    def _normalize_modifier_group_row(
+        self,
+        group: Dict[str, Any],
+        options: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        normalized = dict(group or {})
+        normalized.setdefault("min_selections", 0)
+        normalized.setdefault("max_selections", None)
+        normalized.setdefault("pos_id", None)
+        normalized.setdefault("pos_source", None)
+        normalized.setdefault("is_active", True)
+
+        group_options = [
+            {
+                "price_adjustment": 0,
+                "pos_id": None,
+                "pos_source": None,
+                "is_active": True,
+                **option,
+            }
+            for option in options
+            if option.get("modifier_group_id") == normalized.get("id")
+            and option.get("is_active") is not False
+        ]
+        normalized["options"] = group_options
+        normalized["modifier_options"] = group_options
+        return normalized
+
+    def _template_to_modifier_group(self, template: Dict[str, Any]) -> Dict[str, Any]:
+        options = []
+        for index, option in enumerate(template.get("options") or []):
+            if not isinstance(option, dict):
+                continue
+            options.append({
+                "id": option.get("id") or f"{template.get('id')}-{index}",
+                "shop_id": template.get("shop_id"),
+                "modifier_group_id": template.get("id"),
+                "name": option.get("name"),
+                "price_adjustment": option.get("price") or option.get("price_adjustment") or 0,
+                "is_active": True,
+            })
+
+        max_selections = 1 if template.get("type") == "single_select" else None
+        group = {
+            "id": template.get("id"),
+            "shop_id": template.get("shop_id"),
+            "name": template.get("name"),
+            "min_selections": 1 if template.get("is_required") else 0,
+            "max_selections": max_selections,
+            "pos_id": None,
+            "pos_source": "customization_template",
+            "is_active": True,
+            "applies_to": template.get("applies_to"),
+        }
+        return self._normalize_modifier_group_row(group, options)
+
+    def _list_template_modifier_groups(self, shop_id: str) -> List[Dict[str, Any]]:
+        template_resp = (
+            self._client()
+            .table("customization_templates")
+            .select(PUBLIC_CUSTOMIZATION_TEMPLATE_FIELDS)
+            .eq("shop_id", shop_id)
+            .execute()
+        )
+        return [
+            self._template_to_modifier_group(template)
+            for template in (template_resp.data or [])
+        ]
     
     # ============================================================================
     # SHOP OPERATIONS
@@ -124,7 +257,35 @@ class ShopService:
 
         except Exception as e:
             print(f"Error listing shops: {e}")
-            return []
+            try:
+                select_fields = COMPAT_SHOP_FIELDS if active_only else COMPAT_OWNER_SHOP_FIELDS
+                query = self._client().table("shops").select(select_fields)
+
+                if active_only:
+                    query = query.eq("status", "active")
+                if city:
+                    query = query.ilike("city", f"%{city}%")
+                if search:
+                    safe_search = search.replace(",", " ").strip()
+                    query = query.or_(f"name.ilike.%{safe_search}%,description.ilike.%{safe_search}%")
+
+                response = query.order("created_at", desc=True).execute()
+                rows = response.data or []
+                return [self._safe_shop_row(row) for row in rows] if active_only else rows
+            except Exception as compat_error:
+                print(f"Compat error listing shops: {compat_error}")
+                try:
+                    query = self._client().table("shops").select(LEGACY_SHOP_FIELDS)
+                    if city:
+                        query = query.ilike("city", f"%{city}%")
+                    if search:
+                        safe_search = search.replace(",", " ").strip()
+                        query = query.or_(f"name.ilike.%{safe_search}%,description.ilike.%{safe_search}%")
+                    response = query.order("created_at", desc=True).execute()
+                    return [self._safe_shop_row(row) for row in (response.data or [])]
+                except Exception as legacy_error:
+                    print(f"Legacy error listing shops: {legacy_error}")
+                    return []
     
     async def get_shop_by_id(self, shop_id: str) -> Optional[Dict[str, Any]]:
         """Get safe public shop details by ID."""
@@ -144,7 +305,32 @@ class ShopService:
             return self._safe_shop_row(response.data)
         except Exception as e:
             print(f"Error getting shop {shop_id}: {e}")
-            return None
+            try:
+                response = (
+                    self._client()
+                    .table("shops")
+                    .select(COMPAT_SHOP_FIELDS)
+                    .eq("id", shop_id)
+                    .eq("status", "active")
+                    .single()
+                    .execute()
+                )
+                return self._safe_shop_row(response.data)
+            except Exception as compat_error:
+                print(f"Compat error getting shop {shop_id}: {compat_error}")
+                try:
+                    response = (
+                        self._client()
+                        .table("shops")
+                        .select(LEGACY_SHOP_FIELDS)
+                        .eq("id", shop_id)
+                        .single()
+                        .execute()
+                    )
+                    return self._safe_shop_row(response.data)
+                except Exception as legacy_error:
+                    print(f"Legacy error getting shop {shop_id}: {legacy_error}")
+                    return None
     
     async def get_owner_shop_by_id(self, shop_id: str, owner_id: str) -> Optional[Dict[str, Any]]:
         """Get fuller shop details for the owning shop owner only."""
@@ -164,7 +350,37 @@ class ShopService:
             return response.data
         except Exception as e:
             print(f"Error getting owner shop {shop_id}: {e}")
-            return None
+            try:
+                response = (
+                    self._client()
+                    .table("shops")
+                    .select(COMPAT_OWNER_SHOP_FIELDS)
+                    .eq("id", shop_id)
+                    .eq("owner_id", owner_id)
+                    .single()
+                    .execute()
+                )
+                data = response.data or {}
+                if "avg_rating" not in data:
+                    data["avg_rating"] = data.get("average_rating")
+                data.pop("average_rating", None)
+                return data
+            except Exception as compat_error:
+                print(f"Compat error getting owner shop {shop_id}: {compat_error}")
+                try:
+                    response = (
+                        self._client()
+                        .table("shops")
+                        .select(LEGACY_OWNER_SHOP_FIELDS)
+                        .eq("id", shop_id)
+                        .eq("owner_id", owner_id)
+                        .single()
+                        .execute()
+                    )
+                    return response.data
+                except Exception as legacy_error:
+                    print(f"Legacy error getting owner shop {shop_id}: {legacy_error}")
+                    return None
     
     async def create_shop(self, shop_data: Dict[str, Any], owner_id: str) -> Dict[str, Any]:
         """Create a new shop"""
@@ -521,9 +737,25 @@ class ShopService:
                 .order("display_order")
                 .execute()
             )
-            return response.data or []
+            return [self._normalize_category_row(row) for row in (response.data or [])]
         except Exception as e:
             print(f"Error listing categories for shop {shop_id}: {e}")
+            for table_name in ("categories", "menu_categories"):
+                try:
+                    response = (
+                        self._client()
+                        .table(table_name)
+                        .select(LEGACY_CATEGORY_FIELDS)
+                        .eq("shop_id", shop_id)
+                        .order("display_order")
+                        .execute()
+                    )
+                    return [
+                        self._normalize_category_row(row)
+                        for row in (response.data or [])
+                    ]
+                except Exception as compat_error:
+                    print(f"Compat error listing {table_name} for shop {shop_id}: {compat_error}")
             return []
     
     async def create_category(
@@ -556,7 +788,20 @@ class ShopService:
             return response.data[0] if response.data else {}
         except Exception as e:
             print(f"Error creating category: {e}")
-            raise
+            try:
+                response = (
+                    self._client()
+                    .table("menu_categories")
+                    .insert({
+                        "shop_id": shop_id,
+                        "name": name,
+                        "display_order": display_order,
+                    })
+                    .execute()
+                )
+                return self._normalize_category_row(response.data[0]) if response.data else {}
+            except Exception:
+                raise e
     
     async def update_category(
         self, 
@@ -578,7 +823,22 @@ class ShopService:
             return response.data[0] if response.data else {}
         except Exception as e:
             print(f"Error updating category {category_id}: {e}")
-            raise
+            try:
+                legacy_data = {
+                    key: value
+                    for key, value in data.items()
+                    if key in {"name", "display_order"}
+                }
+                response = (
+                    self._client()
+                    .table("menu_categories")
+                    .update(legacy_data)
+                    .eq("id", category_id)
+                    .execute()
+                )
+                return self._normalize_category_row(response.data[0]) if response.data else {}
+            except Exception:
+                raise e
     
     async def delete_category(self, category_id: str) -> bool:
         """Soft delete menu category"""
@@ -596,7 +856,18 @@ class ShopService:
             return True
         except Exception as e:
             print(f"Error deleting category {category_id}: {e}")
-            return False
+            try:
+                (
+                    self._client()
+                    .table("menu_categories")
+                    .delete()
+                    .eq("id", category_id)
+                    .execute()
+                )
+                return True
+            except Exception as compat_error:
+                print(f"Compat error deleting category {category_id}: {compat_error}")
+                return False
     
     async def reorder_categories(
         self, 
@@ -624,7 +895,23 @@ class ShopService:
             return True
         except Exception as e:
             print(f"Error reordering categories: {e}")
-            return False
+            try:
+                for item in category_orders:
+                    category_id = item.get("category_id") or item.get("id")
+                    if not category_id:
+                        continue
+                    (
+                        self._client()
+                        .table("menu_categories")
+                        .update({"display_order": item["display_order"]})
+                        .eq("id", category_id)
+                        .eq("shop_id", shop_id)
+                        .execute()
+                    )
+                return True
+            except Exception as compat_error:
+                print(f"Compat error reordering categories: {compat_error}")
+                return False
     
     # ============================================================================
     # MENU ITEM OPERATIONS
@@ -652,10 +939,28 @@ class ShopService:
                 query = query.eq("category_id", category_id)
             
             response = query.order("display_order").execute()
-            return response.data or []
+            return [self._normalize_menu_item_row(row) for row in (response.data or [])]
         except Exception as e:
             print(f"Error listing menu items for shop {shop_id}: {e}")
-            return []
+            try:
+                query = (
+                    self._client()
+                    .table("menu_items")
+                    .select(LEGACY_MENU_ITEM_FIELDS)
+                    .eq("shop_id", shop_id)
+                )
+
+                if category_id:
+                    query = query.eq("category_id", category_id)
+
+                response = query.order("display_order").execute()
+                return [
+                    self._normalize_menu_item_row(row)
+                    for row in (response.data or [])
+                ]
+            except Exception as compat_error:
+                print(f"Compat error listing menu items for shop {shop_id}: {compat_error}")
+                return []
 
     async def list_modifier_groups(self, shop_id: str) -> List[Dict[str, Any]]:
         """Get active modifier groups with their active options."""
@@ -683,25 +988,47 @@ class ShopService:
             )
 
             options = option_resp.data or []
-            return [
-                {
-                    **group,
-                    "options": [
-                        option
-                        for option in options
-                        if option.get("modifier_group_id") == group.get("id")
-                    ],
-                    "modifier_options": [
-                        option
-                        for option in options
-                        if option.get("modifier_group_id") == group.get("id")
-                    ],
-                }
+            groups = [
+                self._normalize_modifier_group_row(group, options)
                 for group in (group_resp.data or [])
             ]
+            return groups or self._list_template_modifier_groups(shop_id)
         except Exception as e:
             print(f"Error listing modifier groups for shop {shop_id}: {e}")
-            return []
+            try:
+                group_resp = (
+                    self._client()
+                    .table("modifier_groups")
+                    .select("*")
+                    .eq("shop_id", shop_id)
+                    .execute()
+                )
+                option_resp = (
+                    self._client()
+                    .table("modifier_options")
+                    .select("*")
+                    .eq("shop_id", shop_id)
+                    .execute()
+                )
+                options = option_resp.data or []
+                groups = [
+                    group
+                    for group in (group_resp.data or [])
+                    if group.get("is_active") is not False
+                ]
+                groups.sort(key=lambda group: group.get("created_at") or "")
+                normalized_groups = [
+                    self._normalize_modifier_group_row(group, options)
+                    for group in groups
+                ]
+                return normalized_groups or self._list_template_modifier_groups(shop_id)
+            except Exception as compat_error:
+                print(f"Compat error listing modifier groups for shop {shop_id}: {compat_error}")
+                try:
+                    return self._list_template_modifier_groups(shop_id)
+                except Exception as template_error:
+                    print(f"Template fallback error listing modifiers for shop {shop_id}: {template_error}")
+                    return []
 
     async def create_modifier_group(self, shop_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
         if not self.db:
@@ -805,10 +1132,22 @@ class ShopService:
                 .single()
                 .execute()
             )
-            return response.data
+            return self._normalize_menu_item_row(response.data)
         except Exception as e:
             print(f"Error getting menu item {item_id}: {e}")
-            return None
+            try:
+                response = (
+                    self._client()
+                    .table("menu_items")
+                    .select(LEGACY_MENU_ITEM_FIELDS)
+                    .eq("id", item_id)
+                    .single()
+                    .execute()
+                )
+                return self._normalize_menu_item_row(response.data)
+            except Exception as compat_error:
+                print(f"Compat error getting menu item {item_id}: {compat_error}")
+                return None
     
     async def create_menu_item(
         self, 
@@ -832,7 +1171,30 @@ class ShopService:
             return response.data[0] if response.data else {}
         except Exception as e:
             print(f"Error creating menu item: {e}")
-            raise
+            try:
+                legacy_data = {
+                    key: value
+                    for key, value in {**item_data, "shop_id": shop_id}.items()
+                    if key in {
+                        "shop_id",
+                        "category_id",
+                        "name",
+                        "description",
+                        "base_price",
+                        "image_url",
+                        "is_available",
+                        "display_order",
+                    }
+                }
+                response = (
+                    self._client()
+                    .table("menu_items")
+                    .insert(legacy_data)
+                    .execute()
+                )
+                return self._normalize_menu_item_row(response.data[0]) if response.data else {}
+            except Exception:
+                raise e
     
     async def update_menu_item(
         self, 
@@ -854,7 +1216,30 @@ class ShopService:
             return response.data[0] if response.data else {}
         except Exception as e:
             print(f"Error updating menu item {item_id}: {e}")
-            raise
+            try:
+                legacy_data = {
+                    key: value
+                    for key, value in item_data.items()
+                    if key in {
+                        "category_id",
+                        "name",
+                        "description",
+                        "base_price",
+                        "image_url",
+                        "is_available",
+                        "display_order",
+                    }
+                }
+                response = (
+                    self._client()
+                    .table("menu_items")
+                    .update(legacy_data)
+                    .eq("id", item_id)
+                    .execute()
+                )
+                return self._normalize_menu_item_row(response.data[0]) if response.data else {}
+            except Exception:
+                raise e
     
     async def delete_menu_item(self, item_id: str) -> bool:
         """Soft delete menu item"""
@@ -872,7 +1257,18 @@ class ShopService:
             return True
         except Exception as e:
             print(f"Error deleting menu item {item_id}: {e}")
-            return False
+            try:
+                (
+                    self._client()
+                    .table("menu_items")
+                    .update({"is_available": False})
+                    .eq("id", item_id)
+                    .execute()
+                )
+                return True
+            except Exception as compat_error:
+                print(f"Compat error deleting menu item {item_id}: {compat_error}")
+                return False
     
     async def toggle_item_availability(
         self, 

@@ -142,51 +142,79 @@ async def sync_square_catalog(
         preferred_pos_id = cat_info["preferred_pos_id"]
         all_pos_ids = cat_info["pos_ids"]
 
-        existing_by_name = (
-            client.table("categories")
-            .select("id")
-            .eq("shop_id", shop_id)
-            .eq("is_active", True)
-            .ilike("name", name)
-            .limit(1)
-            .execute()
-        )
-
-        if existing_by_name.data:
-            lc_id = existing_by_name.data[0]["id"]
-            client.table("categories").update({
-                "name": preferred_pos_id and name or name,
-                "pos_id": preferred_pos_id,
-                "pos_source": source,
-                "is_active": True,
-            }).eq("id", lc_id).execute()
-        else:
-            existing_by_pos = (
+        try:
+            existing_by_name = (
                 client.table("categories")
                 .select("id")
                 .eq("shop_id", shop_id)
-                .eq("pos_id", preferred_pos_id)
+                .eq("is_active", True)
+                .ilike("name", name)
                 .limit(1)
                 .execute()
             )
 
-            if existing_by_pos.data:
-                lc_id = existing_by_pos.data[0]["id"]
+            if existing_by_name.data:
+                lc_id = existing_by_name.data[0]["id"]
                 client.table("categories").update({
-                    "name": name,
+                    "name": preferred_pos_id and name or name,
+                    "pos_id": preferred_pos_id,
                     "pos_source": source,
                     "is_active": True,
                 }).eq("id", lc_id).execute()
             else:
+                existing_by_pos = (
+                    client.table("categories")
+                    .select("id")
+                    .eq("shop_id", shop_id)
+                    .eq("pos_id", preferred_pos_id)
+                    .limit(1)
+                    .execute()
+                )
+
+                if existing_by_pos.data:
+                    lc_id = existing_by_pos.data[0]["id"]
+                    client.table("categories").update({
+                        "name": name,
+                        "pos_source": source,
+                        "is_active": True,
+                    }).eq("id", lc_id).execute()
+                else:
+                    lc_id = str(uuid.uuid4())
+                    client.table("categories").insert({
+                        "id": lc_id,
+                        "shop_id": shop_id,
+                        "name": name,
+                        "pos_id": preferred_pos_id,
+                        "pos_source": source,
+                        "display_order": categories_synced,
+                        "is_active": True,
+                    }).execute()
+        except Exception as category_error:
+            logger.warning(
+                f"[sync] categories table unavailable for {name}; "
+                f"falling back to menu_categories: {category_error}"
+            )
+            existing_by_name = (
+                client.table("menu_categories")
+                .select("id")
+                .eq("shop_id", shop_id)
+                .ilike("name", name)
+                .limit(1)
+                .execute()
+            )
+            if existing_by_name.data:
+                lc_id = existing_by_name.data[0]["id"]
+                client.table("menu_categories").update({
+                    "name": name,
+                    "display_order": categories_synced,
+                }).eq("id", lc_id).execute()
+            else:
                 lc_id = str(uuid.uuid4())
-                client.table("categories").insert({
+                client.table("menu_categories").insert({
                     "id": lc_id,
                     "shop_id": shop_id,
                     "name": name,
-                    "pos_id": preferred_pos_id,
-                    "pos_source": source,
                     "display_order": categories_synced,
-                    "is_active": True,
                 }).execute()
 
         category_name_to_lc_id[normalized_name] = lc_id
