@@ -56,6 +56,9 @@ PUBLIC_CATEGORY_FIELDS = (
 )
 
 LEGACY_CATEGORY_FIELDS = "id, shop_id, name, display_order"
+MENU_CATEGORY_FIELDS = (
+    "id, shop_id, name, sort_order, description, pos_id, pos_source, is_active"
+)
 
 PUBLIC_MENU_ITEM_FIELDS = (
     "id, shop_id, category_id, name, description, base_price, image_url, "
@@ -97,7 +100,8 @@ class ShopService:
 
     def _client(self):
         if not self.db:
-            return None
+            from app.database import get_supabase
+            self.db = get_supabase()
         return self.db.get_service_client()
 
     def _safe_shop_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
@@ -127,6 +131,9 @@ class ShopService:
 
     def _normalize_category_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
         category = dict(row or {})
+        if "display_order" not in category:
+            category["display_order"] = category.get("sort_order", 0)
+        category.pop("sort_order", None)
         category.setdefault("description", None)
         category.setdefault("pos_id", None)
         category.setdefault("pos_source", None)
@@ -740,14 +747,18 @@ class ShopService:
             return [self._normalize_category_row(row) for row in (response.data or [])]
         except Exception as e:
             print(f"Error listing categories for shop {shop_id}: {e}")
-            for table_name in ("categories", "menu_categories"):
+            category_sources = (
+                ("categories", LEGACY_CATEGORY_FIELDS, "display_order"),
+                ("menu_categories", MENU_CATEGORY_FIELDS, "sort_order"),
+            )
+            for table_name, fields, order_column in category_sources:
                 try:
                     response = (
                         self._client()
                         .table(table_name)
-                        .select(LEGACY_CATEGORY_FIELDS)
+                        .select(fields)
                         .eq("shop_id", shop_id)
-                        .order("display_order")
+                        .order(order_column)
                         .execute()
                     )
                     return [
@@ -795,7 +806,7 @@ class ShopService:
                     .insert({
                         "shop_id": shop_id,
                         "name": name,
-                        "display_order": display_order,
+                        "sort_order": display_order,
                     })
                     .execute()
                 )
@@ -825,9 +836,9 @@ class ShopService:
             print(f"Error updating category {category_id}: {e}")
             try:
                 legacy_data = {
-                    key: value
+                    ("sort_order" if key == "display_order" else key): value
                     for key, value in data.items()
-                    if key in {"name", "display_order"}
+                    if key in {"name", "display_order", "description", "is_active"}
                 }
                 response = (
                     self._client()
@@ -903,7 +914,7 @@ class ShopService:
                     (
                         self._client()
                         .table("menu_categories")
-                        .update({"display_order": item["display_order"]})
+                        .update({"sort_order": item["display_order"]})
                         .eq("id", category_id)
                         .eq("shop_id", shop_id)
                         .execute()
@@ -1499,4 +1510,8 @@ class ShopService:
 
 
 # Global service instance
-shop_service = ShopService()
+try:
+    from app.database import get_supabase
+    shop_service = ShopService(get_supabase())
+except Exception:
+    shop_service = ShopService()

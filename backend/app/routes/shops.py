@@ -140,6 +140,11 @@ async def get_shop(shop_id: str):
     offers = await shop_service.list_shop_offers(shop_id)
     return {
         "shop": shop,
+        "categories": categories,
+        "items": items,
+        "modifierGroups": modifier_groups,
+        "modifier_groups": modifier_groups,
+        "offers": offers,
         "menu": {
             "categories": categories,
             "items": items,

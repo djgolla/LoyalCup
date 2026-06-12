@@ -1,5 +1,5 @@
 from typing import List
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, ValidationError, field_validator
 
 
@@ -12,6 +12,13 @@ PLACEHOLDER_VALUES = {
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
     supabase_url: str = Field(default="https://placeholder.supabase.co")
     supabase_anon_key: str = Field(default="placeholder-anon-key")
     supabase_service_role_key: str = Field(default="placeholder-service-key")
@@ -62,12 +69,6 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
         return v
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-
 
 try:
     settings = Settings()

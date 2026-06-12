@@ -329,7 +329,7 @@ async def upload_item_image(
 @router.get("/{shop_id}/modifier-groups")
 async def get_modifier_groups(shop_id: str):
     groups = await shop_service.list_modifier_groups(shop_id)
-    return {"groups": groups}
+    return {"groups": groups, "modifierGroups": groups, "modifier_groups": groups}
 
 
 @router.post("/{shop_id}/modifier-groups")

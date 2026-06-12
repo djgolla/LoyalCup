@@ -206,7 +206,10 @@ async def sync_square_catalog(
                 lc_id = existing_by_name.data[0]["id"]
                 client.table("menu_categories").update({
                     "name": name,
-                    "display_order": categories_synced,
+                    "sort_order": categories_synced,
+                    "pos_category_id": preferred_pos_id,
+                    "pos_id": preferred_pos_id,
+                    "pos_source": source,
                 }).eq("id", lc_id).execute()
             else:
                 lc_id = str(uuid.uuid4())
@@ -214,7 +217,11 @@ async def sync_square_catalog(
                     "id": lc_id,
                     "shop_id": shop_id,
                     "name": name,
-                    "display_order": categories_synced,
+                    "sort_order": categories_synced,
+                    "pos_category_id": preferred_pos_id,
+                    "pos_id": preferred_pos_id,
+                    "pos_source": source,
+                    "is_active": True,
                 }).execute()
 
         category_name_to_lc_id[normalized_name] = lc_id
