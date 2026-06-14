@@ -39,6 +39,59 @@ const isOpenNow = (hours) => {
   } catch { return null; }
 };
 
+const getNextOpenText = (hours) => {
+  if (!hours) return null;
+
+  try {
+    const now = new Date();
+
+    for (let offset = 0; offset < 8; offset += 1) {
+      const day = new Date(now);
+      day.setDate(now.getDate() + offset);
+
+      const idx = day.getDay();
+      const h = hours[DAYS_FULL[idx]] || hours[DAYS_SHORT[idx]];
+
+      if (!h || h.closed || !h.open) continue;
+
+      const [openHour, openMinute] = h.open.split(':').map(Number);
+      const openDate = new Date(day);
+      openDate.setHours(openHour || 0, openMinute || 0, 0, 0);
+
+      if (openDate > now) {
+        return openDate.toLocaleTimeString([], {
+          hour: 'numeric',
+          minute: '2-digit',
+        });
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+};
+
+const getClosedMessage = (shop) => {
+  if (!shop) return 'This shop is currently closed. Please check back later.';
+
+  if (shop.mobile_ordering_enabled === false) {
+    return `${shop.name || 'This shop'} is not currently accepting mobile orders.`;
+  }
+
+  const nextOpen = getNextOpenText(shop.hours);
+
+  if (nextOpen) {
+    return `${shop.name || 'This shop'} is currently closed. Orders open again at ${nextOpen}.`;
+  }
+
+  return `${shop.name || 'This shop'} is currently closed. Please check back later.`;
+};
+
+const showClosedAlert = (shop) => {
+  Alert.alert('Ordering Unavailable', getClosedMessage(shop));
+};
+
 const isSvgUrl = (url) => typeof url === 'string' && url.split('?')[0].toLowerCase().endsWith('.svg');
 
 const SvgImage = ({ uri, style, resizeMode = 'cover' }) => {
@@ -179,6 +232,9 @@ export default function ShopDetailScreen() {
   const [selectedMods, setSelectedMods] = useState({});
   const [quantity,     setQuantity]     = useState(1);
 
+  const openStatus = isOpenNow(shop?.hours);
+  const orderingUnavailable = shop?.mobile_ordering_enabled === false;
+
   useEffect(() => {
     if (!hasValidShopId) {
       console.warn('[ShopDetail] Missing/invalid shop id, skipping fetch:', id);
@@ -205,12 +261,12 @@ export default function ShopDetailScreen() {
       console.log('[ShopDetail] Loading shop data for ID:', shopId);
       const data = await shopService.getShopWithMenu(shopId);
       console.log('[ShopDetail] Shop loaded:', data.shop?.name);
-
       setShop(data.shop || null);
       setCategories(data.categories || []);
       setMenuItems(data.items || []);
       setModifierGroups(data.modifierGroups || []);
       setOffers(data.offers || []);
+
     } catch (e) {
       console.error('[ShopDetail] loadShopData FATAL error:', e);
       Alert.alert('Error', 'Failed to load shop. Please try again.');
@@ -227,6 +283,11 @@ export default function ShopDetailScreen() {
   };
 
   const openModifierModal = (item) => {
+    if (openStatus === false || orderingUnavailable) {
+      showClosedAlert(shop);
+      return;
+    }
+
     setSelectedItem(item);
     setSelectedMods({});
     setQuantity(1);
@@ -249,11 +310,19 @@ export default function ShopDetailScreen() {
 
   const handleAddToCart = () => {
     if (!selectedItem) return;
+
+    if (openStatus === false || orderingUnavailable) {
+      setModalVisible(false);
+      showClosedAlert(shop);
+      return;
+    }
+
     const customizations = Object.values(selectedMods).flat();
     const extraPrice     = customizations.reduce((s, c) => s + (parseFloat(c.price_adjustment) || 0), 0);
     const unitPrice      = parseFloat(selectedItem.base_price) + extraPrice;
+
     addItem({
-      id:             `${shopId}:${selectedItem.id}`,      
+      id:             `${shopId}:${selectedItem.id}`,
       name:           selectedItem.name,
       price:          unitPrice,
       quantity,
@@ -262,6 +331,7 @@ export default function ShopDetailScreen() {
       image_url:      selectedItem.image_url,
       customizations,
     });
+
     setModalVisible(false);
   };
 
@@ -292,7 +362,6 @@ export default function ShopDetailScreen() {
   const modItemGroups    = selectedItem ? getItemModGroups(selectedItem) : [];
   const modsExtraPrice   = Object.values(selectedMods).flat().reduce((s, c) => s + (parseFloat(c.price_adjustment) || 0), 0);
   const cartCount        = getItemCount();
-  const openStatus       = isOpenNow(shop?.hours);
   const hasBannerAndLogo = !!shop?.banner_url && !!shop?.logo_url;
 
   const renderMenuItem = (item) => (
@@ -303,7 +372,9 @@ export default function ShopDetailScreen() {
         {item.description && <Text style={styles.menuItemDesc} numberOfLines={2}>{item.description}</Text>}
         <View style={styles.menuItemFooter}>
           <Text style={styles.menuItemPrice}>${parseFloat(item.base_price).toFixed(2)}</Text>
-          <View style={styles.addButton}><Feather name="plus" size={18} color="#FFF" /></View>
+          <View style={[styles.addButton, (openStatus === false || orderingUnavailable) && styles.addButtonDisabled]}>
+            <Feather name={orderingUnavailable ? 'pause' : 'plus'} size={18} color="#FFF" />
+          </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -349,6 +420,16 @@ export default function ShopDetailScreen() {
               </Text>
             </View>
           )}
+
+          {orderingUnavailable && (
+            <View style={styles.orderingUnavailableBanner}>
+              <Feather name="pause-circle" size={16} color="#B45309" />
+              <Text style={styles.orderingUnavailableText}>
+                Ordering unavailable — this shop has paused mobile ordering temporarily.
+              </Text>
+            </View>
+          )}
+
           <Text style={styles.shopHeadline}>{shop.name}</Text>
           <ExpandableDesc text={shop.description} />
           <View style={styles.shopActions}>
@@ -566,6 +647,28 @@ const styles = StyleSheet.create({
   openChip:         { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, marginBottom: 8 },
   openDot:          { width: 7, height: 7, borderRadius: 4 },
   openChipText:     { fontSize: 12, fontWeight: '700' },
+
+  orderingUnavailableBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+    width: '100%',
+  },
+  orderingUnavailableText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#92400E',
+    lineHeight: 18,
+  },
+
   shopDesc:         { fontSize: 14, color: '#555', textAlign: 'center', lineHeight: 21 },
   shopDescToggle:   { fontSize: 13, color: '#00704A', fontWeight: '600', textAlign: 'center', marginTop: 4 },
   shopActions:      { flexDirection: 'row', gap: 10, marginTop: 2 },
@@ -600,6 +703,7 @@ const styles = StyleSheet.create({
   menuItemFooter:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   menuItemPrice:   { fontSize: 16, fontWeight: '800', color: '#00704A' },
   addButton:       { width: 32, height: 32, borderRadius: 16, backgroundColor: '#00704A', justifyContent: 'center', alignItems: 'center' },
+  addButtonDisabled: { backgroundColor: '#9CA3AF' },
   emptyMenu:       { alignItems: 'center', paddingVertical: 48 },
   emptyMenuText:   { fontSize: 15, color: '#CCC', marginTop: 12 },
 
