@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity,
-  ScrollView, Switch, Alert, Modal, TextInput,
+  ScrollView, Switch, Alert, Modal, TextInput, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -10,6 +10,9 @@ import { useAuth } from '../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { apiClient } from '../services/apiClient';
+
+const DELETE_ACCOUNT_URL = 'https://loyalcupapp.com/delete-account';
+const PRIVACY_URL = 'https://loyalcupapp.com/privacy';
 
 export default function SettingsScreen() {
   const router       = useRouter();
@@ -77,10 +80,12 @@ export default function SettingsScreen() {
     setNotificationsEnabled(value);
     saveSetting('notifications', value);
   };
+
   const handleTogglePush = (value) => {
     setPushEnabled(value);
     saveSetting('push', value);
   };
+
   const handleToggleEmail = (value) => {
     setEmailEnabled(value);
     saveSetting('email', value);
@@ -126,6 +131,34 @@ export default function SettingsScreen() {
     } finally {
       setChangingPassword(false);
     }
+  };
+
+  const handleOpenPrivacy = () => {
+    Linking.openURL(PRIVACY_URL).catch(() => {
+      Alert.alert('Privacy Policy', 'Visit loyalcupapp.com/privacy for our full privacy policy.');
+    });
+  };
+
+  const handleDeleteAccountRequest = () => {
+    Alert.alert(
+      'Delete Account',
+      'You can request deletion of your LoyalCup account and associated personal data on our secure account deletion page. This will open loyalcupapp.com/delete-account.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: () => {
+            Linking.openURL(DELETE_ACCOUNT_URL).catch(() => {
+              Alert.alert(
+                'Could Not Open Link',
+                'Please visit loyalcupapp.com/delete-account to request account deletion.'
+              );
+            });
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -205,7 +238,7 @@ export default function SettingsScreen() {
 
         <TouchableOpacity
           style={styles.settingItem}
-          onPress={() => Alert.alert('Privacy Policy', 'Visit loyalcupapp.com/privacy for our full privacy policy.')}
+          onPress={handleOpenPrivacy}
         >
           <View style={styles.settingLeft}>
             <View style={styles.iconContainer}><Feather name="shield" size={20} color="#00704A" /></View>
@@ -223,6 +256,19 @@ export default function SettingsScreen() {
             <Text style={styles.settingLabel}>Help & Support</Text>
           </View>
           <Feather name="chevron-right" size={20} color="#CCC" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.settingItem} onPress={handleDeleteAccountRequest}>
+          <View style={styles.settingLeft}>
+            <View style={[styles.iconContainer, styles.dangerIconContainer]}>
+              <Feather name="trash-2" size={20} color="#B91C1C" />
+            </View>
+            <View>
+              <Text style={[styles.settingLabel, styles.dangerLabel]}>Delete Account</Text>
+              <Text style={styles.settingSubLabel}>Request account and data deletion</Text>
+            </View>
+          </View>
+          <Feather name="external-link" size={18} color="#CCC" />
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
@@ -348,9 +394,12 @@ const styles = StyleSheet.create({
   scrollView:        { flex: 1, paddingHorizontal: 16 },
   sectionTitle:      { fontSize: 12, fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 24, marginBottom: 8 },
   settingItem:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, backgroundColor: '#FFF', borderRadius: 14, marginBottom: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
-  settingLeft:       { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  settingLeft:       { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   iconContainer:     { width: 36, height: 36, borderRadius: 18, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
+  dangerIconContainer: { backgroundColor: '#FEE2E2' },
   settingLabel:      { fontSize: 15, fontWeight: '600', color: '#000' },
+  settingSubLabel:   { fontSize: 12, color: '#777', marginTop: 2 },
+  dangerLabel:       { color: '#B91C1C' },
   modalOverlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   modalContent:      { backgroundColor: '#FFF', borderRadius: 20, padding: 24, width: '88%', maxWidth: 400 },
   modalTitle:        { fontSize: 20, fontWeight: '700', color: '#000', marginBottom: 20, textAlign: 'center' },

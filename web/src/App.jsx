@@ -34,11 +34,12 @@ import Reviews             from './pages/shop-owner/Reviews';
 import Subscribe           from './pages/shop-owner/Subscribe';
 
 // info pages
-import Contact from "./pages/info/Contact";
-import Privacy from "./pages/info/Privacy";
-import Terms   from "./pages/info/Terms";
-import About   from "./pages/info/About";
-import Pricing from "./pages/info/Pricing";
+import Contact       from "./pages/info/Contact";
+import Privacy       from "./pages/info/Privacy";
+import Terms         from "./pages/info/Terms";
+import About         from "./pages/info/About";
+import Pricing       from "./pages/info/Pricing";
+import DeleteAccount from "./pages/info/DeleteAccount";
 
 // error pages
 import NotFound from "./pages/NotFound";
@@ -83,13 +84,14 @@ export default function App() {
               <Routes>
                 {/* public pages */}
                 <Route element={<MainLayout />}>
-                  <Route path="/"        element={<RoleRedirect><Home /></RoleRedirect>} />
-                  <Route path="/download" element={<Download />} />
-                  <Route path="/contact"  element={<Contact />} />
-                  <Route path="/privacy"  element={<Privacy />} />
-                  <Route path="/terms"    element={<Terms />} />
-                  <Route path="/about"    element={<About />} />
-                  <Route path="/pricing"  element={<Pricing />} />
+                  <Route path="/"               element={<RoleRedirect><Home /></RoleRedirect>} />
+                  <Route path="/download"       element={<Download />} />
+                  <Route path="/contact"        element={<Contact />} />
+                  <Route path="/privacy"        element={<Privacy />} />
+                  <Route path="/terms"          element={<Terms />} />
+                  <Route path="/about"          element={<About />} />
+                  <Route path="/pricing"        element={<Pricing />} />
+                  <Route path="/delete-account" element={<DeleteAccount />} />
                 </Route>
 
                 {/* auth pages */}
