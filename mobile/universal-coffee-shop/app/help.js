@@ -178,7 +178,7 @@ export default function HelpScreen() {
           </View>
         </View>
 
-        <Text style={styles.version}>LoyalCup · © 2026</Text>
+        <Text style={styles.version}>LoyalCup LLC · © 2026</Text>
       </ScrollView>
     </SafeAreaView>
   );
