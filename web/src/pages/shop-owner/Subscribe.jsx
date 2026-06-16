@@ -324,7 +324,7 @@ export default function Subscribe() {
         >
           <div className="text-center mb-8">
             <div className="flex items-end justify-center gap-1 mb-1">
-              <span className="text-6xl font-black text-gray-900 dark:text-white">$150</span>
+              <span className="text-6xl font-black text-gray-900 dark:text-white">$200</span>
               <span className="text-xl text-gray-400 mb-2">/mo</span>
             </div>
             <p className="text-gray-500 dark:text-gray-400 text-sm">No setup fee · Cancel anytime</p>
@@ -363,7 +363,7 @@ export default function Subscribe() {
             ) : noSession ? (
               <><LogIn className="w-5 h-5" /> Log In to Subscribe</>
             ) : (
-              <><CreditCard className="w-5 h-5" /> Subscribe — $150/mo <ArrowRight className="w-5 h-5" /></>
+              <><CreditCard className="w-5 h-5" /> Subscribe — $200/mo <ArrowRight className="w-5 h-5" /></>
             )}
           </motion.button>
 
