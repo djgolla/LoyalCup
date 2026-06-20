@@ -1,5 +1,11 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Dimensions } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  Dimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -95,7 +101,7 @@ export default function LaunchScreen() {
               onPress={() => router.replace('/home')}
               activeOpacity={0.8}
             >
-              <Feather name="compass" size={18} color="#FFF" />
+              <Feather name="compass" size={16} color="rgba(255,255,255,0.88)" />
               <Text style={styles.guestButtonText}>Continue as Guest</Text>
             </TouchableOpacity>
           </View>
@@ -116,7 +122,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 24,
     paddingTop: 40,
-    paddingBottom: 40,
+    paddingBottom: 28,
     justifyContent: 'space-between',
   },
   logoContainer: {
@@ -207,14 +213,15 @@ const styles = StyleSheet.create({
   },
   guestButton: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    gap: 8,
+    alignItems: 'center',
+    gap: 7,
+    paddingTop: 2,
+    paddingBottom: 2,
   },
   guestButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.92)',
+    color: 'rgba(255, 255, 255, 0.88)',
   },
 });

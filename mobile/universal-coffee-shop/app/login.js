@@ -1,6 +1,6 @@
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter } from 'expo-router';
 import {
   KeyboardAvoidingView,
   ScrollView,
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 20,
+marginTop: 20,
   },
   footerText: {
     color: '#666',
@@ -126,33 +126,10 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
-  guestButton: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 28,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#00704A',
-  },
-  guestButtonText: {
-    color: '#00704A',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  guestHint: {
-    marginTop: 10,
-    textAlign: 'center',
-    color: '#888',
-    fontSize: 12,
-  },
 });
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { returnTo } = useLocalSearchParams();
   const { signIn } = useAuth();
 
   const [email, setEmail] = useState('');
@@ -162,23 +139,15 @@ export default function LoginScreen() {
   const [cooldown, setCooldown] = useState(0);
   const cooldownTimer = useRef(null);
 
-  const getDestination = () => {
-    return typeof returnTo === 'string' && returnTo.startsWith('/')
-      ? returnTo
-      : '/home';
-  };
-
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
       Alert.alert('Missing Info', 'Please enter both email and password');
       return;
     }
-
     setLoading(true);
-
     try {
       await signIn(email.trim(), password);
-      router.replace(getDestination());
+      router.replace('/home');
     } catch (error) {
       Alert.alert('Login Failed', error.message || 'Invalid email or password');
     } finally {
@@ -188,56 +157,54 @@ export default function LoginScreen() {
 
   const startCooldown = () => {
     setCooldown(30);
-
     if (cooldownTimer.current) clearInterval(cooldownTimer.current);
-
+    
     cooldownTimer.current = setInterval(() => {
       setCooldown((prev) => {
         if (prev <= 1) {
           clearInterval(cooldownTimer.current);
           return 0;
         }
-
         return prev - 1;
       });
     }, 1000);
   };
 
-  const handleForgotPassword = async () => {
-    if (!email.trim()) {
-      Alert.alert('Enter Your Email', 'Type your email address above, then tap Forgot Password.');
-      return;
-    }
+const handleForgotPassword = async () => {
+  if (!email.trim()) {
+    Alert.alert('Enter Your Email', 'Type your email address above, then tap Forgot Password.');
+    return;
+  }
 
-    if (cooldown > 0) {
-      Alert.alert('Please Wait', `Try again in ${cooldown} seconds`);
-      return;
-    }
+  if (cooldown > 0) {
+    Alert.alert('Please Wait', `Try again in ${cooldown} seconds`);
+    return;
+  }
 
-    setLoading(true);
+  setLoading(true);
 
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(
-        email.trim().toLowerCase(),
-        {
-          redirectTo: 'https://loyalcupapp.com/reset-password',
-        }
-      );
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(
+      email.trim().toLowerCase(),
+      {
+        redirectTo: 'https://loyalcupapp.com/reset-password',
+      }
+    );
 
-      if (error) throw error;
+    if (error) throw error;
 
-      Alert.alert(
-        'Check Your Email 📬',
-        'If that email exists in our system, a password reset link has been sent.'
-      );
+    Alert.alert(
+      'Check Your Email 📬',
+      'If that email exists in our system, a password reset link has been sent.'
+    );
 
-      startCooldown();
-    } catch (e) {
-      Alert.alert('Error', e.message || 'Failed to send reset email. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
+    startCooldown();
+  } catch (e) {
+    Alert.alert('Error', e.message || 'Failed to send reset email. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -258,7 +225,6 @@ export default function LoginScreen() {
             <View style={styles.iconCircle}>
               <Feather name="coffee" size={32} color="#00704A" />
             </View>
-
             <Text style={styles.title}>Welcome Back</Text>
             <Text style={styles.subtitle}>Sign in to continue</Text>
           </View>
@@ -266,10 +232,8 @@ export default function LoginScreen() {
           <View style={styles.form}>
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Email</Text>
-
               <View style={styles.inputContainer}>
                 <Feather name="mail" size={20} color="#666" />
-
                 <TextInput
                   style={styles.input}
                   placeholder="your@email.com"
@@ -286,10 +250,8 @@ export default function LoginScreen() {
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Password</Text>
-
               <View style={styles.inputContainer}>
                 <Feather name="lock" size={20} color="#666" />
-
                 <TextInput
                   style={styles.input}
                   placeholder="••••••••"
@@ -300,23 +262,20 @@ export default function LoginScreen() {
                   autoCapitalize="none"
                   editable={!loading}
                 />
-
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                   <Feather name={showPassword ? 'eye' : 'eye-off'} size={20} color="#666" />
                 </TouchableOpacity>
               </View>
             </View>
 
-            <TouchableOpacity
+            <TouchableOpacity 
               onPress={handleForgotPassword}
               disabled={loading || cooldown > 0}
             >
-              <Text
-                style={[
-                  styles.forgotPassword,
-                  (loading || cooldown > 0) && { opacity: 0.5 },
-                ]}
-              >
+              <Text style={[
+                styles.forgotPassword,
+                (loading || cooldown > 0) && { opacity: 0.5 }
+              ]}>
                 Forgot Password?
               </Text>
             </TouchableOpacity>
@@ -332,32 +291,16 @@ export default function LoginScreen() {
               onPress={handleLogin}
               disabled={loading}
             >
-              <Text style={styles.buttonText}>
-                {loading ? 'Signing in...' : 'Sign In'}
-              </Text>
+              <Text style={styles.buttonText}>{loading ? 'Signing in...' : 'Sign In'}</Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>Don't have an account? </Text>
-
             <TouchableOpacity onPress={() => router.push('/signup')}>
               <Text style={styles.footerLink}>Sign up</Text>
             </TouchableOpacity>
           </View>
-
-          <TouchableOpacity
-            style={styles.guestButton}
-            onPress={() => router.replace('/home')}
-            disabled={loading}
-          >
-            <Feather name="compass" size={18} color="#00704A" />
-            <Text style={styles.guestButtonText}>Continue as Guest</Text>
-          </TouchableOpacity>
-
-          <Text style={styles.guestHint}>
-            Browse local shops and menus without an account.
-          </Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

@@ -26,7 +26,6 @@ function RootLayoutNav() {
 
     const currentScreen = segments[0];
 
-    // Screens guests are allowed to use.
     const guestAllowedScreens = [
       'index',
       'launch',
@@ -38,7 +37,6 @@ function RootLayoutNav() {
       'help',
     ];
 
-    // Account-required screens.
     const accountRequiredScreens = [
       'cart',
       'checkout',
@@ -52,13 +50,11 @@ function RootLayoutNav() {
       'order',
     ];
 
-    // Guest tries to enter an account-only page.
     if (!user && accountRequiredScreens.includes(currentScreen)) {
       router.replace('/login');
       return;
     }
 
-    // Logged-in users should not go back to launch/login/signup.
     if (
       user &&
       (
@@ -73,7 +69,6 @@ function RootLayoutNav() {
       return;
     }
 
-    // Unknown guest route protection.
     if (!user && !guestAllowedScreens.includes(currentScreen)) {
       router.replace('/launch');
     }

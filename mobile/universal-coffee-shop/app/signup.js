@@ -1,7 +1,15 @@
 import React, { useState } from 'react';
-import { 
-  StyleSheet, Text, View, TouchableOpacity, TextInput, 
-  KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator 
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -11,6 +19,7 @@ import { useAuth } from '../context/AuthContext';
 export default function SignupScreen() {
   const router = useRouter();
   const { signUp } = useAuth();
+
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -35,14 +44,25 @@ export default function SignupScreen() {
     }
 
     setLoading(true);
+
     try {
-      await signUp(email.trim(), password, { full_name: name.trim() });
+      await signUp(email.trim(), password, {
+        full_name: name.trim(),
+      });
+
       Alert.alert('Success!', 'Account created successfully', [
-        { text: 'OK', onPress: () => router.replace('/home') }
+        {
+          text: 'OK',
+          onPress: () => router.replace('/home'),
+        },
       ]);
     } catch (error) {
       console.error('Signup error:', error);
-      Alert.alert('Signup Failed', error.message || 'Failed to create account');
+
+      Alert.alert(
+        'Signup Failed',
+        error.message || 'Failed to create account'
+      );
     } finally {
       setLoading(false);
     }
@@ -50,17 +70,19 @@ export default function SignupScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.keyboardView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <ScrollView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled">
-          
-          <TouchableOpacity 
+          keyboardShouldPersistTaps="handled"
+        >
+          <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.back()}>
+            onPress={() => router.back()}
+          >
             <Feather name="arrow-left" size={24} color="#000" />
           </TouchableOpacity>
 
@@ -68,6 +90,7 @@ export default function SignupScreen() {
             <View style={styles.iconCircle}>
               <Feather name="coffee" size={32} color="#00704A" />
             </View>
+
             <Text style={styles.title}>Join LoyalCup</Text>
             <Text style={styles.subtitle}>Start earning rewards today</Text>
           </View>
@@ -75,8 +98,10 @@ export default function SignupScreen() {
           <View style={styles.form}>
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Full Name</Text>
+
               <View style={styles.inputContainer}>
                 <Feather name="user" size={20} color="#666" />
+
                 <TextInput
                   style={styles.input}
                   placeholder="John Doe"
@@ -84,14 +109,17 @@ export default function SignupScreen() {
                   value={name}
                   onChangeText={setName}
                   autoCapitalize="words"
+                  editable={!loading}
                 />
               </View>
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Email</Text>
+
               <View style={styles.inputContainer}>
                 <Feather name="mail" size={20} color="#666" />
+
                 <TextInput
                   style={styles.input}
                   placeholder="your@email.com"
@@ -101,14 +129,17 @@ export default function SignupScreen() {
                   autoCapitalize="none"
                   keyboardType="email-address"
                   autoComplete="email"
+                  editable={!loading}
                 />
               </View>
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Password</Text>
+
               <View style={styles.inputContainer}>
                 <Feather name="lock" size={20} color="#666" />
+
                 <TextInput
                   style={styles.input}
                   placeholder="At least 6 characters"
@@ -117,12 +148,17 @@ export default function SignupScreen() {
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
+                  editable={!loading}
                 />
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                  <Feather 
-                    name={showPassword ? "eye-off" : "eye"} 
-                    size={20} 
-                    color="#666" 
+
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  disabled={loading}
+                >
+                  <Feather
+                    name={showPassword ? 'eye-off' : 'eye'}
+                    size={20}
+                    color="#666"
                   />
                 </TouchableOpacity>
               </View>
@@ -130,8 +166,10 @@ export default function SignupScreen() {
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Confirm Password</Text>
+
               <View style={styles.inputContainer}>
                 <Feather name="lock" size={20} color="#666" />
+
                 <TextInput
                   style={styles.input}
                   placeholder="Re-enter your password"
@@ -140,15 +178,20 @@ export default function SignupScreen() {
                   onChangeText={setConfirmPassword}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
+                  editable={!loading}
                 />
               </View>
             </View>
 
-            <TouchableOpacity 
-              style={[styles.signupButton, loading && styles.signupButtonDisabled]}
+            <TouchableOpacity
+              style={[
+                styles.signupButton,
+                loading && styles.signupButtonDisabled,
+              ]}
               onPress={handleSignup}
               disabled={loading}
-              activeOpacity={0.8}>
+              activeOpacity={0.8}
+            >
               {loading ? (
                 <ActivityIndicator color="#FFF" />
               ) : (
@@ -168,10 +211,28 @@ export default function SignupScreen() {
 
             <View style={styles.footer}>
               <Text style={styles.footerText}>Already have an account? </Text>
-              <TouchableOpacity onPress={() => router.push('/login')}>
+
+              <TouchableOpacity
+                onPress={() => router.push('/login')}
+                disabled={loading}
+              >
                 <Text style={styles.footerLink}>Sign In</Text>
               </TouchableOpacity>
             </View>
+
+            <TouchableOpacity
+              style={styles.guestButton}
+              onPress={() => router.replace('/home')}
+              disabled={loading}
+              activeOpacity={0.8}
+            >
+              <Feather name="compass" size={18} color="#00704A" />
+              <Text style={styles.guestButtonText}>Continue as Guest</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.guestHint}>
+              Browse local coffee shops and menus without an account.
+            </Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -295,5 +356,27 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#00704A',
+  },
+  guestButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#00704A',
+  },
+  guestButtonText: {
+    color: '#00704A',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  guestHint: {
+    marginTop: -10,
+    textAlign: 'center',
+    color: '#888',
+    fontSize: 12,
   },
 });
