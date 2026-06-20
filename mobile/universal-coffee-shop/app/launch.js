@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Image, Dimensions } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,15 +14,19 @@ export default function LaunchScreen() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <LinearGradient
         colors={['#00704A', '#004D33', '#003324']}
-        style={styles.gradient}>
-        
+        style={styles.gradient}
+      >
         <View style={styles.content}>
           <View style={styles.logoContainer}>
             <View style={styles.logoCircle}>
               <Feather name="coffee" size={60} color="#FFF" />
             </View>
+
             <Text style={styles.appName}>LoyalCup</Text>
-            <Text style={styles.tagline}>Your favorite coffee shops,{'\n'}all in one place</Text>
+
+            <Text style={styles.tagline}>
+              Your favorite coffee shops,{'\n'}all in one place
+            </Text>
           </View>
 
           <View style={styles.features}>
@@ -30,9 +34,12 @@ export default function LaunchScreen() {
               <View style={styles.featureIcon}>
                 <Feather name="map-pin" size={24} color="#00704A" />
               </View>
+
               <View style={styles.featureText}>
                 <Text style={styles.featureTitle}>Discover Local</Text>
-                <Text style={styles.featureDescription}>Find amazing coffee shops nearby</Text>
+                <Text style={styles.featureDescription}>
+                  Find amazing coffee shops nearby
+                </Text>
               </View>
             </View>
 
@@ -40,9 +47,12 @@ export default function LaunchScreen() {
               <View style={styles.featureIcon}>
                 <Feather name="award" size={24} color="#00704A" />
               </View>
+
               <View style={styles.featureText}>
                 <Text style={styles.featureTitle}>Earn Rewards</Text>
-                <Text style={styles.featureDescription}>Get points with every purchase</Text>
+                <Text style={styles.featureDescription}>
+                  Get points with every purchase
+                </Text>
               </View>
             </View>
 
@@ -50,27 +60,43 @@ export default function LaunchScreen() {
               <View style={styles.featureIcon}>
                 <Feather name="zap" size={24} color="#00704A" />
               </View>
+
               <View style={styles.featureText}>
                 <Text style={styles.featureTitle}>Order Ahead</Text>
-                <Text style={styles.featureDescription}>Skip the line, save time</Text>
+                <Text style={styles.featureDescription}>
+                  Skip the line, save time
+                </Text>
               </View>
             </View>
           </View>
 
           <View style={styles.buttons}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.primaryButton}
               onPress={() => router.push('/signup')}
-              activeOpacity={0.8}>
+              activeOpacity={0.8}
+            >
               <Text style={styles.primaryButtonText}>Get Started</Text>
               <Feather name="arrow-right" size={20} color="#00704A" />
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.secondaryButton}
               onPress={() => router.push('/login')}
-              activeOpacity={0.8}>
-              <Text style={styles.secondaryButtonText}>I Already Have an Account</Text>
+              activeOpacity={0.8}
+            >
+              <Text style={styles.secondaryButtonText}>
+                I Already Have an Account
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.guestButton}
+              onPress={() => router.replace('/home')}
+              activeOpacity={0.8}
+            >
+              <Feather name="compass" size={18} color="#FFF" />
+              <Text style={styles.guestButtonText}>Continue as Guest</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -178,5 +204,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFF',
+  },
+  guestButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    gap: 8,
+  },
+  guestButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.92)',
   },
 });

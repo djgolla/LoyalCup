@@ -1,4 +1,3 @@
-// main navigation layout file
 import { useEffect, useRef } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useFonts } from 'expo-font';
@@ -7,7 +6,10 @@ import * as Notifications from 'expo-notifications';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { CartProvider } from '../context/CartContext';
-import { registerForPushNotifications, clearPushToken } from '../services/notificationService';
+import {
+  registerForPushNotifications,
+  clearPushToken,
+} from '../services/notificationService';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -19,20 +21,64 @@ function RootLayoutNav() {
   const responseListener = useRef(null);
   const hadUserRef = useRef(false);
 
-  // Auth-based routing
   useEffect(() => {
     if (loading) return;
 
     const currentScreen = segments[0];
 
-    if (!user && currentScreen !== 'launch' && currentScreen !== 'login' && currentScreen !== 'signup') {
-      router.replace('/launch');
-    } else if (user && (currentScreen === 'launch' || currentScreen === 'login' || currentScreen === 'signup' || !currentScreen)) {
+    // Screens guests are allowed to use.
+    const guestAllowedScreens = [
+      'index',
+      'launch',
+      'login',
+      'signup',
+      'home',
+      'shop',
+      'about',
+      'help',
+    ];
+
+    // Account-required screens.
+    const accountRequiredScreens = [
+      'cart',
+      'checkout',
+      'favorites',
+      'rewards',
+      'profile',
+      'settings',
+      'order-history',
+      'payment-methods',
+      'saved-addresses',
+      'order',
+    ];
+
+    // Guest tries to enter an account-only page.
+    if (!user && accountRequiredScreens.includes(currentScreen)) {
+      router.replace('/login');
+      return;
+    }
+
+    // Logged-in users should not go back to launch/login/signup.
+    if (
+      user &&
+      (
+        currentScreen === 'index' ||
+        currentScreen === 'launch' ||
+        currentScreen === 'login' ||
+        currentScreen === 'signup' ||
+        !currentScreen
+      )
+    ) {
       router.replace('/home');
+      return;
+    }
+
+    // Unknown guest route protection.
+    if (!user && !guestAllowedScreens.includes(currentScreen)) {
+      router.replace('/launch');
     }
   }, [user, loading, segments, router]);
 
-  // Push notifications
   useEffect(() => {
     if (loading) return;
 
@@ -41,18 +87,21 @@ function RootLayoutNav() {
 
       registerForPushNotifications();
 
-      notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {
-        console.log('[Push] Received:', notification);
-      });
+      notificationListener.current =
+        Notifications.addNotificationReceivedListener((notification) => {
+          console.log('[Push] Received:', notification);
+        });
 
-      responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
-        const orderId = response.notification.request.content.data?.order_id;
-        if (orderId) {
-          router.push(`/order/${orderId}`);
-        }
-      });
+      responseListener.current =
+        Notifications.addNotificationResponseReceivedListener((response) => {
+          const orderId =
+            response.notification.request.content.data?.order_id;
+
+          if (orderId) {
+            router.push(`/order/${orderId}`);
+          }
+        });
     } else if (hadUserRef.current) {
-      // Only clear after a real logged-in user logs out.
       clearPushToken();
       hadUserRef.current = false;
     }
@@ -92,7 +141,7 @@ function RootLayoutNav() {
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     'Anton-Regular': require('../assets/fonts/Anton-Regular.ttf'),
-    'Canopee': require('../assets/fonts/Canopee.ttf'),
+    Canopee: require('../assets/fonts/Canopee.ttf'),
   });
 
   useEffect(() => {
