@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Store, MapPin, Phone, Mail, Globe, FileText, ArrowRight } from 'lucide-react';
+import { Store, MapPin, Phone, Mail, Globe, FileText, ArrowRight, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import supabase from '../../lib/supabase';
 import { apiUrl } from '../../api/client';
@@ -13,20 +13,34 @@ export default function ShopApplication() {
   const [formData, setFormData] = useState({
     businessName: '',
     description: '',
-    address: '',
-    city: '',
-    state: '',
-    zip: '',
-    phone: '',
     email: '',
     password: '',
-    website: '',
     agreeToTerms: false,
   });
+  const [locations, setLocations] = useState([
+    { name: '', address: '', city: '', state: '', zip: '', phone: '', website: '' },
+  ]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+  };
+
+  const handleLocationChange = (index, field, value) => {
+    setLocations(prev => prev.map((location, i) => (
+      i === index ? { ...location, [field]: value } : location
+    )));
+  };
+
+  const addLocation = () => {
+    setLocations(prev => [
+      ...prev,
+      { name: '', address: '', city: '', state: '', zip: '', phone: '', website: '' },
+    ]);
+  };
+
+  const removeLocation = (index) => {
+    setLocations(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async (e) => {
@@ -37,6 +51,17 @@ export default function ShopApplication() {
     }
     if (formData.password.length < 8) {
       toast.error('Password must be at least 8 characters');
+      return;
+    }
+    if (locations.length < 1) {
+      toast.error('Please add at least one location');
+      return;
+    }
+    const incompleteLocation = locations.some(location => (
+      !location.address || !location.city || !location.state || !location.zip || !location.phone
+    ));
+    if (incompleteLocation) {
+      toast.error('Please complete the required fields for each location');
       return;
     }
     setLoading(true);
@@ -72,6 +97,18 @@ export default function ShopApplication() {
         if (!session?.access_token) throw new Error('Failed to create account session');
       }
 
+      const firstLocation = locations[0];
+      const normalizedLocations = locations.map((location, index) => ({
+        name: location.name || (locations.length === 1 ? formData.businessName : `${formData.businessName} - Location ${index + 1}`),
+        description: formData.description || null,
+        address: location.address,
+        city: location.city,
+        state: location.state,
+        zip: location.zip,
+        phone: location.phone,
+        website: location.website || null,
+      }));
+
       const response = await fetch(apiUrl('/api/v1/shops/apply'), {
         method: 'POST',
         headers: {
@@ -81,12 +118,13 @@ export default function ShopApplication() {
         body: JSON.stringify({
           name: formData.businessName,
           description: formData.description || null,
-          address: formData.address,
-          city: formData.city,
-          state: formData.state,
-          zip: formData.zip,
-          phone: formData.phone,
-          website: formData.website || null,
+          address: firstLocation.address,
+          city: firstLocation.city,
+          state: firstLocation.state,
+          zip: firstLocation.zip,
+          phone: firstLocation.phone,
+          website: firstLocation.website || null,
+          locations: normalizedLocations,
         }),
       });
       const result = await response.json().catch(() => ({}));
@@ -167,46 +205,77 @@ export default function ShopApplication() {
               placeholder="Min 8 characters" required minLength={8} className={ic} />
           </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
-              <MapPin className="w-4 h-4" /> Street Address *
-            </label>
-            <input name="address" value={formData.address} onChange={handleChange}
-              placeholder="123 Main St" required className={ic} />
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            <div className="col-span-1">
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">City *</label>
-              <input name="city" value={formData.city} onChange={handleChange}
-                placeholder="Austin" required className={ic} />
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                <MapPin className="w-4 h-4" /> Location{locations.length > 1 ? 's' : ''} *
+              </label>
+              <button type="button" onClick={addLocation}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 font-bold text-sm">
+                <Plus className="w-4 h-4" /> Add Location
+              </button>
             </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">State *</label>
-              <input name="state" value={formData.state} onChange={handleChange}
-                placeholder="TX" required maxLength={2} className={ic} />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">ZIP *</label>
-              <input name="zip" value={formData.zip} onChange={handleChange}
-                placeholder="78701" required className={ic} />
-            </div>
-          </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
-              <Phone className="w-4 h-4" /> Phone *
-            </label>
-            <input name="phone" type="tel" value={formData.phone} onChange={handleChange}
-              placeholder="(512) 555-0100" required className={ic} />
-          </div>
+            {locations.map((location, index) => (
+              <div key={index} className="rounded-2xl border-2 border-gray-200 dark:border-neutral-800 p-4 space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-bold text-gray-900 dark:text-white">Location {index + 1}</h3>
+                  {locations.length > 1 && (
+                    <button type="button" onClick={() => removeLocation(index)}
+                      className="inline-flex items-center gap-1 text-sm font-bold text-red-500">
+                      <Trash2 className="w-4 h-4" /> Remove
+                    </button>
+                  )}
+                </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
-              <Globe className="w-4 h-4" /> Website (optional)
-            </label>
-            <input name="website" type="url" value={formData.website} onChange={handleChange}
-              placeholder="https://yourshop.com" className={ic} />
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Location Name</label>
+                  <input value={location.name} onChange={e => handleLocationChange(index, 'name', e.target.value)}
+                    placeholder={index === 0 ? formData.businessName || 'Brew & Bean Coffee' : `${formData.businessName || 'Brew & Bean'} - Downtown`}
+                    className={ic} />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Street Address *</label>
+                  <input value={location.address} onChange={e => handleLocationChange(index, 'address', e.target.value)}
+                    placeholder="123 Main St" required className={ic} />
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="col-span-1">
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">City *</label>
+                    <input value={location.city} onChange={e => handleLocationChange(index, 'city', e.target.value)}
+                      placeholder="Austin" required className={ic} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">State *</label>
+                    <input value={location.state} onChange={e => handleLocationChange(index, 'state', e.target.value)}
+                      placeholder="TX" required maxLength={2} className={ic} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">ZIP *</label>
+                    <input value={location.zip} onChange={e => handleLocationChange(index, 'zip', e.target.value)}
+                      placeholder="78701" required className={ic} />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
+                    <Phone className="w-4 h-4" /> Phone *
+                  </label>
+                  <input type="tel" value={location.phone} onChange={e => handleLocationChange(index, 'phone', e.target.value)}
+                    placeholder="(512) 555-0100" required className={ic} />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
+                    <Globe className="w-4 h-4" /> Website (optional)
+                  </label>
+                  <input type="url" value={location.website} onChange={e => handleLocationChange(index, 'website', e.target.value)}
+                    placeholder="https://yourshop.com" className={ic} />
+                </div>
+              </div>
+            ))}
           </div>
 
           <label className="flex items-start gap-3 cursor-pointer">

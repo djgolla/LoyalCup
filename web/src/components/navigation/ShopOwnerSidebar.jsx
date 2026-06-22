@@ -4,11 +4,11 @@ import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard, Menu as MenuIcon, FolderTree, Sliders,
   Settings as SettingsIcon, ShoppingBag, BarChart3, Award,
-  LogOut, Lock, Star, CreditCard,
+  LogOut, Lock, Star, CreditCard, MapPin,
 } from 'lucide-react';
 
 export default function ShopOwnerSidebar() {
-  const { shop } = useShop();
+  const { shop, shops, selectedShopId, selectShop } = useShop();
   const { logout } = useAuth();
   const navigate = useNavigate();
 
@@ -62,6 +62,24 @@ export default function ShopOwnerSidebar() {
           {shop?.name || 'My Coffee Shop'}
         </p>
         {statusBadge}
+        {shops.length > 1 && (
+          <label className="mt-3 block">
+            <span className="mb-1 flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-neutral-500">
+              <MapPin size={12} /> Location
+            </span>
+            <select
+              value={selectedShopId || shop?.id || ''}
+              onChange={(e) => selectShop(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-amber-500"
+            >
+              {shops.map((ownerShop) => (
+                <option key={ownerShop.id} value={ownerShop.id}>
+                  {ownerShop.name || ownerShop.address || 'Unnamed location'}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       <nav className="flex-1 p-3 overflow-y-auto">

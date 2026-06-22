@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Store, MapPin, Clock, Image as ImageIcon,
-  Save, Upload, X, Check, Smartphone, Power, Timer, Printer
+  Save, Upload, X, Check, Smartphone, Power, Timer, Printer, Plus
 } from 'lucide-react';
 import { useShop } from '../../context/ShopContext';
 import supabase from '../../lib/supabase';
-import { updateShop, uploadShopAsset } from '../../api/shops';
+import { createShop, updateShop, uploadShopAsset } from '../../api/shops';
 import { toast } from 'sonner';
 
 const DEFAULT_HOURS = {
@@ -47,10 +47,12 @@ async function geocodeAddress(address, city, state, zip) {
 }
 
 export default function ShopSettings() {
-  const { shop, shopId, loadShop } = useShop();
+  const { shop, shops, shopId, loadShop, selectShop } = useShop();
   const [loading,    setLoading]   = useState(false);
   const [uploading,  setUploading] = useState(null);
   const [dragActive, setDragActive] = useState(null);
+  const [showAddLocation, setShowAddLocation] = useState(false);
+  const [addingLocation, setAddingLocation] = useState(false);
 
   const [formData, setFormData] = useState({
     name:                    '',
@@ -69,6 +71,15 @@ export default function ShopSettings() {
   });
 
   const [savedAddress, setSavedAddress] = useState('');
+  const [newLocation, setNewLocation] = useState({
+    name: '',
+    address: '',
+    city: '',
+    state: '',
+    zip: '',
+    phone: '',
+    website: '',
+  });
 
   useEffect(() => {
     if (shop) {
@@ -200,12 +211,155 @@ export default function ShopSettings() {
     }
   };
 
+  const handleNewLocationChange = (field, value) => {
+    setNewLocation(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleCreateLocation = async (e) => {
+    e.preventDefault();
+    if (!newLocation.name || !newLocation.address || !newLocation.city || !newLocation.state || !newLocation.zip) {
+      toast.error('Please fill out the required location fields.');
+      return;
+    }
+
+    try {
+      setAddingLocation(true);
+      const coords = await geocodeAddress(
+        newLocation.address,
+        newLocation.city,
+        newLocation.state,
+        newLocation.zip
+      );
+      const { data: { session } } = await supabase.auth.getSession();
+      const result = await createShop({
+        name: newLocation.name,
+        description: formData.description || null,
+        address: newLocation.address,
+        city: newLocation.city,
+        state: newLocation.state,
+        zip: newLocation.zip,
+        phone: newLocation.phone || formData.phone || null,
+        website: newLocation.website || formData.website || null,
+        avg_prep_time_minutes: formData.avg_prep_time_minutes || 10,
+        mobile_ordering_enabled: true,
+        ...(coords || {}),
+      }, session?.access_token);
+
+      const createdShopId = result?.shop?.id;
+      await loadShop();
+      if (createdShopId) selectShop(createdShopId);
+      setNewLocation({ name: '', address: '', city: '', state: '', zip: '', phone: '', website: '' });
+      setShowAddLocation(false);
+      toast.success('Location added. Connect Square for this location when ready.');
+    } catch (error) {
+      toast.error(error.message || 'Failed to add location');
+    } finally {
+      setAddingLocation(false);
+    }
+  };
+
   return (
     <div className="space-y-6 pb-8">
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-4xl font-black text-gray-900 dark:text-white mb-2">Shop Settings</h1>
-        <p className="text-gray-600 dark:text-gray-400">Manage your shop information and preferences</p>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-4xl font-black text-gray-900 dark:text-white mb-2">Shop Settings</h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              Manage {shop?.name || 'your shop'} and any additional locations.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAddLocation(prev => !prev)}
+            className="inline-flex items-center gap-2 px-4 py-3 rounded-xl bg-amber-500 text-white font-bold shadow hover:bg-amber-600 transition"
+          >
+            <Plus className="w-4 h-4" />
+            Add Location
+          </button>
+        </div>
       </motion.div>
+
+      {shops.length > 1 && (
+        <div className="bg-white dark:bg-neutral-900 rounded-2xl p-5 border-2 border-gray-200 dark:border-neutral-800 shadow-lg">
+          <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">Current Location</label>
+          <select
+            value={shopId || ''}
+            onChange={(e) => selectShop(e.target.value)}
+            className="w-full md:max-w-md px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition"
+          >
+            {shops.map((ownerShop) => (
+              <option key={ownerShop.id} value={ownerShop.id}>
+                {ownerShop.name || ownerShop.address || 'Unnamed location'}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {showAddLocation && (
+        <motion.form
+          onSubmit={handleCreateLocation}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border-2 border-amber-200 dark:border-amber-800 shadow-lg space-y-4"
+        >
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-amber-600" /> New Location
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              This creates another location under the same owner account. Menu, Square connection, ordering, and settings are managed per location.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">Location Name *</label>
+              <input value={newLocation.name} onChange={e => handleNewLocationChange('name', e.target.value)}
+                placeholder="Brew & Bean - Downtown" required className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">Street Address *</label>
+              <input value={newLocation.address} onChange={e => handleNewLocationChange('address', e.target.value)}
+                required className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition" />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">City *</label>
+              <input value={newLocation.city} onChange={e => handleNewLocationChange('city', e.target.value)}
+                required className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition" />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">State *</label>
+              <input value={newLocation.state} onChange={e => handleNewLocationChange('state', e.target.value)}
+                required maxLength={2} className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition" />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">ZIP *</label>
+              <input value={newLocation.zip} onChange={e => handleNewLocationChange('zip', e.target.value)}
+                required className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition" />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">Phone</label>
+              <input type="tel" value={newLocation.phone} onChange={e => handleNewLocationChange('phone', e.target.value)}
+                className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">Website</label>
+              <input type="url" value={newLocation.website} onChange={e => handleNewLocationChange('website', e.target.value)}
+                placeholder="https://..." className="w-full px-4 py-3 bg-gray-50 dark:bg-neutral-800 border-2 border-gray-200 dark:border-neutral-700 rounded-xl focus:outline-none focus:border-amber-500 transition" />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={() => setShowAddLocation(false)}
+              className="px-5 py-3 rounded-xl bg-gray-100 dark:bg-neutral-800 text-gray-700 dark:text-gray-200 font-bold">
+              Cancel
+            </button>
+            <button type="submit" disabled={addingLocation}
+              className="px-5 py-3 rounded-xl bg-amber-500 text-white font-bold disabled:opacity-60">
+              {addingLocation ? 'Adding...' : 'Create Location'}
+            </button>
+          </div>
+        </motion.form>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
 

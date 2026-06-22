@@ -1,38 +1,28 @@
 import { createContext, useState, useEffect, useContext, useRef } from "react";
 import { useAuth } from "./AuthContext";
-import { getShop, getBillingStatus } from "../api/shops";
+import { getBillingStatus, getShop, listMyShops } from "../api/shops";
 import { getPosStatus } from "../services/posService";
 
 export const ShopContext = createContext();
+
+const SELECTED_SHOP_KEY = "loyalcup:selectedShopId";
 
 export function ShopProvider({ children }) {
   const { user, profile, session } = useAuth();
 
   const [shop, setShop] = useState(null);
+  const [shops, setShops] = useState([]);
+  const [selectedShopId, setSelectedShopId] = useState(() => {
+    try {
+      return window.localStorage.getItem(SELECTED_SHOP_KEY);
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const loadingRef = useRef(false);
-
-  useEffect(() => {
-    if (!user) {
-      setShop(null);
-      setLoading(false);
-      setError(null);
-      loadingRef.current = false;
-      return;
-    }
-
-    const userRole = profile?.role || "customer";
-
-    if (userRole === "shop_owner" || userRole === "shop_worker" || userRole === "applicant") {
-      loadShop();
-    } else {
-      setShop(null);
-      setLoading(false);
-      setError(null);
-    }
-  }, [user?.id, profile?.role, profile?.shop_id, session?.access_token]);
 
   const loadShop = async () => {
     if (!user) return;
@@ -48,10 +38,12 @@ export function ShopProvider({ children }) {
 
       if (userRole !== "shop_owner" && userRole !== "shop_worker" && userRole !== "applicant") {
         setShop(null);
+        setShops([]);
         return;
       }
 
       let billing = null;
+      let ownerShops = [];
 
       if (userRole === "shop_owner" || userRole === "applicant") {
         try {
@@ -61,27 +53,53 @@ export function ShopProvider({ children }) {
             console.warn("[ShopContext] billing status failed:", billingErr.message);
           }
         }
+
+        try {
+          const shopsResponse = await listMyShops(token);
+          ownerShops = shopsResponse?.shops || [];
+          setShops(ownerShops);
+        } catch (shopsErr) {
+          if (shopsErr?.status !== 404) {
+            console.warn("[ShopContext] owner shops load failed:", shopsErr.message);
+          }
+          ownerShops = billing?.shops || [];
+          setShops(ownerShops);
+        }
       }
 
-      const shopId =
+      const fallbackShopId =
         profile?.shop_id ||
         billing?.shop_id ||
+        ownerShops[0]?.id ||
         null;
+
+      const savedShop = ownerShops.find((candidate) => candidate.id === selectedShopId);
+      const profileShop = ownerShops.find((candidate) => candidate.id === fallbackShopId);
+      const selectedShop = savedShop || profileShop || ownerShops[0] || null;
+      const shopId = selectedShop?.id || fallbackShopId;
 
       if (!shopId) {
         setShop(null);
         return;
       }
 
-      let publicShop = null;
+      if (shopId !== selectedShopId) {
+        setSelectedShopId(shopId);
+        try {
+          window.localStorage.setItem(SELECTED_SHOP_KEY, shopId);
+        } catch {
+          // Ignore storage failures; selection still works in memory.
+        }
+      }
 
-      try {
-        const shopResponse = await getShop(shopId);
-        publicShop = shopResponse?.shop || null;
-      } catch (shopErr) {
-        // Public shop detail may fail before active/public visibility.
-        // Keep onboarding alive using billing/profile shop id.
-        console.warn("[ShopContext] public shop load failed:", shopErr.message);
+      let publicShop = null;
+      if (!selectedShop) {
+        try {
+          const shopResponse = await getShop(shopId);
+          publicShop = shopResponse?.shop || null;
+        } catch (shopErr) {
+          console.warn("[ShopContext] public shop load failed:", shopErr.message);
+        }
       }
 
       let posStatus = null;
@@ -102,17 +120,18 @@ export function ShopProvider({ children }) {
 
       setShop({
         ...(publicShop || {}),
+        ...(selectedShop || {}),
 
         id: shopId,
 
         status:
+          selectedShop?.status ||
           billing?.shop_status ||
-          publicShop?.status ||
           null,
 
         subscription_status:
+          selectedShop?.subscription_status ||
           billing?.status ||
-          publicShop?.subscription_status ||
           null,
 
         stripe_subscription_id:
@@ -142,11 +161,50 @@ export function ShopProvider({ children }) {
     }
   };
 
+  const selectShop = (shopId) => {
+    if (!shopId) return;
+    setSelectedShopId(shopId);
+    const nextShop = shops.find((candidate) => candidate.id === shopId);
+    if (nextShop) {
+      setShop((current) => ({ ...(current || {}), ...nextShop, id: shopId }));
+    }
+    try {
+      window.localStorage.setItem(SELECTED_SHOP_KEY, shopId);
+    } catch {
+      // Ignore storage failures; the state update above is enough for this session.
+    }
+  };
+
+  useEffect(() => {
+    if (!user) {
+      setShop(null);
+      setShops([]);
+      setLoading(false);
+      setError(null);
+      loadingRef.current = false;
+      return;
+    }
+
+    const userRole = profile?.role || "customer";
+
+    if (userRole === "shop_owner" || userRole === "shop_worker" || userRole === "applicant") {
+      loadShop();
+    } else {
+      setShop(null);
+      setShops([]);
+      setLoading(false);
+      setError(null);
+    }
+  }, [user?.id, profile?.role, profile?.shop_id, session?.access_token, selectedShopId]);
+
   return (
     <ShopContext.Provider
       value={{
         shop,
+        shops,
         shopId: shop?.id,
+        selectedShopId,
+        selectShop,
         loading,
         error,
         loadShop,

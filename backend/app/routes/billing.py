@@ -84,7 +84,7 @@ async def create_checkout_session(
         sc.table("shops")
         .select("id, name, stripe_customer_id, stripe_subscription_id, status")
         .eq("owner_id", user_id)
-        .order("created_at", desc=True)
+        .order("created_at")
         .limit(1)
         .execute()
     )
@@ -231,6 +231,18 @@ async def stripe_webhook(
             except Exception as e:
                 logger.warning(f"[Billing] Could not promote user role: {e}")
 
+            try:
+                sc.table("shops").update({
+                    "stripe_customer_id": obj.get("customer"),
+                    "stripe_subscription_id": subscription_id,
+                    "subscription_status": "active",
+                    "subscription_price_id": price_id,
+                    "status": "active",
+                }).eq("owner_id", owner_id).in_("status", ["pending_payment", "pending"]).execute()
+                logger.info(f"[Billing] Activated all pending shops for owner {owner_id}")
+            except Exception as e:
+                logger.warning(f"[Billing] Could not activate sibling shops for owner {owner_id}: {e}")
+
         logger.info(f"[Billing] Shop {shop_id} ACTIVATED ✓")
 
         try:
@@ -260,8 +272,9 @@ async def stripe_webhook(
     elif event_type == "customer.subscription.updated":
         sub = event["data"]["object"]
         shop_id = sub["metadata"].get("shop_id")
+        subscription_id = sub.get("id")
 
-        if shop_id:
+        if shop_id or subscription_id:
             stripe_status = sub["status"]
             shop_status_map = {
                 "active": "active",
@@ -275,21 +288,32 @@ async def stripe_webhook(
             if stripe_status in ("canceled", "unpaid"):
                 update["status"] = shop_status_map.get(stripe_status, "suspended")
 
-            sc.table("shops").update(update).eq("id", shop_id).execute()
-            logger.info(f"[Billing] Shop {shop_id} subscription → {stripe_status}")
+            query = sc.table("shops").update(update)
+            if subscription_id:
+                query = query.eq("stripe_subscription_id", subscription_id)
+            else:
+                query = query.eq("id", shop_id)
+            query.execute()
+            logger.info(f"[Billing] Subscription {subscription_id or shop_id} → {stripe_status}")
 
     elif event_type == "customer.subscription.deleted":
         sub = event["data"]["object"]
         shop_id = sub["metadata"].get("shop_id")
+        subscription_id = sub.get("id")
 
-        if shop_id:
-            sc.table("shops").update({
+        if shop_id or subscription_id:
+            update_query = sc.table("shops").update({
                 "subscription_status": "cancelled",
                 "stripe_subscription_id": None,
                 "status": "cancelled",
-            }).eq("id", shop_id).execute()
+            })
+            if subscription_id:
+                update_query = update_query.eq("stripe_subscription_id", subscription_id)
+            else:
+                update_query = update_query.eq("id", shop_id)
+            update_query.execute()
 
-            logger.info(f"[Billing] Shop {shop_id} subscription cancelled")
+            logger.info(f"[Billing] Subscription {subscription_id or shop_id} cancelled")
 
     elif event_type == "invoice.payment_failed":
         invoice = event["data"]["object"]
@@ -329,20 +353,34 @@ async def get_subscription_status(user: dict = Depends(require_auth())):
 
     shop_resp = (
         sc.table("shops")
-        .select("id, subscription_status, stripe_subscription_id, stripe_customer_id, status")
+        .select("id, name, subscription_status, stripe_subscription_id, stripe_customer_id, status")
         .eq("owner_id", user_id)
-        .order("created_at", desc=True)
-        .limit(1)
+        .order("created_at")
         .execute()
     )
 
     if not shop_resp.data:
         raise HTTPException(status_code=404, detail="Shop not found")
 
-    shop = shop_resp.data[0]
+    shops = shop_resp.data or []
+    shop = next(
+        (
+            row for row in shops
+            if row.get("status") == "active"
+            or row.get("subscription_status") == "active"
+            or row.get("stripe_subscription_id")
+        ),
+        shops[0],
+    )
 
     return {
-        "subscribed": shop.get("status") == "active",
+        "subscribed": any(
+            row.get("status") == "active"
+            or row.get("subscription_status") == "active"
+            for row in shops
+        ),
+        "shop_id": shop.get("id"),
+        "shops": shops,
         "status": shop.get("subscription_status") or "none",
         "shop_status": shop.get("status"),
         "subscription_id": shop.get("stripe_subscription_id"),
@@ -363,7 +401,8 @@ async def create_billing_portal(user: dict = Depends(require_auth())):
         sc.table("shops")
         .select("id, stripe_customer_id")
         .eq("owner_id", user_id)
-        .order("created_at", desc=True)
+        .not_.is_("stripe_customer_id", "null")
+        .order("created_at")
         .limit(1)
         .execute()
     )

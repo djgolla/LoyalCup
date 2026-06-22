@@ -81,6 +81,11 @@ async def pos_connect(
     db=Depends(get_supabase),
 ):
     provider = request.query_params.get("provider", "").lower()
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
 
     if not provider:
         raise HTTPException(status_code=400, detail="Missing provider query param")
@@ -96,15 +101,18 @@ async def pos_connect(
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    shop_resp = (
+    query = (
         db.get_service_client()
         .table("shops")
         .select("id, status")
         .eq("owner_id", user_id)
-        .order("created_at", desc=True)
-        .limit(1)
-        .execute()
     )
+
+    requested_shop_id = body.get("shop_id") or request.query_params.get("shop_id")
+    if requested_shop_id:
+        query = query.eq("id", requested_shop_id)
+
+    shop_resp = query.order("created_at").limit(1).execute()
 
     if not shop_resp.data:
         raise HTTPException(

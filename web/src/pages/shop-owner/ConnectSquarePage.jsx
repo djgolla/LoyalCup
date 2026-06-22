@@ -118,7 +118,7 @@ export default function ConnectSquarePage() {
     setWarning(null);
     setConnecting(true);
     try {
-      const { authorization_url } = await getSquareConnectUrl();
+      const { authorization_url } = await getSquareConnectUrl(shopId);
       window.location.href = authorization_url;
     } catch (e) {
       setError(e.message || "Failed to start Square connection. Check your server config.");

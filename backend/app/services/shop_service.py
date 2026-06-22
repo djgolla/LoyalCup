@@ -388,6 +388,54 @@ class ShopService:
                 except Exception as legacy_error:
                     print(f"Legacy error getting owner shop {shop_id}: {legacy_error}")
                     return None
+
+    async def list_owner_shops(self, owner_id: str) -> List[Dict[str, Any]]:
+        """List all shops owned by a shop owner with owner-safe fields."""
+        if not self.db:
+            return []
+
+        try:
+            response = (
+                self._client()
+                .table("shops")
+                .select(OWNER_SHOP_FIELDS)
+                .eq("owner_id", owner_id)
+                .order("created_at")
+                .execute()
+            )
+            return response.data or []
+        except Exception as e:
+            print(f"Error listing owner shops for {owner_id}: {e}")
+            try:
+                response = (
+                    self._client()
+                    .table("shops")
+                    .select(COMPAT_OWNER_SHOP_FIELDS)
+                    .eq("owner_id", owner_id)
+                    .order("created_at")
+                    .execute()
+                )
+                rows = response.data or []
+                for row in rows:
+                    if "avg_rating" not in row:
+                        row["avg_rating"] = row.get("average_rating")
+                    row.pop("average_rating", None)
+                return rows
+            except Exception as compat_error:
+                print(f"Compat error listing owner shops for {owner_id}: {compat_error}")
+                try:
+                    response = (
+                        self._client()
+                        .table("shops")
+                        .select(LEGACY_OWNER_SHOP_FIELDS)
+                        .eq("owner_id", owner_id)
+                        .order("created_at")
+                        .execute()
+                    )
+                    return response.data or []
+                except Exception as legacy_error:
+                    print(f"Legacy error listing owner shops for {owner_id}: {legacy_error}")
+                    return []
     
     async def create_shop(self, shop_data: Dict[str, Any], owner_id: str) -> Dict[str, Any]:
         """Create a new shop"""
@@ -397,7 +445,38 @@ class ShopService:
             return shop_data
         
         try:
+            billing_resp = (
+                self._client()
+                .table("shops")
+                .select("stripe_customer_id, stripe_subscription_id, subscription_status, subscription_price_id, status")
+                .eq("owner_id", owner_id)
+                .order("created_at")
+                .execute()
+            )
+            active_billing_shop = next(
+                (
+                    row for row in (billing_resp.data or [])
+                    if row.get("status") == "active"
+                    or row.get("subscription_status") == "active"
+                    or row.get("stripe_subscription_id")
+                ),
+                None,
+            )
+
             shop_data["owner_id"] = owner_id
+            if active_billing_shop:
+                shop_data.setdefault("status", "active")
+                for field in (
+                    "stripe_customer_id",
+                    "stripe_subscription_id",
+                    "subscription_status",
+                    "subscription_price_id",
+                ):
+                    if active_billing_shop.get(field):
+                        shop_data.setdefault(field, active_billing_shop.get(field))
+            else:
+                shop_data.setdefault("status", "pending_payment")
+
             response = (
                 self._client()
                 .table("shops")
@@ -448,11 +527,12 @@ class ShopService:
     async def create_shop_application(self, user_id: str, application_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Create a shop application and upgrade user to shop_owner.
-        Validates that user doesn't already own a shop.
+        Supports multiple initial locations under one owner account.
         """
         if not self.db:
             return {
                 "shop": application_data,
+                "shops": [application_data],
                 "message": "Shop application created successfully"
             }
         
@@ -467,8 +547,8 @@ class ShopService:
             
             if existing_shop.data and len(existing_shop.data) > 0:
                 raise ValueError("User already owns a shop")
-            
-            shop_data = {
+
+            locations = application_data.get("locations") or [{
                 "name": application_data.get("name"),
                 "description": application_data.get("description"),
                 "address": application_data.get("address"),
@@ -476,23 +556,42 @@ class ShopService:
                 "state": application_data.get("state"),
                 "zip": application_data.get("zip"),
                 "phone": application_data.get("phone"),
-                "business_license": application_data.get("business_license"),
                 "website": application_data.get("website"),
-                "owner_id": user_id,
-                "status": "pending_payment",
-            }
+            }]
+
+            if not locations:
+                raise ValueError("At least one location is required")
+            if len(locations) > 10:
+                raise ValueError("Please start with 10 or fewer locations")
+
+            shop_rows = []
+            for index, location in enumerate(locations):
+                shop_rows.append({
+                    "name": location.get("name") or application_data.get("name"),
+                    "description": location.get("description") or application_data.get("description"),
+                    "address": location.get("address"),
+                    "city": location.get("city"),
+                    "state": location.get("state"),
+                    "zip": location.get("zip"),
+                    "phone": location.get("phone") or application_data.get("phone"),
+                    "business_license": application_data.get("business_license"),
+                    "website": location.get("website") or application_data.get("website"),
+                    "owner_id": user_id,
+                    "status": "pending_payment",
+                })
             
             shop_response = (
                 self._client()
                 .table("shops")
-                .insert(shop_data)
+                .insert(shop_rows)
                 .execute()
             )
             
             if not shop_response.data or len(shop_response.data) == 0:
                 raise Exception("Failed to create shop")
             
-            shop = shop_response.data[0]
+            shops = shop_response.data
+            shop = shops[0]
             
             email = application_data.get("email")
             if not email:
@@ -516,6 +615,7 @@ class ShopService:
             
             return {
                 "shop": shop,
+                "shops": shops,
                 "message": "Shop application created. Complete your subscription to go live."
             }
         except ValueError as e:

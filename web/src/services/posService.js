@@ -26,11 +26,12 @@ async function handleResponse(res, defaultMsg) {
 /**
  * Get the Square OAuth authorization URL (kicks off OAuth flow).
  */
-export async function getSquareConnectUrl() {
+export async function getSquareConnectUrl(shopId) {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE}/api/v1/pos/connect?provider=square`, {
     method:  "POST",
     headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify({ shop_id: shopId || null }),
   });
   return handleResponse(res, "Failed to get Square connect URL");
 }

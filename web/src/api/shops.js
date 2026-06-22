@@ -58,6 +58,14 @@ export async function getBillingStatus(token) {
   return parseResponse(response);
 }
 
+export async function listMyShops(token) {
+  const response = await fetch(`${API_BASE}/shops/mine`, {
+    headers: authHeaders(token),
+  });
+
+  return parseResponse(response);
+}
+
 // ============================================================================
 // SHOP OWNER ENDPOINTS  (all require token)
 // ============================================================================

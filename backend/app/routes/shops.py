@@ -35,12 +35,15 @@ class ShopCreate(BaseModel):
     address: Optional[str] = None
     city: Optional[str] = None
     state: Optional[str] = None
+    zip: Optional[str] = None
     lat: Optional[float] = None
     lng: Optional[float] = None
     phone: Optional[str] = None
+    website: Optional[str] = None
     hours: Optional[Dict[str, Any]] = None
     loyalty_points_per_dollar: int = 0
     participates_in_global_loyalty: bool = False
+    mobile_ordering_enabled: Optional[bool] = None
     # Customers are told their order will be ready in ~this many minutes.
     avg_prep_time_minutes: int = 10
 
@@ -84,6 +87,7 @@ class ShopApplicationRequest(BaseModel):
     business_license: Optional[str] = None
     website: Optional[str] = None
     why_join: Optional[str] = None
+    locations: Optional[List[ShopCreate]] = None
 
 
 # ============================================================================
@@ -126,6 +130,16 @@ async def get_public_stats():
         "orderCount": orders.count or 0,
         "userCount": users.count or 0,
     }
+
+
+@router.get("/mine")
+async def list_my_shops(user: dict = Depends(require_auth())):
+    """List shops owned by the authenticated owner."""
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found in token")
+    shops = await shop_service.list_owner_shops(user_id)
+    return {"shops": shops}
 
 
 @router.get("/{shop_id}")
@@ -200,7 +214,8 @@ async def create_shop(shop_data: ShopCreate, user: dict = Depends(require_auth()
     user_id = user.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="User ID not found in token")
-    shop = await shop_service.create_shop(shop_data.dict(), user_id)
+    data = {k: v for k, v in shop_data.dict().items() if v is not None}
+    shop = await shop_service.create_shop(data, user_id)
     return {"shop": shop}
 
 
