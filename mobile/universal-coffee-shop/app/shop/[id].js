@@ -184,7 +184,7 @@ const ShopHero = ({ bannerUrl, logoUrl, shopName }) => {
         <ShopImage
           uri={bannerUrl}
           style={styles.heroBannerImg}
-          resizeMode="cover"
+          resizeMode="contain"
         />
 
         <LinearGradient
@@ -212,7 +212,7 @@ const ShopHero = ({ bannerUrl, logoUrl, shopName }) => {
   return (
     <View style={[styles.heroWrap, styles.heroNoBanner]}>
       <LinearGradient
-        colors={['#1a0a00', '#2d1200', '#1a2e1a']}
+        colors={['#101828', '#1F2937', '#F97316']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
@@ -541,7 +541,7 @@ export default function ShopDetailScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#00704A" />
+          <ActivityIndicator size="large" color="#F97316" />
         </View>
       </SafeAreaView>
     );
@@ -616,7 +616,7 @@ export default function ShopDetailScreen() {
               style={[
                 styles.openChip,
                 {
-                  backgroundColor: openStatus ? '#dcfce7' : '#f3f4f6',
+                  backgroundColor: openStatus ? '#DCFCE7' : '#F3F4F6',
                 },
               ]}
             >
@@ -624,7 +624,7 @@ export default function ShopDetailScreen() {
                 style={[
                   styles.openDot,
                   {
-                    backgroundColor: openStatus ? '#16a34a' : '#9ca3af',
+                    backgroundColor: openStatus ? '#15803D' : '#9ca3af',
                   },
                 ]}
               />
@@ -633,7 +633,7 @@ export default function ShopDetailScreen() {
                 style={[
                   styles.openChipText,
                   {
-                    color: openStatus ? '#16a34a' : '#6b7280',
+                    color: openStatus ? '#15803D' : '#6b7280',
                   },
                 ]}
               >
@@ -662,7 +662,7 @@ export default function ShopDetailScreen() {
                 style={styles.actionBtn}
                 onPress={handleCall}
               >
-                <Feather name="phone" size={16} color="#00704A" />
+                <Feather name="phone" size={16} color="#F97316" />
                 <Text style={styles.actionBtnText}>Call</Text>
               </TouchableOpacity>
             )}
@@ -672,7 +672,7 @@ export default function ShopDetailScreen() {
                 style={styles.actionBtn}
                 onPress={handleDirections}
               >
-                <Feather name="navigation" size={16} color="#00704A" />
+                <Feather name="navigation" size={16} color="#F97316" />
                 <Text style={styles.actionBtnText}>Directions</Text>
               </TouchableOpacity>
             )}
@@ -773,7 +773,7 @@ export default function ShopDetailScreen() {
         <View style={styles.menuContainer}>
           {menuItems.length === 0 ? (
             <View style={styles.emptyMenu}>
-              <Feather name="coffee" size={48} color="#DDD" />
+              <Feather name="coffee" size={48} color="#CBD5E1" />
               <Text style={styles.emptyMenuText}>No menu items</Text>
             </View>
           ) : selectedCategory === 'all' ? (
@@ -816,7 +816,7 @@ export default function ShopDetailScreen() {
             </>
           ) : filteredItems.length === 0 ? (
             <View style={styles.emptyMenu}>
-              <Feather name="coffee" size={48} color="#DDD" />
+              <Feather name="coffee" size={48} color="#CBD5E1" />
               <Text style={styles.emptyMenuText}>No items here</Text>
             </View>
           ) : (
@@ -873,7 +873,7 @@ export default function ShopDetailScreen() {
                 onPress={() => setModalVisible(false)}
                 style={styles.modalClose}
               >
-                <Feather name="x" size={22} color="#000" />
+                <Feather name="x" size={22} color="#101828" />
               </TouchableOpacity>
             </View>
 
@@ -984,7 +984,7 @@ export default function ShopDetailScreen() {
                       setQuantity((value) => Math.max(1, value - 1))
                     }
                   >
-                    <Feather name="minus" size={16} color="#000" />
+                    <Feather name="minus" size={16} color="#101828" />
                   </TouchableOpacity>
 
                   <Text style={styles.qtyText}>{quantity}</Text>
@@ -993,7 +993,7 @@ export default function ShopDetailScreen() {
                     style={styles.qtyBtn}
                     onPress={() => setQuantity((value) => value + 1)}
                   >
-                    <Feather name="plus" size={16} color="#000" />
+                    <Feather name="plus" size={16} color="#101828" />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1024,7 +1024,7 @@ export default function ShopDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: '#F8FAFC',
   },
   centered: {
     flex: 1,
@@ -1035,14 +1035,14 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#000',
+    color: '#101828',
     marginTop: 12,
   },
   btn: {
     marginTop: 16,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: '#00704A',
+    backgroundColor: '#101828',
     borderRadius: 10,
   },
   btnText: {
@@ -1067,7 +1067,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
-    backgroundColor: 'rgba(0,0,0,0.42)',
+    backgroundColor: 'rgba(42,18,10,0.62)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   cartBadge: {
     position: 'absolute',
@@ -1092,7 +1094,7 @@ const styles = StyleSheet.create({
     height: HERO_HEIGHT,
     position: 'relative',
     overflow: 'visible',
-    backgroundColor: '#111',
+    backgroundColor: '#0F172A',
   },
   heroNoBanner: {
     overflow: 'hidden',
@@ -1114,11 +1116,11 @@ const styles = StyleSheet.create({
     width: LOGO_SIZE,
     height: LOGO_SIZE,
     borderRadius: LOGO_SIZE / 2,
-    backgroundColor: '#FFF',
+    backgroundColor: '#FFFFFF',
     overflow: 'hidden',
     borderWidth: 3,
     borderColor: '#FFF',
-    shadowColor: '#000',
+    shadowColor: '#101828',
     shadowOffset: {
       width: 0,
       height: 4,
@@ -1152,7 +1154,7 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 45,
-    backgroundColor: '#FFF',
+    backgroundColor: '#FFFFFF',
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1178,13 +1180,13 @@ const styles = StyleSheet.create({
   },
 
   shopInfo: {
-    backgroundColor: '#FFF',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 18,
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: '#E5E7EB',
   },
   shopInfoWithLogo: {
     paddingTop: LOGO_OVERLAP + 8,
@@ -1192,7 +1194,7 @@ const styles = StyleSheet.create({
   shopHeadline: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#000',
+    color: '#101828',
     marginBottom: 8,
     textAlign: 'center',
   },
@@ -1238,13 +1240,13 @@ const styles = StyleSheet.create({
 
   shopDesc: {
     fontSize: 14,
-    color: '#555',
+    color: '#475569',
     textAlign: 'center',
     lineHeight: 21,
   },
   shopDescToggle: {
     fontSize: 13,
-    color: '#00704A',
+    color: '#F97316',
     fontWeight: '600',
     textAlign: 'center',
     marginTop: 4,
@@ -1260,15 +1262,15 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 18,
     paddingVertical: 10,
-    backgroundColor: '#E8F5E9',
+    backgroundColor: '#F8FAFC',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#00704A33',
+    borderColor: '#F9731633',
   },
   actionBtnText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#00704A',
+    color: '#F97316',
   },
 
   offersSection: {
@@ -1285,7 +1287,7 @@ const styles = StyleSheet.create({
   },
   offerCard: {
     backgroundColor: '#fffbeb',
-    borderRadius: 14,
+    borderRadius: 20,
     padding: 14,
     borderWidth: 1.5,
     borderColor: '#fde68a',
@@ -1318,9 +1320,9 @@ const styles = StyleSheet.create({
   },
 
   catTabsWrap: {
-    backgroundColor: '#FFF',
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: '#E5E7EB',
   },
   catTabsContent: {
     paddingHorizontal: 16,
@@ -1331,16 +1333,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#F8FAFC',
     marginRight: 6,
   },
   catTabActive: {
-    backgroundColor: '#00704A',
+    backgroundColor: '#101828',
   },
   catTabText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#666',
+    color: '#64748B',
   },
   catTabTextActive: {
     color: '#FFF',
@@ -1355,57 +1357,59 @@ const styles = StyleSheet.create({
   catSectionTitle: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#000',
+    color: '#101828',
     paddingHorizontal: 16,
     marginBottom: 4,
   },
   catSectionDesc: {
     fontSize: 13,
-    color: '#999',
+    color: '#94A3B8',
     paddingHorizontal: 16,
     marginBottom: 12,
   },
   menuGrid: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
   menuItem: {
-    width: (width - 28) / 2,
-    backgroundColor: '#FFF',
-    borderRadius: 14,
-    marginBottom: 12,
-    marginHorizontal: 3,
+    width: (width - 44) / 2,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginBottom: 8,
+    marginHorizontal: 2,
     overflow: 'hidden',
-    shadowColor: '#000',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#101828',
     shadowOffset: {
       width: 0,
       height: 2,
     },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
     elevation: 2,
   },
   menuItemImage: {
     width: '100%',
-    height: 120,
-    backgroundColor: '#F5F5F5',
+    height: 92,
+    backgroundColor: '#F8FAFC',
   },
   menuItemContent: {
-    padding: 10,
+    padding: 8,
   },
   menuItemName: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#000',
+    color: '#101828',
     marginBottom: 3,
   },
   menuItemDesc: {
-    fontSize: 12,
-    color: '#999',
-    marginBottom: 10,
-    lineHeight: 16,
+    fontSize: 10,
+    color: '#94A3B8',
+    marginBottom: 6,
+    lineHeight: 14,
   },
   menuItemFooter: {
     flexDirection: 'row',
@@ -1413,15 +1417,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   menuItemPrice: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
-    color: '#00704A',
+    color: '#F97316',
   },
   addButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#00704A',
+    width: 27,
+    height: 27,
+    borderRadius: 14,
+    backgroundColor: '#101828',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1434,7 +1438,7 @@ const styles = StyleSheet.create({
   },
   emptyMenuText: {
     fontSize: 15,
-    color: '#CCC',
+    color: '#CBD5E1',
     marginTop: 12,
   },
 
@@ -1443,9 +1447,9 @@ const styles = StyleSheet.create({
     bottom: 20,
     left: 16,
     right: 16,
-    backgroundColor: '#00704A',
-    borderRadius: 16,
-    shadowColor: '#000',
+    backgroundColor: '#101828',
+    borderRadius: 22,
+    shadowColor: '#101828',
     shadowOffset: {
       width: 0,
       height: 4,
@@ -1462,7 +1466,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   floatingCartBadge: {
-    backgroundColor: '#FFF',
+    backgroundColor: '#FFFFFF',
     borderRadius: 11,
     minWidth: 22,
     height: 22,
@@ -1471,7 +1475,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   floatingCartBadgeText: {
-    color: '#00704A',
+    color: '#F97316',
     fontSize: 13,
     fontWeight: '800',
   },
@@ -1488,7 +1492,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalSheet: {
-    backgroundColor: '#FFF',
+    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: '88%',
@@ -1507,17 +1511,17 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: '#E5E7EB',
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#000',
+    color: '#101828',
     marginBottom: 2,
   },
   modalBasePrice: {
     fontSize: 15,
-    color: '#00704A',
+    color: '#F97316',
     fontWeight: '600',
   },
   modalClose: {
@@ -1528,7 +1532,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   noModsText: {
-    color: '#999',
+    color: '#94A3B8',
     fontSize: 14,
     textAlign: 'center',
     paddingVertical: 20,
@@ -1545,17 +1549,17 @@ const styles = StyleSheet.create({
   modGroupName: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#000',
+    color: '#101828',
   },
   modGroupTag: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#F8FAFC',
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
   modGroupTagText: {
     fontSize: 11,
-    color: '#999',
+    color: '#94A3B8',
     fontWeight: '600',
   },
   modOption: {
@@ -1566,20 +1570,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: '#E5E5E5',
+    borderColor: '#E5E7EB',
     marginBottom: 8,
   },
   modOptionSel: {
-    borderColor: '#00704A',
-    backgroundColor: '#F0FAF5',
+    borderColor: '#F97316',
+    backgroundColor: '#F8FAFC',
   },
   modOptName: {
     fontSize: 14,
-    color: '#000',
+    color: '#101828',
     flex: 1,
   },
   modOptNameSel: {
-    color: '#00704A',
+    color: '#F97316',
     fontWeight: '600',
   },
   modOptRight: {
@@ -1589,23 +1593,23 @@ const styles = StyleSheet.create({
   },
   modOptPrice: {
     fontSize: 13,
-    color: '#999',
+    color: '#94A3B8',
   },
   modOptPriceSel: {
-    color: '#00704A',
+    color: '#F97316',
   },
   modCheck: {
     width: 22,
     height: 22,
     borderRadius: 11,
     borderWidth: 2,
-    borderColor: '#CCC',
+    borderColor: '#CBD5E1',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modCheckSel: {
-    backgroundColor: '#00704A',
-    borderColor: '#00704A',
+    backgroundColor: '#101828',
+    borderColor: '#F97316',
   },
   qtyRow: {
     flexDirection: 'row',
@@ -1613,14 +1617,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+    borderTopColor: '#E5E7EB',
     marginTop: 8,
     marginBottom: 8,
   },
   qtyLabel: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#000',
+    color: '#101828',
   },
   qtyControls: {
     flexDirection: 'row',
@@ -1631,14 +1635,14 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#F8FAFC',
     justifyContent: 'center',
     alignItems: 'center',
   },
   qtyText: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#000',
+    color: '#101828',
     minWidth: 24,
     textAlign: 'center',
   },
@@ -1646,11 +1650,11 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 36,
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+    borderTopColor: '#E5E7EB',
   },
   addToCartBtn: {
-    backgroundColor: '#00704A',
-    borderRadius: 14,
+    backgroundColor: '#101828',
+    borderRadius: 20,
     paddingVertical: 16,
     alignItems: 'center',
   },

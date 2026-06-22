@@ -16,7 +16,7 @@ export default function SavedAddressesScreen() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Feather name="arrow-left" size={24} color="#000" />
+          <Feather name="arrow-left" size={24} color="#101828" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Saved Addresses</Text>
         <View style={styles.backButton} />
@@ -24,7 +24,7 @@ export default function SavedAddressesScreen() {
 
       <View style={styles.body}>
         <View style={styles.iconWrap}>
-          <Feather name="map-pin" size={48} color="#00704A" />
+          <Feather name="map-pin" size={48} color="#F97316" />
         </View>
         <Text style={styles.title}>Coming Soon</Text>
         <Text style={styles.subtitle}>
@@ -39,14 +39,14 @@ export default function SavedAddressesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:   { flex: 1, backgroundColor: '#FAFAFA' },
-  header:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  container:   { flex: 1, backgroundColor: '#F8FAFC' },
+  header:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   backButton:  { padding: 8, width: 40 },
-  headerTitle: { fontSize: 20, fontWeight: '700', color: '#000' },
+  headerTitle: { fontSize: 20, fontWeight: '700', color: '#101828' },
   body:        { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
-  iconWrap:    { width: 96, height: 96, borderRadius: 48, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
-  title:       { fontSize: 24, fontWeight: '800', color: '#000', marginBottom: 12 },
-  subtitle:    { fontSize: 15, color: '#666', textAlign: 'center', lineHeight: 22, marginBottom: 32 },
-  button:      { paddingHorizontal: 32, paddingVertical: 14, backgroundColor: '#00704A', borderRadius: 25 },
+  iconWrap:    { width: 96, height: 96, borderRadius: 48, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
+  title:       { fontSize: 24, fontWeight: '800', color: '#101828', marginBottom: 12 },
+  subtitle:    { fontSize: 15, color: '#64748B', textAlign: 'center', lineHeight: 22, marginBottom: 32 },
+  button:      { paddingHorizontal: 32, paddingVertical: 14, backgroundColor: '#F97316', borderRadius: 25 },
   buttonText:  { color: '#FFF', fontSize: 16, fontWeight: '700' },
 });

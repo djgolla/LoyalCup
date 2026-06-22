@@ -40,7 +40,7 @@ export default function CoffeeShopCard({ shop }) {
       onPress={handlePress}
       activeOpacity={0.7}
     >
-      <View style={[styles.logoContainer, { backgroundColor: shop?.color || '#F5F5F5' }]}>
+      <View style={[styles.logoContainer, { backgroundColor: shop?.color || '#F8FAFC' }]}>
         {shop?.logo_url ? (
           <Image
             source={{ uri: shop.logo_url }}
@@ -60,14 +60,14 @@ export default function CoffeeShopCard({ shop }) {
         </Text>
 
         <View style={styles.infoRow}>
-          <Feather name="map-pin" size={14} color="#666" />
+          <Feather name="map-pin" size={14} color="#64748B" />
           <Text style={styles.locationText} numberOfLines={1}>
             {shop?.city || shop?.address || 'Nearby'}
           </Text>
         </View>
 
         <View style={styles.ratingRow}>
-          <Feather name="star" size={14} color="#FFB800" />
+          <Feather name="star" size={14} color="#F59E0B" />
           <Text style={styles.ratingText}>
             {Number(rating || 0).toFixed(1)}
           </Text>
@@ -84,7 +84,7 @@ export default function CoffeeShopCard({ shop }) {
         <Feather
           name="heart"
           size={20}
-          color={isFavorited ? '#FF0000' : '#999'}
+          color={isFavorited ? '#FF0000' : '#94A3B8'}
           fill={isFavorited ? '#FF0000' : 'none'}
         />
       </TouchableOpacity>
@@ -95,24 +95,24 @@ export default function CoffeeShopCard({ shop }) {
 const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
-    backgroundColor: '#FFF',
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 14,
     marginBottom: 12,
-    borderWidth: 2,
-    borderColor: '#000',
-    shadowColor: '#000',
-    shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 5,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#101828',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 4,
   },
   logoContainer: {
     width: 70,
     height: 70,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#000',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -130,7 +130,8 @@ const styles = StyleSheet.create({
   },
   shopName: {
     fontSize: 16,
-    fontFamily: 'Anton-Regular',
+    fontWeight: '900',
+    color: '#101828',
     marginBottom: 4,
   },
   infoRow: {
@@ -140,7 +141,7 @@ const styles = StyleSheet.create({
   },
   locationText: {
     fontSize: 12,
-    color: '#666',
+    color: '#64748B',
     marginLeft: 4,
   },
   ratingRow: {
@@ -150,11 +151,12 @@ const styles = StyleSheet.create({
   ratingText: {
     fontSize: 12,
     fontWeight: 'bold',
+    color: '#101828',
     marginLeft: 4,
   },
   reviewCount: {
     fontSize: 12,
-    color: '#666',
+    color: '#64748B',
     marginLeft: 4,
   },
   favoriteButton: {

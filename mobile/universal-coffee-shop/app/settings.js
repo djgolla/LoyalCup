@@ -165,7 +165,7 @@ export default function SettingsScreen() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerSide} onPress={() => router.back()}>
-          <Feather name="arrow-left" size={24} color="#000" />
+          <Feather name="arrow-left" size={24} color="#101828" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Settings</Text>
         <View style={styles.headerSide} />
@@ -178,26 +178,26 @@ export default function SettingsScreen() {
 
         <View style={styles.settingItem}>
           <View style={styles.settingLeft}>
-            <View style={styles.iconContainer}><Feather name="bell" size={20} color="#00704A" /></View>
+            <View style={styles.iconContainer}><Feather name="bell" size={20} color="#F97316" /></View>
             <Text style={styles.settingLabel}>All Notifications</Text>
           </View>
           <Switch
             value={notificationsEnabled}
             onValueChange={handleToggleNotifications}
-            trackColor={{ false: '#E0E0E0', true: '#00704A' }}
+            trackColor={{ false: '#E0E0E0', true: '#F97316' }}
             thumbColor="#FFF"
           />
         </View>
 
         <View style={styles.settingItem}>
           <View style={styles.settingLeft}>
-            <View style={styles.iconContainer}><Feather name="smartphone" size={20} color="#00704A" /></View>
+            <View style={styles.iconContainer}><Feather name="smartphone" size={20} color="#F97316" /></View>
             <Text style={styles.settingLabel}>Push Notifications</Text>
           </View>
           <Switch
             value={pushEnabled}
             onValueChange={handleTogglePush}
-            trackColor={{ false: '#E0E0E0', true: '#00704A' }}
+            trackColor={{ false: '#E0E0E0', true: '#F97316' }}
             thumbColor="#FFF"
             disabled={!notificationsEnabled}
           />
@@ -205,13 +205,13 @@ export default function SettingsScreen() {
 
         <View style={styles.settingItem}>
           <View style={styles.settingLeft}>
-            <View style={styles.iconContainer}><Feather name="mail" size={20} color="#00704A" /></View>
+            <View style={styles.iconContainer}><Feather name="mail" size={20} color="#F97316" /></View>
             <Text style={styles.settingLabel}>Email Notifications</Text>
           </View>
           <Switch
             value={emailEnabled}
             onValueChange={handleToggleEmail}
-            trackColor={{ false: '#E0E0E0', true: '#00704A' }}
+            trackColor={{ false: '#E0E0E0', true: '#F97316' }}
             thumbColor="#FFF"
             disabled={!notificationsEnabled}
           />
@@ -222,18 +222,18 @@ export default function SettingsScreen() {
 
         <TouchableOpacity style={styles.settingItem} onPress={() => setEditProfileVisible(true)}>
           <View style={styles.settingLeft}>
-            <View style={styles.iconContainer}><Feather name="user" size={20} color="#00704A" /></View>
+            <View style={styles.iconContainer}><Feather name="user" size={20} color="#F97316" /></View>
             <Text style={styles.settingLabel}>Edit Profile</Text>
           </View>
-          <Feather name="chevron-right" size={20} color="#CCC" />
+          <Feather name="chevron-right" size={20} color="#CBD5E1" />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.settingItem} onPress={() => setChangePasswordVisible(true)}>
           <View style={styles.settingLeft}>
-            <View style={styles.iconContainer}><Feather name="lock" size={20} color="#00704A" /></View>
+            <View style={styles.iconContainer}><Feather name="lock" size={20} color="#F97316" /></View>
             <Text style={styles.settingLabel}>Change Password</Text>
           </View>
-          <Feather name="chevron-right" size={20} color="#CCC" />
+          <Feather name="chevron-right" size={20} color="#CBD5E1" />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -241,10 +241,10 @@ export default function SettingsScreen() {
           onPress={handleOpenPrivacy}
         >
           <View style={styles.settingLeft}>
-            <View style={styles.iconContainer}><Feather name="shield" size={20} color="#00704A" /></View>
+            <View style={styles.iconContainer}><Feather name="shield" size={20} color="#F97316" /></View>
             <Text style={styles.settingLabel}>Privacy Policy</Text>
           </View>
-          <Feather name="chevron-right" size={20} color="#CCC" />
+          <Feather name="chevron-right" size={20} color="#CBD5E1" />
         </TouchableOpacity>
 
         {/* ── Support ── */}
@@ -252,10 +252,10 @@ export default function SettingsScreen() {
 
         <TouchableOpacity style={styles.settingItem} onPress={() => router.push('/help')}>
           <View style={styles.settingLeft}>
-            <View style={styles.iconContainer}><Feather name="help-circle" size={20} color="#00704A" /></View>
+            <View style={styles.iconContainer}><Feather name="help-circle" size={20} color="#F97316" /></View>
             <Text style={styles.settingLabel}>Help & Support</Text>
           </View>
-          <Feather name="chevron-right" size={20} color="#CCC" />
+          <Feather name="chevron-right" size={20} color="#CBD5E1" />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.settingItem} onPress={handleDeleteAccountRequest}>
@@ -268,7 +268,7 @@ export default function SettingsScreen() {
               <Text style={styles.settingSubLabel}>Request account and data deletion</Text>
             </View>
           </View>
-          <Feather name="external-link" size={18} color="#CCC" />
+          <Feather name="external-link" size={18} color="#CBD5E1" />
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
@@ -292,7 +292,7 @@ export default function SettingsScreen() {
                 value={profileName}
                 onChangeText={setProfileName}
                 placeholder="Enter your name"
-                placeholderTextColor="#999"
+                placeholderTextColor="#94A3B8"
               />
             </View>
 
@@ -343,7 +343,7 @@ export default function SettingsScreen() {
                 value={newPassword}
                 onChangeText={setNewPassword}
                 placeholder="Enter new password"
-                placeholderTextColor="#999"
+                placeholderTextColor="#94A3B8"
                 secureTextEntry
               />
             </View>
@@ -355,7 +355,7 @@ export default function SettingsScreen() {
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
                 placeholder="Confirm new password"
-                placeholderTextColor="#999"
+                placeholderTextColor="#94A3B8"
                 secureTextEntry
               />
             </View>
@@ -387,31 +387,31 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:         { flex: 1, backgroundColor: '#FAFAFA' },
-  header:            { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  container:         { flex: 1, backgroundColor: '#F8FAFC' },
+  header:            { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   headerSide:        { width: 40, padding: 8 },
-  headerTitle:       { fontSize: 20, fontWeight: '700', color: '#000' },
+  headerTitle:       { fontSize: 20, fontWeight: '700', color: '#101828' },
   scrollView:        { flex: 1, paddingHorizontal: 16 },
-  sectionTitle:      { fontSize: 12, fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 24, marginBottom: 8 },
-  settingItem:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, backgroundColor: '#FFF', borderRadius: 14, marginBottom: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
+  sectionTitle:      { fontSize: 12, fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 24, marginBottom: 8 },
+  settingItem:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, backgroundColor: '#FFFFFF', borderRadius: 14, marginBottom: 8, shadowColor: '#101828', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
   settingLeft:       { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  iconContainer:     { width: 36, height: 36, borderRadius: 18, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
+  iconContainer:     { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
   dangerIconContainer: { backgroundColor: '#FEE2E2' },
-  settingLabel:      { fontSize: 15, fontWeight: '600', color: '#000' },
-  settingSubLabel:   { fontSize: 12, color: '#777', marginTop: 2 },
+  settingLabel:      { fontSize: 15, fontWeight: '600', color: '#101828' },
+  settingSubLabel:   { fontSize: 12, color: '#7A604F', marginTop: 2 },
   dangerLabel:       { color: '#B91C1C' },
   modalOverlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  modalContent:      { backgroundColor: '#FFF', borderRadius: 20, padding: 24, width: '88%', maxWidth: 400 },
-  modalTitle:        { fontSize: 20, fontWeight: '700', color: '#000', marginBottom: 20, textAlign: 'center' },
+  modalContent:      { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 24, width: '88%', maxWidth: 400 },
+  modalTitle:        { fontSize: 20, fontWeight: '700', color: '#101828', marginBottom: 20, textAlign: 'center' },
   inputGroup:        { marginBottom: 16 },
-  inputLabel:        { fontSize: 13, fontWeight: '600', marginBottom: 6, color: '#555' },
-  input:             { borderWidth: 1.5, borderColor: '#E0E0E0', borderRadius: 12, padding: 12, fontSize: 15, backgroundColor: '#FFF', color: '#000' },
-  inputDisabled:     { backgroundColor: '#F5F5F5', color: '#999' },
-  helperText:        { fontSize: 11, color: '#999', marginTop: 4 },
+  inputLabel:        { fontSize: 13, fontWeight: '600', marginBottom: 6, color: '#475569' },
+  input:             { borderWidth: 1.5, borderColor: '#E5E7EB', borderRadius: 12, padding: 12, fontSize: 15, backgroundColor: '#FFFFFF', color: '#101828' },
+  inputDisabled:     { backgroundColor: '#F8FAFC', color: '#94A3B8' },
+  helperText:        { fontSize: 11, color: '#94A3B8', marginTop: 4 },
   modalButtons:      { flexDirection: 'row', gap: 12, marginTop: 20 },
   modalButton:       { flex: 1, padding: 14, borderRadius: 12, alignItems: 'center' },
-  cancelButton:      { backgroundColor: '#F5F5F5' },
-  saveButton:        { backgroundColor: '#00704A' },
-  cancelButtonText:  { fontSize: 15, fontWeight: '600', color: '#000' },
+  cancelButton:      { backgroundColor: '#F8FAFC' },
+  saveButton:        { backgroundColor: '#F97316' },
+  cancelButtonText:  { fontSize: 15, fontWeight: '600', color: '#101828' },
   saveButtonText:    { fontSize: 15, fontWeight: '600', color: '#FFF' },
 });

@@ -15,7 +15,7 @@ export default function MenuItemCard({ item, onAddToCart }) {
         />
       ) : (
         <View style={styles.placeholderImage}>
-          <Feather name="coffee" size={32} color="#666" />
+          <Feather name="coffee" size={32} color="#64748B" />
         </View>
       )}
       
@@ -44,26 +44,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 15,
     marginBottom: 15,
-    borderWidth: 2,
-    borderColor: '#000',
-    borderRadius: 15,
-    backgroundColor: '#FFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#101828',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    elevation: 3,
   },
   itemImage: {
     width: 80,
     height: 80,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#000',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
     marginRight: 15,
   },
   placeholderImage: {
     width: 80,
     height: 80,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#000',
-    backgroundColor: '#F0F0F0',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#E5E7EB',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 15,
@@ -74,23 +79,24 @@ const styles = StyleSheet.create({
   },
   itemName: {
     fontSize: 18,
-    fontFamily: 'Anton-Regular',
+    fontWeight: '900',
+    color: '#101828',
     marginBottom: 5,
   },
   itemDescription: {
     fontSize: 14,
-    color: '#666',
+    color: '#64748B',
     marginBottom: 8,
   },
   itemPrice: {
     fontSize: 16,
-    fontFamily: 'Anton-Regular',
-    color: '#000',
+    fontWeight: '900',
+    color: '#F97316',
   },
   addButton: {
     width: 44,
     height: 44,
-    backgroundColor: '#000',
+    backgroundColor: '#101828',
     borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',

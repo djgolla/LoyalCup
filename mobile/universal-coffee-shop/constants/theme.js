@@ -3,34 +3,37 @@
 
 export const Colors = {
   // Primary
-  background: '#FAFAFA',
+  background: '#F8FAFC',
   backgroundAlt: '#FFFFFF',
-  primary: '#000000',
-  primaryLight: '#1A1A1A',
+  primary: '#101828',
+  primaryLight: '#1F2937',
   
   // Text
-  text: '#1A1A1A',
-  textSecondary: '#666666',
-  textTertiary: '#999999',
-  textLight: '#CCCCCC',
+  text: '#101828',
+  textSecondary: '#64748B',
+  textTertiary: '#94A3B8',
+  textLight: '#CBD5E1',
   
   // Accents
-  accent: '#2C1810',  // Coffee brown
+  accent: '#F97316',
+  accentLight: '#FFEDD5',
+  espresso: '#101828',
+  crema: '#F8FAFC',
   error: '#FF3B30',
-  success: '#34C759',
-  warning: '#FFB800',
-  info: '#007AFF',
+  success: '#15803D',
+  warning: '#D97706',
+  info: '#2563EB',
   
   // UI Elements
-  border: '#E0E0E0',
-  borderDark: '#000000',
-  divider: '#F0F0F0',
+  border: '#E5E7EB',
+  borderDark: '#101828',
+  divider: '#E5E7EB',
   overlay: 'rgba(0, 0, 0, 0.5)',
   
   // Backgrounds
   cardBg: '#FFFFFF',
   inputBg: '#FFFFFF',
-  disabledBg: '#F5F5F5',
+  disabledBg: '#E2E8F0',
 };
 
 export const Spacing = {
@@ -73,23 +76,23 @@ export const Typography = {
 
 export const Shadows = {
   small: {
-    shadowColor: '#000',
+    shadowColor: '#101828',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.06,
     shadowRadius: 4,
     elevation: 1,
   },
   medium: {
-    shadowColor: '#000',
+    shadowColor: '#101828',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
   },
   large: {
-    shadowColor: '#000',
+    shadowColor: '#101828',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.18,
     shadowRadius: 12,
     elevation: 6,
   },

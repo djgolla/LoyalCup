@@ -73,11 +73,11 @@ const OrderCard = ({ order, onPress, onReorder, isActive }) => {
       <View style={styles.shopRow}>
         {shopLogo
           ? <Image source={{ uri: shopLogo }} style={styles.shopLogo} />
-          : <View style={styles.shopLogoPlaceholder}><Feather name="coffee" size={13} color="#00704A" /></View>
+          : <View style={styles.shopLogoPlaceholder}><Feather name="coffee" size={13} color="#F97316" /></View>
         }
         <Text style={styles.shopName} numberOfLines={1}>{shopName}</Text>
-        <View style={[styles.statusBadge, { backgroundColor: isCancelled ? '#fef2f2' : isActive ? '#E8F5E9' : '#f9fafb' }]}>
-          <Text style={[styles.statusText, { color: isCancelled ? '#dc2626' : isActive ? '#00704A' : '#6b7280' }]}>
+        <View style={[styles.statusBadge, { backgroundColor: isCancelled ? '#fef2f2' : isActive ? '#F8FAFC' : '#f9fafb' }]}>
+          <Text style={[styles.statusText, { color: isCancelled ? '#dc2626' : isActive ? '#F97316' : '#6b7280' }]}>
             {isCancelled ? 'Cancelled' : isActive ? 'Placed' : 'Completed'}
           </Text>
         </View>
@@ -110,11 +110,11 @@ const OrderCard = ({ order, onPress, onReorder, isActive }) => {
         <View style={styles.cardFooterRight}>
           {!isActive && order.status === 'completed' && (
             <TouchableOpacity style={styles.reorderBtn} onPress={() => onReorder(order)}>
-              <Feather name="refresh-cw" size={13} color="#00704A" />
+              <Feather name="refresh-cw" size={13} color="#F97316" />
               <Text style={styles.reorderBtnText}>Reorder</Text>
             </TouchableOpacity>
           )}
-          <Feather name="chevron-right" size={18} color="#CCC" />
+          <Feather name="chevron-right" size={18} color="#CBD5E1" />
         </View>
       </View>
     </TouchableOpacity>
@@ -171,11 +171,11 @@ export default function OrderHistoryScreen() {
   if (loading) return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}><Feather name="arrow-left" size={22} color="#000" /></TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()}><Feather name="arrow-left" size={22} color="#101828" /></TouchableOpacity>
         <Text style={styles.headerTitle}>Order History</Text>
         <View style={{ width: 22 }} />
       </View>
-      <View style={styles.centered}><ActivityIndicator size="large" color="#00704A" /></View>
+      <View style={styles.centered}><ActivityIndicator size="large" color="#F97316" /></View>
     </SafeAreaView>
   );
 
@@ -184,14 +184,14 @@ export default function OrderHistoryScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}><Feather name="arrow-left" size={22} color="#000" /></TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()}><Feather name="arrow-left" size={22} color="#101828" /></TouchableOpacity>
         <Text style={styles.headerTitle}>Order History</Text>
         <View style={{ width: 22 }} />
       </View>
 
       {!hasSomething ? (
         <View style={styles.emptyState}>
-          <Feather name="shopping-bag" size={60} color="#DDD" />
+          <Feather name="shopping-bag" size={60} color="#CBD5E1" />
           <Text style={styles.emptyTitle}>No orders yet</Text>
           <Text style={styles.emptySubtitle}>Your orders will appear here after you place them</Text>
           <TouchableOpacity style={styles.shopNowBtn} onPress={() => router.push('/home')}>
@@ -202,7 +202,7 @@ export default function OrderHistoryScreen() {
         <FlatList
           data={[]}
           renderItem={null}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#00704A" />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#F97316" />}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 40 }}
           ListHeaderComponent={
@@ -251,24 +251,24 @@ export default function OrderHistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:          { flex: 1, backgroundColor: '#FAFAFA' },
+  container:          { flex: 1, backgroundColor: '#F8FAFC' },
   centered:           { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header:             { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#EEE' },
-  headerTitle:        { fontSize: 20, fontWeight: '800', color: '#000' },
+  header:             { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  headerTitle:        { fontSize: 20, fontWeight: '800', color: '#101828' },
   section:            { paddingHorizontal: 16, paddingTop: 20 },
   sectionHeaderRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   sectionLabel:       { fontSize: 11, fontWeight: '800', color: '#9ca3af', letterSpacing: 1.2 },
   activePulse:        { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  activeDot:          { width: 7, height: 7, borderRadius: 4, backgroundColor: '#00704A' },
-  activeCount:        { fontSize: 11, fontWeight: '700', color: '#00704A' },
-  card:               { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1.5, borderColor: '#F0F0F0', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 1 },
-  cardActive:         { borderColor: '#00704A', borderWidth: 1.5 },
-  etaBanner:          { backgroundColor: '#00704A', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 12, alignItems: 'center' },
+  activeDot:          { width: 7, height: 7, borderRadius: 4, backgroundColor: '#F97316' },
+  activeCount:        { fontSize: 11, fontWeight: '700', color: '#F97316' },
+  card:               { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1.5, borderColor: '#E5E7EB', shadowColor: '#101828', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 1 },
+  cardActive:         { borderColor: '#F97316', borderWidth: 1.5 },
+  etaBanner:          { backgroundColor: '#F97316', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 12, alignItems: 'center' },
   etaBannerText:      { color: '#FFF', fontWeight: '800', fontSize: 13 },
   shopRow:            { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   shopLogo:           { width: 26, height: 26, borderRadius: 13, marginRight: 8 },
-  shopLogoPlaceholder:{ width: 26, height: 26, borderRadius: 13, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center', marginRight: 8 },
-  shopName:           { flex: 1, fontSize: 14, fontWeight: '700', color: '#000' },
+  shopLogoPlaceholder:{ width: 26, height: 26, borderRadius: 13, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', marginRight: 8 },
+  shopName:           { flex: 1, fontSize: 14, fontWeight: '700', color: '#101828' },
   statusBadge:        { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10 },
   statusText:         { fontSize: 11, fontWeight: '800' },
   metaRow:            { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
@@ -279,13 +279,13 @@ const styles = StyleSheet.create({
   itemMods:           { color: '#9ca3af', fontSize: 12 },
   moreItems:          { fontSize: 12, color: '#9ca3af', marginTop: 2 },
   cardFooter:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
-  totalText:          { fontSize: 18, fontWeight: '800', color: '#000' },
+  totalText:          { fontSize: 18, fontWeight: '800', color: '#101828' },
   cardFooterRight:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  reorderBtn:         { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5, borderColor: '#00704A' },
-  reorderBtnText:     { fontSize: 12, fontWeight: '700', color: '#00704A' },
+  reorderBtn:         { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5, borderColor: '#F97316' },
+  reorderBtnText:     { fontSize: 12, fontWeight: '700', color: '#F97316' },
   emptyState:         { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
-  emptyTitle:         { fontSize: 20, fontWeight: '800', color: '#000', marginTop: 16, marginBottom: 6 },
+  emptyTitle:         { fontSize: 20, fontWeight: '800', color: '#101828', marginTop: 16, marginBottom: 6 },
   emptySubtitle:      { fontSize: 14, color: '#9ca3af', textAlign: 'center', marginBottom: 28, lineHeight: 20 },
-  shopNowBtn:         { paddingHorizontal: 28, paddingVertical: 14, backgroundColor: '#00704A', borderRadius: 25 },
+  shopNowBtn:         { paddingHorizontal: 28, paddingVertical: 14, backgroundColor: '#F97316', borderRadius: 25 },
   shopNowBtnText:     { color: '#FFF', fontSize: 15, fontWeight: '700' },
 });

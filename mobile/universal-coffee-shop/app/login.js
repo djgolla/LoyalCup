@@ -11,6 +11,7 @@ import {
   Alert,
   Platform,
   StyleSheet,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useRef } from 'react';
@@ -19,7 +20,7 @@ import Feather from '@expo/vector-icons/Feather';
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#F8FAFC',
   },
   keyboardView: {
     flex: 1,
@@ -27,41 +28,63 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: 20,
+    padding: 24,
   },
   backButton: {
     position: 'absolute',
-    top: 10,
-    left: 20,
+    top: 18,
+    left: 24,
     zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   header: {
     alignItems: 'center',
     marginBottom: 40,
   },
   iconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#E8F5E9',
+    width: 112,
+    height: 112,
+    borderRadius: 30,
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
-    borderWidth: 3,
-    borderColor: '#00704A',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#101828',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 6,
+  },
+  logoImage: {
+    width: 96,
+    height: 96,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: 32,
+    fontWeight: '900',
     marginBottom: 10,
-    color: '#000000',
+    color: '#101828',
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: '#64748B',
   },
   form: {
     marginVertical: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 26,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   inputGroup: {
     marginBottom: 20,
@@ -70,32 +93,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 8,
-    color: '#000',
+    color: '#101828',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 18,
     paddingHorizontal: 15,
-    paddingVertical: 12,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   input: {
     flex: 1,
     marginLeft: 10,
     fontSize: 16,
-    color: '#000000',
+    color: '#101828',
   },
   forgotPassword: {
-    color: '#00704A',
+    color: '#F97316',
     fontSize: 14,
     marginBottom: 20,
     textAlign: 'right',
   },
   button: {
-    backgroundColor: '#00704A',
-    height: 50,
-    borderRadius: 12,
+    backgroundColor: '#F97316',
+    height: 56,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 10,
@@ -111,17 +136,17 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
-marginTop: 20,
+    marginTop: 20,
   },
   footerText: {
-    color: '#666',
+    color: '#64748B',
   },
   footerLink: {
-    color: '#00704A',
+    color: '#F97316',
     fontWeight: '600',
   },
   cooldownText: {
-    color: '#999',
+    color: '#94A3B8',
     fontSize: 12,
     marginTop: 8,
     textAlign: 'center',
@@ -218,12 +243,16 @@ const handleForgotPassword = async () => {
           keyboardShouldPersistTaps="handled"
         >
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Feather name="arrow-left" size={24} color="#000" />
+            <Feather name="arrow-left" size={22} color="#101828" />
           </TouchableOpacity>
 
           <View style={styles.header}>
             <View style={styles.iconCircle}>
-              <Feather name="coffee" size={32} color="#00704A" />
+              <Image
+                source={require('../assets/images/LOGO.PNG')}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
             <Text style={styles.title}>Welcome Back</Text>
             <Text style={styles.subtitle}>Sign in to continue</Text>
@@ -233,11 +262,11 @@ const handleForgotPassword = async () => {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Email</Text>
               <View style={styles.inputContainer}>
-                <Feather name="mail" size={20} color="#666" />
+                <Feather name="mail" size={20} color="#64748B" />
                 <TextInput
                   style={styles.input}
                   placeholder="your@email.com"
-                  placeholderTextColor="#999"
+                  placeholderTextColor="#94A3B8"
                   value={email}
                   onChangeText={setEmail}
                   autoCapitalize="none"
@@ -251,11 +280,11 @@ const handleForgotPassword = async () => {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Password</Text>
               <View style={styles.inputContainer}>
-                <Feather name="lock" size={20} color="#666" />
+                <Feather name="lock" size={20} color="#64748B" />
                 <TextInput
                   style={styles.input}
                   placeholder="••••••••"
-                  placeholderTextColor="#999"
+                  placeholderTextColor="#94A3B8"
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
@@ -263,7 +292,7 @@ const handleForgotPassword = async () => {
                   editable={!loading}
                 />
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                  <Feather name={showPassword ? 'eye' : 'eye-off'} size={20} color="#666" />
+                  <Feather name={showPassword ? 'eye' : 'eye-off'} size={20} color="#64748B" />
                 </TouchableOpacity>
               </View>
             </View>

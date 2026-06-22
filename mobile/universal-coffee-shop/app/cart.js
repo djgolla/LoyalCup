@@ -109,14 +109,14 @@ export default function CartScreen() {
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
-            <Feather name="arrow-left" size={24} color="#000" />
+            <Feather name="arrow-left" size={24} color="#101828" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Cart</Text>
           <View style={styles.headerButton} />
         </View>
 
         <View style={styles.emptyContainer}>
-          <Feather name="shopping-bag" size={80} color="#CCC" />
+          <Feather name="shopping-bag" size={80} color="#CBD5E1" />
           <Text style={styles.emptyTitle}>Your cart is empty</Text>
           <Text style={styles.emptySubtitle}>Add items to get started</Text>
           <TouchableOpacity style={styles.shopButton} onPress={() => router.push('/home')}>
@@ -136,7 +136,7 @@ export default function CartScreen() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
-          <Feather name="arrow-left" size={24} color="#000" />
+          <Feather name="arrow-left" size={24} color="#101828" />
         </TouchableOpacity>
 
         <Text style={styles.headerTitle}>Cart ({cart.length})</Text>
@@ -172,7 +172,7 @@ export default function CartScreen() {
                   ? <Image source={{ uri: item.image_url }} style={styles.itemImage} />
                   : (
                     <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
-                      <Feather name="coffee" size={24} color="#CCC" />
+                      <Feather name="coffee" size={24} color="#CBD5E1" />
                     </View>
                   )
                 }
@@ -195,7 +195,7 @@ export default function CartScreen() {
                       style={styles.quantityButton}
                       onPress={() => handleUpdateQuantity(item.cartKey, -1)}
                     >
-                      <Feather name="minus" size={16} color="#000" />
+                      <Feather name="minus" size={16} color="#101828" />
                     </TouchableOpacity>
 
                     <Text style={styles.quantityText}>{item.quantity || 1}</Text>
@@ -204,7 +204,7 @@ export default function CartScreen() {
                       style={styles.quantityButton}
                       onPress={() => handleUpdateQuantity(item.cartKey, 1)}
                     >
-                      <Feather name="plus" size={16} color="#000" />
+                      <Feather name="plus" size={16} color="#101828" />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -215,7 +215,7 @@ export default function CartScreen() {
 
         {hasPoints && !multipleShopsDetected && (
           <View style={styles.pointsTeaser}>
-            <Feather name="award" size={18} color="#00704A" />
+            <Feather name="award" size={18} color="#2563EB" />
             <Text style={styles.pointsTeaserText}>
               {availablePoints.toLocaleString()} points available at {activeShopName}
               {pendingPoints > 0 ? ` · ${pendingPoints.toLocaleString()} pending` : ''}
@@ -226,7 +226,7 @@ export default function CartScreen() {
 
         {!hasPoints && !multipleShopsDetected && (
           <View style={styles.pointsTeaserMuted}>
-            <Feather name="award" size={18} color="#999" />
+            <Feather name="award" size={18} color="#94A3B8" />
             <Text style={styles.pointsTeaserMutedText}>
               No points available at {activeShopName} yet.
             </Text>
@@ -258,7 +258,7 @@ export default function CartScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAFAFA' },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
 
   header: {
     flexDirection: 'row',
@@ -266,12 +266,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: '#FFF',
+    backgroundColor: '#F8FAFC',
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: '#E5E7EB',
   },
   headerButton: { padding: 8, width: 40 },
-  headerTitle: { fontSize: 20, fontWeight: '700', color: '#000' },
+  headerTitle: { fontSize: 20, fontWeight: '900', color: '#101828' },
 
   emptyContainer: {
     flex: 1,
@@ -282,16 +282,16 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#000',
+    color: '#101828',
     marginTop: 20,
     marginBottom: 8,
   },
-  emptySubtitle: { fontSize: 15, color: '#999', marginBottom: 32 },
+  emptySubtitle: { fontSize: 15, color: '#94A3B8', marginBottom: 32 },
   shopButton: {
     paddingHorizontal: 32,
     paddingVertical: 14,
-    backgroundColor: '#00704A',
-    borderRadius: 12,
+    backgroundColor: '#101828',
+    borderRadius: 22,
   },
   shopButtonText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
 
@@ -319,19 +319,21 @@ const styles = StyleSheet.create({
 
   shopSection: {
     margin: 16,
-    backgroundColor: '#FFF',
-    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
     padding: 16,
-    shadowColor: '#000',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#101828',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
     elevation: 2,
   },
   shopSectionLabel: {
     fontSize: 15,
-    fontWeight: '700',
-    color: '#00704A',
+    fontWeight: '900',
+    color: '#101828',
     marginBottom: 12,
   },
 
@@ -340,13 +342,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F5F5F5',
+    borderBottomColor: '#F8FAFC',
   },
   itemImage: {
     width: 70,
     height: 70,
-    borderRadius: 8,
-    backgroundColor: '#F0F0F0',
+    borderRadius: 14,
+    backgroundColor: '#E5E7EB',
   },
   itemImagePlaceholder: {
     justifyContent: 'center',
@@ -360,26 +362,26 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#000',
+    color: '#101828',
     marginBottom: 2,
   },
   itemCustomizations: {
     fontSize: 12,
-    color: '#00704A',
+    color: '#64748B',
     marginBottom: 4,
   },
   itemPrice: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#00704A',
+    color: '#2563EB',
     marginBottom: 8,
   },
 
   quantityContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 18,
     paddingHorizontal: 4,
     paddingVertical: 4,
     alignSelf: 'flex-start',
@@ -388,14 +390,14 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 6,
-    backgroundColor: '#FFF',
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
   },
   quantityText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#000',
+    color: '#101828',
     marginHorizontal: 16,
   },
 
@@ -405,13 +407,15 @@ const styles = StyleSheet.create({
     gap: 10,
     margin: 16,
     padding: 14,
-    backgroundColor: '#E8F5E9',
-    borderRadius: 12,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
   },
   pointsTeaserText: {
     flex: 1,
     fontSize: 14,
-    color: '#00704A',
+    color: '#1D4ED8',
     fontWeight: '500',
     lineHeight: 19,
   },
@@ -421,13 +425,13 @@ const styles = StyleSheet.create({
     gap: 10,
     margin: 16,
     padding: 14,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 18,
   },
   pointsTeaserMutedText: {
     flex: 1,
     fontSize: 14,
-    color: '#777',
+    color: '#64748B',
     fontWeight: '500',
     lineHeight: 19,
   },
@@ -437,25 +441,25 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#FFF',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 30,
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+    borderTopColor: '#E5E7EB',
   },
   subtotalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 4,
   },
-  subtotalLabel: { fontSize: 16, color: '#666' },
-  subtotalValue: { fontSize: 18, fontWeight: '700', color: '#000' },
-  taxNote: { fontSize: 12, color: '#999', marginBottom: 12 },
+  subtotalLabel: { fontSize: 16, color: '#64748B' },
+  subtotalValue: { fontSize: 20, fontWeight: '900', color: '#101828' },
+  taxNote: { fontSize: 12, color: '#94A3B8', marginBottom: 12 },
 
   checkoutButton: {
-    backgroundColor: '#00704A',
-    borderRadius: 14,
+    backgroundColor: '#101828',
+    borderRadius: 22,
     paddingVertical: 16,
     flexDirection: 'row',
     justifyContent: 'center',

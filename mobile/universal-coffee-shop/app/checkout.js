@@ -38,9 +38,9 @@ const getSquareHTML = (appId, locationId) => {
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:-apple-system,sans-serif;background:#fff;padding:20px}
     #card-container{margin-bottom:8px;min-height:90px}
-    #pay-button{width:100%;padding:16px;background:#000;color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;margin-top:12px}
+    #pay-button{width:100%;padding:16px;background:#101828;color:#fff;border:none;border-radius:18px;font-size:16px;font-weight:700;cursor:pointer;margin-top:12px}
     #pay-button:disabled{opacity:.5;cursor:not-allowed}
-    #status{margin-top:10px;font-size:13px;color:#666;text-align:center;min-height:18px}
+    #status{margin-top:10px;font-size:13px;color:#64748B;text-align:center;min-height:18px}
     .error{color:#e53e3e!important}
   </style>
 </head><body>
@@ -350,14 +350,14 @@ export default function CheckoutScreen() {
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
-            <Feather name="arrow-left" size={24} color="#000" />
+            <Feather name="arrow-left" size={24} color="#101828" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Checkout</Text>
           <View style={styles.headerButton} />
         </View>
 
         <View style={styles.emptyContainer}>
-          <Feather name="shopping-bag" size={72} color="#CCC" />
+          <Feather name="shopping-bag" size={72} color="#CBD5E1" />
           <Text style={styles.emptyTitle}>Your cart is empty</Text>
           <TouchableOpacity style={styles.browseButton} onPress={() => router.push('/home')}>
             <Text style={styles.browseButtonText}>Browse Shops</Text>
@@ -374,7 +374,7 @@ export default function CheckoutScreen() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
-          <Feather name="arrow-left" size={24} color="#000" />
+          <Feather name="arrow-left" size={24} color="#101828" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Checkout</Text>
         <View style={styles.headerButton} />
@@ -431,7 +431,7 @@ export default function CheckoutScreen() {
                     </Text>
                   </View>
                 </View>
-                <Feather name={showPointsPanel ? 'chevron-up' : 'chevron-down'} size={20} color="#666" />
+                <Feather name={showPointsPanel ? 'chevron-up' : 'chevron-down'} size={20} color="#64748B" />
               </TouchableOpacity>
 
               {showPointsPanel && (
@@ -474,7 +474,7 @@ export default function CheckoutScreen() {
                           onPress={dec}
                           disabled={pointsToRedeem <= 0}
                         >
-                          <Feather name="minus" size={18} color="#000" />
+                          <Feather name="minus" size={18} color="#101828" />
                         </TouchableOpacity>
 
                         <View style={styles.stepperValue}>
@@ -487,7 +487,7 @@ export default function CheckoutScreen() {
                           onPress={inc}
                           disabled={pointsToRedeem >= maxRedeemable}
                         >
-                          <Feather name="plus" size={18} color="#000" />
+                          <Feather name="plus" size={18} color="#101828" />
                         </TouchableOpacity>
                       </View>
 
@@ -512,7 +512,7 @@ export default function CheckoutScreen() {
         <View style={styles.card}>
           {quoteLoading ? (
             <View style={styles.quoteLoadingRow}>
-              <ActivityIndicator color="#00704A" size="small" />
+              <ActivityIndicator color="#F97316" size="small" />
               <Text style={styles.quoteLoadingText}>Calculating final total with Square...</Text>
             </View>
           ) : quoteError ? (
@@ -534,8 +534,8 @@ export default function CheckoutScreen() {
 
               {displayDiscount > 0 && (
                 <View style={styles.priceRow}>
-                  <Text style={[styles.priceLabel, { color: '#00704A' }]}>Points ({pointsToRedeem})</Text>
-                  <Text style={[styles.priceValue, { color: '#00704A' }]}>−{money(displayDiscount)}</Text>
+                  <Text style={[styles.priceLabel, { color: '#F97316' }]}>Points ({pointsToRedeem})</Text>
+                  <Text style={[styles.priceValue, { color: '#F97316' }]}>−{money(displayDiscount)}</Text>
                 </View>
               )}
 
@@ -545,7 +545,7 @@ export default function CheckoutScreen() {
               </View>
 
               <View style={styles.taxNote}>
-                <Feather name="check-circle" size={12} color="#00704A" />
+                <Feather name="check-circle" size={12} color="#F97316" />
                 <Text style={styles.taxNoteText}>Calculated by Square</Text>
               </View>
             </>
@@ -553,7 +553,7 @@ export default function CheckoutScreen() {
         </View>
 
         <View style={styles.infoBox}>
-          <Feather name="star" size={14} color="#00704A" />
+          <Feather name="star" size={14} color="#F97316" />
           <Text style={styles.infoText}>
             {cfg ? `Earn ${cfg.points_per_dollar} pts per $1${cfg.bonus_active ? ` (${cfg.bonus_multiplier}× bonus active!)` : ''}` : 'Earn loyalty points on this order.'}
           </Text>
@@ -591,7 +591,7 @@ export default function CheckoutScreen() {
           <SafeAreaView style={styles.modalContainer} edges={['top', 'bottom']}>
             <View style={styles.modalHeader}>
               <TouchableOpacity style={styles.headerButton} onPress={() => setShowPaymentSheet(false)}>
-                <Feather name="x" size={24} color="#000" />
+                <Feather name="x" size={24} color="#101828" />
               </TouchableOpacity>
               <Text style={styles.headerTitle}>Enter Card</Text>
               <View style={styles.headerButton} />
@@ -616,7 +616,7 @@ export default function CheckoutScreen() {
             />
 
             <View style={styles.modalFooter}>
-              <Feather name="lock" size={13} color="#999" />
+              <Feather name="lock" size={13} color="#94A3B8" />
               <Text style={styles.modalFooterText}>Tokenized by Square. We never see or store your card number.</Text>
             </View>
           </SafeAreaView>
@@ -627,75 +627,75 @@ export default function CheckoutScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAFAFA' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: '#F8FAFC', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   headerButton: { width: 40, height: 40, justifyContent: 'center' },
-  headerTitle: { fontSize: 20, fontWeight: '700', color: '#000' },
+  headerTitle: { fontSize: 20, fontWeight: '900', color: '#101828' },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
-  emptyTitle: { fontSize: 22, fontWeight: '700', color: '#000', marginTop: 16, marginBottom: 6 },
-  browseButton: { backgroundColor: '#000', paddingHorizontal: 32, paddingVertical: 16, borderRadius: 14 },
+  emptyTitle: { fontSize: 22, fontWeight: '900', color: '#101828', marginTop: 16, marginBottom: 6 },
+  browseButton: { backgroundColor: '#101828', paddingHorizontal: 32, paddingVertical: 16, borderRadius: 22 },
   browseButtonText: { color: '#FFF', fontWeight: '700', fontSize: 15 },
   scrollView: { flex: 1 },
-  sectionLabel: { fontSize: 11, fontWeight: '700', color: '#999', letterSpacing: 1.5, marginTop: 20, marginBottom: 8, marginHorizontal: 16 },
-  card: { backgroundColor: '#FFF', marginHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: '#F0F0F0', overflow: 'hidden' },
+  sectionLabel: { fontSize: 11, fontWeight: '900', color: '#94A3B8', letterSpacing: 1.5, marginTop: 20, marginBottom: 8, marginHorizontal: 16 },
+  card: { backgroundColor: '#FFFFFF', marginHorizontal: 16, borderRadius: 22, borderWidth: 1, borderColor: '#E5E7EB', overflow: 'hidden' },
   orderItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
-  orderItemBorder: { borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
+  orderItemBorder: { borderBottomWidth: 1, borderBottomColor: '#F8FAFC' },
   itemLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 12 },
-  qtyBadge: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  qtyBadge: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#101828', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   qtyBadgeText: { color: '#FFF', fontSize: 13, fontWeight: '700' },
   itemInfo: { flex: 1 },
-  itemName: { fontSize: 15, fontWeight: '600', color: '#000', marginBottom: 2 },
-  itemCustom: { fontSize: 12, color: '#00704A' },
-  itemPrice: { fontSize: 15, fontWeight: '600', color: '#000' },
+  itemName: { fontSize: 15, fontWeight: '800', color: '#101828', marginBottom: 2 },
+  itemCustom: { fontSize: 12, color: '#F97316' },
+  itemPrice: { fontSize: 15, fontWeight: '600', color: '#101828' },
   pointsToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
   pointsToggleLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  pointsIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#00704A', justifyContent: 'center', alignItems: 'center' },
-  pointsToggleTitle: { fontSize: 15, fontWeight: '600', color: '#000' },
-  pointsToggleSub: { fontSize: 12, color: '#666', marginTop: 2 },
-  pointsPanel: { paddingHorizontal: 16, paddingBottom: 16, borderTopWidth: 1, borderTopColor: '#F5F5F5' },
-  lockedText: { fontSize: 13, color: '#999', textAlign: 'center', paddingVertical: 16 },
+  pointsIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F97316', justifyContent: 'center', alignItems: 'center' },
+  pointsToggleTitle: { fontSize: 15, fontWeight: '800', color: '#101828' },
+  pointsToggleSub: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  pointsPanel: { paddingHorizontal: 16, paddingBottom: 16, borderTopWidth: 1, borderTopColor: '#F8FAFC' },
+  lockedText: { fontSize: 13, color: '#94A3B8', textAlign: 'center', paddingVertical: 16 },
   pointsChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 14, marginBottom: 12 },
-  chip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: '#E5E5E5', backgroundColor: '#FAFAFA', alignItems: 'center', minWidth: 78 },
-  chipActive: { backgroundColor: '#000', borderColor: '#000' },
-  chipText: { fontSize: 13, fontWeight: '600', color: '#000' },
+  chip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: '#E5E7EB', backgroundColor: '#F8FAFC', alignItems: 'center', minWidth: 78 },
+  chipActive: { backgroundColor: '#101828', borderColor: '#101828' },
+  chipText: { fontSize: 13, fontWeight: '700', color: '#101828' },
   chipTextActive: { color: '#FFF' },
-  chipSub: { fontSize: 11, color: '#999', marginTop: 2 },
+  chipSub: { fontSize: 11, color: '#94A3B8', marginTop: 2 },
   chipSubActive: { color: '#AAA' },
-  stepperLabel: { fontSize: 11, fontWeight: '700', color: '#999', letterSpacing: 1, marginTop: 4, marginBottom: 8 },
+  stepperLabel: { fontSize: 11, fontWeight: '700', color: '#94A3B8', letterSpacing: 1, marginTop: 4, marginBottom: 8 },
   stepperRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
-  stepperBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F0F0F0', justifyContent: 'center', alignItems: 'center' },
+  stepperBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' },
   stepperBtnDis: { opacity: 0.4 },
   stepperValue: { flex: 1, alignItems: 'center' },
-  stepperPts: { fontSize: 18, fontWeight: '800', color: '#000' },
-  stepperUsd: { fontSize: 13, color: '#00704A', fontWeight: '600', marginTop: 2 },
+  stepperPts: { fontSize: 18, fontWeight: '900', color: '#101828' },
+  stepperUsd: { fontSize: 13, color: '#F97316', fontWeight: '600', marginTop: 2 },
   invalidText: { fontSize: 12, color: '#FF3B30', textAlign: 'center', marginTop: 4 },
   clearPoints: { fontSize: 13, fontWeight: '600', color: '#FF3B30', textAlign: 'center', marginTop: 6 },
   quoteLoadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16 },
-  quoteLoadingText: { fontSize: 14, color: '#666', fontWeight: '600' },
+  quoteLoadingText: { fontSize: 14, color: '#64748B', fontWeight: '600' },
   quoteErrorRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16, backgroundColor: '#FEF2F2' },
   quoteErrorText: { fontSize: 14, color: '#DC2626', fontWeight: '600', flex: 1 },
-  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
-  priceLabel: { fontSize: 15, color: '#666' },
-  priceValue: { fontSize: 15, fontWeight: '600', color: '#000' },
+  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' },
+  priceLabel: { fontSize: 15, color: '#64748B' },
+  priceValue: { fontSize: 15, fontWeight: '700', color: '#101828' },
   totalRow: { borderBottomWidth: 0, paddingTop: 14, paddingBottom: 8 },
-  totalLabel: { fontSize: 17, fontWeight: '700', color: '#000' },
-  totalValue: { fontSize: 17, fontWeight: '700', color: '#000' },
+  totalLabel: { fontSize: 18, fontWeight: '900', color: '#101828' },
+  totalValue: { fontSize: 20, fontWeight: '900', color: '#101828' },
   taxNote: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingBottom: 14 },
-  taxNoteText: { fontSize: 12, color: '#00704A', flex: 1, fontWeight: '600' },
-  infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginHorizontal: 16, marginTop: 12, backgroundColor: '#FFF', borderRadius: 12, borderWidth: 1, borderColor: '#F0F0F0', padding: 12 },
-  infoText: { flex: 1, fontSize: 13, color: '#00704A', lineHeight: 18 },
-  footer: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFF', padding: 20, paddingBottom: 30, borderTopWidth: 1, borderTopColor: '#F0F0F0' },
-  payButton: { backgroundColor: '#000', padding: 18, borderRadius: 14 },
+  taxNoteText: { fontSize: 12, color: '#F97316', flex: 1, fontWeight: '600' },
+  infoBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginHorizontal: 16, marginTop: 12, backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', padding: 12 },
+  infoText: { flex: 1, fontSize: 13, color: '#F97316', lineHeight: 18 },
+  footer: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFFFFF', padding: 20, paddingBottom: 30, borderTopWidth: 1, borderTopColor: '#E5E7EB' },
+  payButton: { backgroundColor: '#101828', padding: 18, borderRadius: 22 },
   payButtonDisabled: { opacity: 0.5 },
   payButtonInner: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10 },
   payButtonText: { color: '#FFF', fontWeight: '700', fontSize: 18 },
-  poweredBy: { textAlign: 'center', fontSize: 12, color: '#999', marginTop: 10 },
-  modalContainer: { flex: 1, backgroundColor: '#FFF' },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  modalAmount: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F0F0F0', backgroundColor: '#FAFAFA' },
-  modalAmountLabel: { fontSize: 15, color: '#666' },
-  modalAmountValue: { fontSize: 24, fontWeight: '700', color: '#000' },
-  webView: { flex: 1, backgroundColor: '#FFF' },
-  modalFooter: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 16, borderTopWidth: 1, borderTopColor: '#F0F0F0' },
-  modalFooterText: { flex: 1, fontSize: 12, color: '#999', lineHeight: 17 },
+  poweredBy: { textAlign: 'center', fontSize: 12, color: '#94A3B8', marginTop: 10 },
+  modalContainer: { flex: 1, backgroundColor: '#FFFFFF' },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  modalAmount: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', backgroundColor: '#F8FAFC' },
+  modalAmountLabel: { fontSize: 15, color: '#64748B' },
+  modalAmountValue: { fontSize: 24, fontWeight: '700', color: '#101828' },
+  webView: { flex: 1, backgroundColor: '#FFFFFF' },
+  modalFooter: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 16, borderTopWidth: 1, borderTopColor: '#E5E7EB' },
+  modalFooterText: { flex: 1, fontSize: 12, color: '#94A3B8', lineHeight: 17 },
 });

@@ -10,6 +10,8 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Image,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -26,6 +28,12 @@ export default function SignupScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const openLegalLink = (url) => {
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Unable to Open Link', 'Please try again in a moment.');
+    });
+  };
 
   const handleSignup = async () => {
     if (!name.trim() || !email.trim() || !password.trim() || !confirmPassword.trim()) {
@@ -83,12 +91,16 @@ export default function SignupScreen() {
             style={styles.backButton}
             onPress={() => router.back()}
           >
-            <Feather name="arrow-left" size={24} color="#000" />
+            <Feather name="arrow-left" size={22} color="#101828" />
           </TouchableOpacity>
 
           <View style={styles.header}>
             <View style={styles.iconCircle}>
-              <Feather name="coffee" size={32} color="#00704A" />
+              <Image
+                source={require('../assets/images/LOGO.PNG')}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
 
             <Text style={styles.title}>Join LoyalCup</Text>
@@ -100,12 +112,12 @@ export default function SignupScreen() {
               <Text style={styles.label}>Full Name</Text>
 
               <View style={styles.inputContainer}>
-                <Feather name="user" size={20} color="#666" />
+                <Feather name="user" size={20} color="#64748B" />
 
                 <TextInput
                   style={styles.input}
                   placeholder="John Doe"
-                  placeholderTextColor="#999"
+                  placeholderTextColor="#94A3B8"
                   value={name}
                   onChangeText={setName}
                   autoCapitalize="words"
@@ -118,12 +130,12 @@ export default function SignupScreen() {
               <Text style={styles.label}>Email</Text>
 
               <View style={styles.inputContainer}>
-                <Feather name="mail" size={20} color="#666" />
+                <Feather name="mail" size={20} color="#64748B" />
 
                 <TextInput
                   style={styles.input}
                   placeholder="your@email.com"
-                  placeholderTextColor="#999"
+                  placeholderTextColor="#94A3B8"
                   value={email}
                   onChangeText={setEmail}
                   autoCapitalize="none"
@@ -138,12 +150,12 @@ export default function SignupScreen() {
               <Text style={styles.label}>Password</Text>
 
               <View style={styles.inputContainer}>
-                <Feather name="lock" size={20} color="#666" />
+                <Feather name="lock" size={20} color="#64748B" />
 
                 <TextInput
                   style={styles.input}
                   placeholder="At least 6 characters"
-                  placeholderTextColor="#999"
+                  placeholderTextColor="#94A3B8"
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
@@ -158,7 +170,7 @@ export default function SignupScreen() {
                   <Feather
                     name={showPassword ? 'eye-off' : 'eye'}
                     size={20}
-                    color="#666"
+                    color="#64748B"
                   />
                 </TouchableOpacity>
               </View>
@@ -168,12 +180,12 @@ export default function SignupScreen() {
               <Text style={styles.label}>Confirm Password</Text>
 
               <View style={styles.inputContainer}>
-                <Feather name="lock" size={20} color="#666" />
+                <Feather name="lock" size={20} color="#64748B" />
 
                 <TextInput
                   style={styles.input}
                   placeholder="Re-enter your password"
-                  placeholderTextColor="#999"
+                  placeholderTextColor="#94A3B8"
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
                   secureTextEntry={!showPassword}
@@ -204,9 +216,19 @@ export default function SignupScreen() {
 
             <Text style={styles.terms}>
               By signing up, you agree to our{' '}
-              <Text style={styles.termsLink}>Terms of Service</Text>
+              <Text
+                style={styles.termsLink}
+                onPress={() => openLegalLink('https://loyalcupapp.com/terms')}
+              >
+                Terms of Service
+              </Text>
               {' '}and{' '}
-              <Text style={styles.termsLink}>Privacy Policy</Text>
+              <Text
+                style={styles.termsLink}
+                onPress={() => openLegalLink('https://loyalcupapp.com/privacy')}
+              >
+                Privacy Policy
+              </Text>
             </Text>
 
             <View style={styles.footer}>
@@ -226,7 +248,7 @@ export default function SignupScreen() {
               disabled={loading}
               activeOpacity={0.8}
             >
-              <Feather name="compass" size={18} color="#00704A" />
+              <Feather name="compass" size={18} color="#F97316" />
               <Text style={styles.guestButtonText}>Continue as Guest</Text>
             </TouchableOpacity>
 
@@ -243,7 +265,7 @@ export default function SignupScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFF',
+    backgroundColor: '#F8FAFC',
   },
   keyboardView: {
     flex: 1,
@@ -258,7 +280,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
@@ -268,28 +290,42 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   iconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#E8F5E9',
+    width: 112,
+    height: 112,
+    borderRadius: 30,
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
-    borderWidth: 3,
-    borderColor: '#00704A',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#101828',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 6,
+  },
+  logoImage: {
+    width: 96,
+    height: 96,
   },
   title: {
     fontSize: 32,
     fontWeight: '800',
-    color: '#000',
+    color: '#101828',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: '#64748B',
   },
   form: {
     gap: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 26,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   inputGroup: {
     gap: 8,
@@ -297,29 +333,31 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#000',
+    color: '#101828',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 18,
     paddingHorizontal: 16,
     paddingVertical: 16,
     gap: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   input: {
     flex: 1,
     fontSize: 16,
-    color: '#000',
+    color: '#101828',
   },
   signupButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00704A',
+    backgroundColor: '#F97316',
     paddingVertical: 18,
-    borderRadius: 12,
+    borderRadius: 20,
     gap: 8,
     marginTop: 8,
   },
@@ -333,13 +371,13 @@ const styles = StyleSheet.create({
   },
   terms: {
     fontSize: 12,
-    color: '#999',
+    color: '#94A3B8',
     textAlign: 'center',
     lineHeight: 18,
     marginTop: -8,
   },
   termsLink: {
-    color: '#00704A',
+    color: '#F97316',
     fontWeight: '600',
   },
   footer: {
@@ -350,12 +388,12 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 15,
-    color: '#666',
+    color: '#64748B',
   },
   footerLink: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#00704A',
+    color: '#F97316',
   },
   guestButton: {
     flexDirection: 'row',
@@ -366,17 +404,17 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#00704A',
+    borderColor: '#F97316',
   },
   guestButtonText: {
-    color: '#00704A',
+    color: '#F97316',
     fontSize: 16,
     fontWeight: '700',
   },
   guestHint: {
     marginTop: -10,
     textAlign: 'center',
-    color: '#888',
+    color: '#64748B',
     fontSize: 12,
   },
 });

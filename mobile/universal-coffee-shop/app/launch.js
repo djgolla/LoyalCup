@@ -4,41 +4,49 @@ import {
   Text,
   View,
   TouchableOpacity,
-  Dimensions,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 
-const { width, height } = Dimensions.get('window');
-
 export default function LaunchScreen() {
   const router = useRouter();
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <View style={styles.container}>
       <LinearGradient
-        colors={['#00704A', '#004D33', '#003324']}
+        colors={['#09090B', '#111827', '#1F2937']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
         style={styles.gradient}
       >
-        <View style={styles.content}>
+        <View style={styles.glowOne} />
+        <View style={styles.glowTwo} />
+
+        <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+          <View style={styles.content}>
           <View style={styles.logoContainer}>
-            <View style={styles.logoCircle}>
-              <Feather name="coffee" size={60} color="#FFF" />
+            <View style={styles.logoCard}>
+              <Image
+                source={require('../assets/images/LOGO.PNG')}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
 
             <Text style={styles.appName}>LoyalCup</Text>
 
             <Text style={styles.tagline}>
-              Your favorite coffee shops,{'\n'}all in one place
+              Order ahead, earn rewards, and find better coffee nearby.
             </Text>
           </View>
 
           <View style={styles.features}>
             <View style={styles.featureItem}>
               <View style={styles.featureIcon}>
-                <Feather name="map-pin" size={24} color="#00704A" />
+                <Feather name="map-pin" size={22} color="#F97316" />
               </View>
 
               <View style={styles.featureText}>
@@ -51,7 +59,7 @@ export default function LaunchScreen() {
 
             <View style={styles.featureItem}>
               <View style={styles.featureIcon}>
-                <Feather name="award" size={24} color="#00704A" />
+                <Feather name="award" size={22} color="#F97316" />
               </View>
 
               <View style={styles.featureText}>
@@ -64,7 +72,7 @@ export default function LaunchScreen() {
 
             <View style={styles.featureItem}>
               <View style={styles.featureIcon}>
-                <Feather name="zap" size={24} color="#00704A" />
+                <Feather name="zap" size={22} color="#F97316" />
               </View>
 
               <View style={styles.featureText}>
@@ -83,7 +91,7 @@ export default function LaunchScreen() {
               activeOpacity={0.8}
             >
               <Text style={styles.primaryButtonText}>Get Started</Text>
-              <Feather name="arrow-right" size={20} color="#00704A" />
+              <Feather name="arrow-right" size={20} color="#101828" />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -101,13 +109,14 @@ export default function LaunchScreen() {
               onPress={() => router.replace('/home')}
               activeOpacity={0.8}
             >
-              <Feather name="compass" size={16} color="rgba(255,255,255,0.88)" />
+              <Feather name="compass" size={18} color="#FFFFFF" />
               <Text style={styles.guestButtonText}>Continue as Guest</Text>
             </TouchableOpacity>
           </View>
-        </View>
+          </View>
+        </SafeAreaView>
       </LinearGradient>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -118,54 +127,90 @@ const styles = StyleSheet.create({
   gradient: {
     flex: 1,
   },
+  safeArea: {
+    flex: 1,
+  },
+  glowOne: {
+    position: 'absolute',
+    top: -140,
+    right: -140,
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    backgroundColor: 'rgba(249, 115, 22, 0.24)',
+  },
+  glowTwo: {
+    position: 'absolute',
+    bottom: 190,
+    left: -150,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: 'rgba(59, 130, 246, 0.12)',
+  },
   content: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 40,
-    paddingBottom: 28,
+    paddingHorizontal: 22,
+    paddingTop: 12,
+    paddingBottom: 14,
     justifyContent: 'space-between',
   },
   logoContainer: {
     alignItems: 'center',
-    marginTop: 40,
+    marginTop: 6,
   },
-  logoCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  logoCard: {
+    width: 96,
+    height: 96,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
-    borderWidth: 3,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.55)',
+    shadowColor: '#120703',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  logoImage: {
+    width: 82,
+    height: 82,
   },
   appName: {
-    fontSize: 48,
-    fontWeight: '800',
+    fontSize: 38,
+    fontWeight: '900',
     color: '#FFF',
-    marginBottom: 12,
-    letterSpacing: -1,
+    marginBottom: 6,
   },
   tagline: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.78)',
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 20,
+    fontWeight: '600',
+    maxWidth: 310,
   },
   features: {
-    gap: 20,
+    gap: 8,
   },
   featureItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.09)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+    borderRadius: 18,
+    padding: 9,
   },
   featureIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: '#FFF',
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    backgroundColor: '#F8FAFC',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -173,55 +218,62 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   featureTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
     color: '#FFF',
     marginBottom: 4,
   },
   featureDescription: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.62)',
   },
   buttons: {
-    gap: 12,
+    gap: 8,
   },
   primaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFF',
-    paddingVertical: 18,
-    borderRadius: 16,
+    paddingVertical: 13,
+    borderRadius: 20,
     gap: 8,
+    shadowColor: '#120703',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    elevation: 8,
   },
   primaryButtonText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#00704A',
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#101828',
   },
   secondaryButton: {
     alignItems: 'center',
-    paddingVertical: 18,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    paddingVertical: 13,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.22)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
   secondaryButtonText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#FFF',
   },
   guestButton: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 7,
-    paddingTop: 2,
-    paddingBottom: 2,
+    gap: 8,
+    paddingVertical: 13,
+    borderRadius: 20,
+    backgroundColor: '#F97316',
   },
   guestButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.88)',
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
 });

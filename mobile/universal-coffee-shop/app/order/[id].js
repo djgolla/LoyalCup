@@ -12,9 +12,9 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { apiClient } from '../../services/apiClient';
 
-const GREEN = '#00704A';
+const GREEN = '#F97316';
 const GREEN_DARK = '#005A3A';
-const GREEN_LIGHT = '#E8F5E9';
+const GREEN_LIGHT = '#F8FAFC';
 const ORANGE = '#F59E0B';
 
 const shortId = (id) => id?.slice(0, 8)?.toUpperCase() || '—';
@@ -185,7 +185,7 @@ export default function OrderConfirmationScreen() {
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.headerBtn} onPress={() => router.back()}>
-            <Feather name="arrow-left" size={22} color="#000" />
+            <Feather name="arrow-left" size={22} color="#101828" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Order</Text>
           <View style={styles.headerBtn} />
@@ -204,7 +204,7 @@ export default function OrderConfirmationScreen() {
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.headerBtn} onPress={() => router.back()}>
-            <Feather name="arrow-left" size={22} color="#000" />
+            <Feather name="arrow-left" size={22} color="#101828" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Order</Text>
           <View style={styles.headerBtn} />
@@ -241,13 +241,13 @@ export default function OrderConfirmationScreen() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerBtn} onPress={() => router.back()}>
-          <Feather name="arrow-left" size={22} color="#000" />
+          <Feather name="arrow-left" size={22} color="#101828" />
         </TouchableOpacity>
 
         <Text style={styles.headerTitle}>Order #{shortId(order.id)}</Text>
 
         <TouchableOpacity style={styles.headerBtn} onPress={() => router.push('/order-history')}>
-          <Feather name="list" size={22} color="#000" />
+          <Feather name="list" size={22} color="#101828" />
         </TouchableOpacity>
       </View>
 
@@ -430,53 +430,53 @@ export default function OrderConfirmationScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAFAFA' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#EEE' },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: '#000' },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  headerTitle: { fontSize: 18, fontWeight: '800', color: '#101828' },
   headerBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
 
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  loadingText: { marginTop: 12, color: '#666', fontSize: 14 },
-  errorText: { fontSize: 16, color: '#999', marginTop: 8 },
+  loadingText: { marginTop: 12, color: '#64748B', fontSize: 14 },
+  errorText: { fontSize: 16, color: '#94A3B8', marginTop: 8 },
 
   etaBanner: { margin: 16, marginBottom: 0, backgroundColor: GREEN, borderRadius: 18, padding: 18, alignItems: 'center' },
   readyBanner: { margin: 16, marginBottom: 0, backgroundColor: GREEN_DARK, borderRadius: 18, padding: 18, alignItems: 'center' },
   etaBannerTitle: { color: '#FFF', fontWeight: '900', fontSize: 17, textAlign: 'center', marginBottom: 5 },
   etaBannerText: { color: 'rgba(255,255,255,0.92)', fontWeight: '600', fontSize: 13, textAlign: 'center', lineHeight: 19 },
 
-  card: { margin: 16, marginBottom: 0, backgroundColor: '#FFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#F0F0F0' },
+  card: { margin: 16, marginBottom: 0, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#E5E7EB' },
   shopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   shopLogo: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F3F4F6' },
   shopLogoPlaceholder: { width: 44, height: 44, borderRadius: 22, backgroundColor: GREEN_LIGHT, alignItems: 'center', justifyContent: 'center' },
-  shopName: { fontSize: 16, fontWeight: '800', color: '#000' },
-  orderMeta: { fontSize: 12, color: '#999', marginTop: 2 },
-  statusMsg: { fontSize: 14, color: '#666', fontStyle: 'italic' },
+  shopName: { fontSize: 16, fontWeight: '800', color: '#101828' },
+  orderMeta: { fontSize: 12, color: '#94A3B8', marginTop: 2 },
+  statusMsg: { fontSize: 14, color: '#64748B', fontStyle: 'italic' },
 
-  sectionTitle: { fontSize: 12, fontWeight: '800', color: '#999', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 },
+  sectionTitle: { fontSize: 12, fontWeight: '800', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 },
 
   cancelTitle: { fontSize: 20, fontWeight: '800', color: '#DC2626', marginTop: 12 },
-  cancelSub: { fontSize: 14, color: '#999', textAlign: 'center', marginTop: 6 },
+  cancelSub: { fontSize: 14, color: '#94A3B8', textAlign: 'center', marginTop: 6 },
 
   itemRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11 },
   itemImage: { width: 46, height: 46, borderRadius: 12 },
   itemImagePlaceholder: { backgroundColor: GREEN_LIGHT, alignItems: 'center', justifyContent: 'center' },
-  itemName: { fontSize: 15, fontWeight: '800', color: '#000' },
-  itemQty: { fontSize: 12, color: '#666', marginTop: 2 },
+  itemName: { fontSize: 15, fontWeight: '800', color: '#101828' },
+  itemQty: { fontSize: 12, color: '#64748B', marginTop: 2 },
   itemMods: { fontSize: 12, color: GREEN, marginTop: 2 },
   itemPrice: { fontSize: 14, fontWeight: '800', color: GREEN },
 
   emptyItems: { alignItems: 'center', paddingVertical: 18 },
-  emptyItemsText: { fontSize: 13, color: '#999', marginTop: 8 },
+  emptyItemsText: { fontSize: 13, color: '#94A3B8', marginTop: 8 },
 
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
   totalRowFinal: { marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#E5E7EB' },
-  totalLabel: { fontSize: 14, color: '#666' },
+  totalLabel: { fontSize: 14, color: '#64748B' },
   totalValue: { fontSize: 14, color: '#374151', fontWeight: '600' },
-  totalLabelBold: { fontSize: 16, fontWeight: '900', color: '#000' },
+  totalLabelBold: { fontSize: 16, fontWeight: '900', color: '#101828' },
   totalValueBold: { fontSize: 16, fontWeight: '900', color: GREEN },
 
   squareBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-  squareBadgeText: { fontSize: 12, color: '#999' },
+  squareBadgeText: { fontSize: 12, color: '#94A3B8' },
   pointsBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, backgroundColor: GREEN_LIGHT, padding: 10, borderRadius: 10 },
   pointsBadgeText: { fontSize: 13, fontWeight: '800', color: GREEN },
 
@@ -493,14 +493,14 @@ const styles = StyleSheet.create({
   backButtonText: { color: '#FFF', fontWeight: '800' },
 
   modalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  modalCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 24, width: '100%', maxWidth: 380 },
-  modalTitle: { fontSize: 20, fontWeight: '900', color: '#000', textAlign: 'center' },
-  modalSub: { fontSize: 14, color: '#666', textAlign: 'center', marginTop: 4, marginBottom: 16 },
+  modalCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 24, width: '100%', maxWidth: 380 },
+  modalTitle: { fontSize: 20, fontWeight: '900', color: '#101828', textAlign: 'center' },
+  modalSub: { fontSize: 14, color: '#64748B', textAlign: 'center', marginTop: 4, marginBottom: 16 },
   starsRow: { flexDirection: 'row', justifyContent: 'center', marginBottom: 16 },
-  commentInput: { borderWidth: 1.5, borderColor: '#E5E7EB', borderRadius: 12, padding: 12, fontSize: 14, color: '#000', minHeight: 80, textAlignVertical: 'top', marginBottom: 16 },
+  commentInput: { borderWidth: 1.5, borderColor: '#E5E7EB', borderRadius: 12, padding: 12, fontSize: 14, color: '#101828', minHeight: 80, textAlignVertical: 'top', marginBottom: 16 },
   modalButtons: { flexDirection: 'row', gap: 12 },
   modalSkip: { flex: 1, padding: 14, borderRadius: 12, borderWidth: 1.5, borderColor: '#E5E7EB', alignItems: 'center' },
-  modalSkipText: { fontWeight: '800', color: '#666' },
+  modalSkipText: { fontWeight: '800', color: '#64748B' },
   modalSubmit: { flex: 2, padding: 14, borderRadius: 12, backgroundColor: ORANGE, alignItems: 'center' },
   modalSubmitText: { fontWeight: '900', color: '#FFF', fontSize: 15 },
 });

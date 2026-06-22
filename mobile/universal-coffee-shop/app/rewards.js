@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { getMyLoyalty } from '../services/loyaltyService';
 
 export default function RewardsScreen() {
@@ -37,7 +38,7 @@ export default function RewardsScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#00704A" />
+          <ActivityIndicator size="large" color="#F97316" />
         </View>
       </SafeAreaView>
     );
@@ -54,11 +55,11 @@ export default function RewardsScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Feather name="arrow-left" size={24} color="#000" />
+          <Feather name="arrow-left" size={24} color="#101828" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Rewards</Text>
         <TouchableOpacity onPress={onRefresh}>
-          <Feather name="refresh-cw" size={20} color="#000" />
+          <Feather name="refresh-cw" size={20} color="#101828" />
         </TouchableOpacity>
       </View>
 
@@ -66,12 +67,19 @@ export default function RewardsScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         contentContainerStyle={{ paddingBottom: 32 }}
       >
-        <View style={styles.summaryCard}>
+        <LinearGradient
+          colors={['#0F172A', '#1D4ED8', '#06B6D4']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.summaryCard}
+        >
+          <View style={styles.summaryGlow} />
+
           <View style={styles.summaryTop}>
             <View style={styles.iconWrap}>
               <Feather name="award" size={22} color="#fff" />
             </View>
-            <Text style={styles.summaryLabel}>YOUR POINTS</Text>
+            <Text style={styles.summaryLabel}>LOYALCUP BALANCE</Text>
           </View>
 
           <Text style={styles.balanceBig}>{totalPts.toLocaleString()}</Text>
@@ -81,17 +89,25 @@ export default function RewardsScreen() {
             {totalPending > 0 ? ` · ${totalPending.toLocaleString()} pending` : ''}
           </Text>
 
-          <Text style={styles.balanceFinePrint}>
-            across {shops.length} shop{shops.length === 1 ? '' : 's'} · each shop has its own program
-          </Text>
-        </View>
+          <View style={styles.summaryMetaRow}>
+            <View style={styles.summaryMetaPill}>
+              <Text style={styles.summaryMetaValue}>{shops.length}</Text>
+              <Text style={styles.summaryMetaLabel}>programs</Text>
+            </View>
+
+            <View style={styles.summaryMetaPill}>
+              <Text style={styles.summaryMetaValue}>{txns.length}</Text>
+              <Text style={styles.summaryMetaLabel}>activities</Text>
+            </View>
+          </View>
+        </LinearGradient>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Shop Rewards</Text>
 
           {shops.length === 0 ? (
             <View style={styles.emptyTxn}>
-              <Feather name="coffee" size={32} color="#DDD" />
+              <Feather name="award" size={32} color="#CBD5E1" />
               <Text style={styles.emptyTxnText}>
                 No points yet. Order from a shop to start earning rewards there!
               </Text>
@@ -111,7 +127,7 @@ export default function RewardsScreen() {
                   ? <Image source={{ uri: sp.shops.logo_url }} style={styles.shopLogo} />
                   : (
                     <View style={[styles.shopLogo, styles.shopLogoPh]}>
-                      <Feather name="coffee" size={20} color="#00704A" />
+                      <Feather name="coffee" size={20} color="#F97316" />
                     </View>
                   )
                 }
@@ -129,7 +145,7 @@ export default function RewardsScreen() {
                   )}
                 </View>
 
-                <Feather name="chevron-right" size={20} color="#CCC" />
+                <Feather name="chevron-right" size={20} color="#CBD5E1" />
               </TouchableOpacity>
             );
           })}
@@ -140,7 +156,7 @@ export default function RewardsScreen() {
 
           {txns.length === 0 ? (
             <View style={styles.emptyTxn}>
-              <Feather name="clock" size={32} color="#DDD" />
+              <Feather name="clock" size={32} color="#CBD5E1" />
               <Text style={styles.emptyTxnText}>
                 No transactions yet. Place an order to start earning!
               </Text>
@@ -196,34 +212,38 @@ export default function RewardsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:      { flex: 1, backgroundColor: '#FAFAFA' },
+  container:      { flex: 1, backgroundColor: '#F8FAFC' },
   center:         { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#EEE' },
-  headerTitle:    { fontSize: 20, fontWeight: '800', color: '#000' },
-  summaryCard:    { backgroundColor: '#00704A', margin: 16, borderRadius: 20, padding: 22 },
-  summaryTop:     { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
-  iconWrap:       { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-  summaryLabel:   { color: 'rgba(255,255,255,0.8)', fontSize: 11, fontWeight: '800', letterSpacing: 1.6 },
-  balanceBig:     { color: '#FFF', fontSize: 52, fontWeight: '900', letterSpacing: -1 },
+  header:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#F8FAFC' },
+  headerTitle:    { fontSize: 20, fontWeight: '900', color: '#101828' },
+  summaryCard:    { margin: 16, borderRadius: 30, padding: 24, overflow: 'hidden', shadowColor: '#1D4ED8', shadowOffset: { width: 0, height: 18 }, shadowOpacity: 0.22, shadowRadius: 28, elevation: 9 },
+  summaryGlow:    { position: 'absolute', right: -56, top: -64, width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(255,255,255,0.16)' },
+  summaryTop:     { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
+  iconWrap:       { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.16)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)' },
+  summaryLabel:   { color: 'rgba(255,255,255,0.72)', fontSize: 11, fontWeight: '900', letterSpacing: 1.6 },
+  balanceBig:     { color: '#FFF', fontSize: 58, fontWeight: '900' },
   balanceSub:     { color: 'rgba(255,255,255,0.95)', fontSize: 14, fontWeight: '800', marginTop: 2 },
-  balanceFinePrint:{ color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: '600', marginTop: 4 },
+  summaryMetaRow: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  summaryMetaPill:{ flex: 1, backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 18, paddingVertical: 10, paddingHorizontal: 12 },
+  summaryMetaValue:{ color: '#FFF', fontSize: 18, fontWeight: '900' },
+  summaryMetaLabel:{ color: 'rgba(255,255,255,0.72)', fontSize: 11, fontWeight: '700', marginTop: 2 },
   section:        { marginHorizontal: 16, marginTop: 20 },
-  sectionTitle:   { fontSize: 16, fontWeight: '800', color: '#000', marginBottom: 10 },
-  shopRow:        { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFF', borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#F0F0F0' },
-  shopLogo:       { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F5F5F5' },
-  shopLogoPh:     { justifyContent: 'center', alignItems: 'center', backgroundColor: '#E8F5E9' },
-  shopName:       { fontSize: 14, fontWeight: '700', color: '#000' },
-  shopSub:        { fontSize: 12, color: '#666', marginTop: 2 },
-  shopTiny:       { fontSize: 11, color: '#999', marginTop: 2 },
-  txnRow:         { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFF', borderRadius: 12, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: '#F0F0F0' },
+  sectionTitle:   { fontSize: 17, fontWeight: '900', color: '#101828', marginBottom: 10 },
+  shopRow:        { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFFFFF', borderRadius: 20, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#0F172A', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 1 },
+  shopLogo:       { width: 42, height: 42, borderRadius: 21, backgroundColor: '#F8FAFC' },
+  shopLogoPh:     { justifyContent: 'center', alignItems: 'center', backgroundColor: '#EFF6FF' },
+  shopName:       { fontSize: 14, fontWeight: '700', color: '#101828' },
+  shopSub:        { fontSize: 12, color: '#64748B', marginTop: 2 },
+  shopTiny:       { fontSize: 11, color: '#94A3B8', marginTop: 2 },
+  txnRow:         { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFFFFF', borderRadius: 20, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#E2E8F0' },
   txnIcon:        { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
-  txnTitle:       { fontSize: 14, fontWeight: '700', color: '#000' },
-  txnSub:         { fontSize: 12, color: '#888', marginTop: 2 },
+  txnTitle:       { fontSize: 14, fontWeight: '700', color: '#101828' },
+  txnSub:         { fontSize: 12, color: '#64748B', marginTop: 2 },
   txnAmount:      { fontSize: 14, fontWeight: '800' },
   pendingTag:     { fontSize: 10, fontWeight: '800', color: '#F59E0B', marginTop: 2, textTransform: 'uppercase' },
   emptyTxn:       { alignItems: 'center', paddingVertical: 24 },
-  emptyTxnText:   { color: '#999', marginTop: 8, fontSize: 13, textAlign: 'center', paddingHorizontal: 32 },
-  howCard:        { margin: 16, marginTop: 24, backgroundColor: '#FFF', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#F0F0F0' },
-  howTitle:       { fontSize: 14, fontWeight: '800', color: '#000', marginBottom: 8 },
-  howLine:        { fontSize: 13, color: '#666', lineHeight: 22 },
+  emptyTxnText:   { color: '#94A3B8', marginTop: 8, fontSize: 13, textAlign: 'center', paddingHorizontal: 32 },
+  howCard:        { margin: 16, marginTop: 24, backgroundColor: '#FFFFFF', borderRadius: 24, padding: 18, borderWidth: 1, borderColor: '#E2E8F0' },
+  howTitle:       { fontSize: 14, fontWeight: '900', color: '#101828', marginBottom: 8 },
+  howLine:        { fontSize: 13, color: '#64748B', lineHeight: 22 },
 });

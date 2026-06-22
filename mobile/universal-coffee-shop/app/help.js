@@ -110,7 +110,7 @@ const FaqItem = ({ q, a }) => {
     >
       <View style={styles.faqRow}>
         <Text style={styles.faqQ}>{q}</Text>
-        <Feather name={open ? 'chevron-up' : 'chevron-down'} size={18} color="#999" />
+        <Feather name={open ? 'chevron-up' : 'chevron-down'} size={18} color="#94A3B8" />
       </View>
       {open && <Text style={styles.faqA}>{a}</Text>}
     </TouchableOpacity>
@@ -124,7 +124,7 @@ export default function HelpScreen() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerSide} onPress={() => router.back()}>
-          <Feather name="arrow-left" size={24} color="#000" />
+          <Feather name="arrow-left" size={24} color="#101828" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Help & Support</Text>
         <View style={styles.headerSide} />
@@ -147,29 +147,29 @@ export default function HelpScreen() {
           <Text style={styles.sectionTitle}>Contact Us</Text>
           <View style={styles.card}>
             <TouchableOpacity style={styles.contactRow} onPress={() => Linking.openURL('mailto:support@loyalcupapp.com')}>
-              <View style={styles.contactIcon}><Feather name="mail" size={20} color="#00704A" /></View>
+              <View style={styles.contactIcon}><Feather name="mail" size={20} color="#F97316" /></View>
               <View style={styles.contactText}>
                 <Text style={styles.contactLabel}>Email Support</Text>
                 <Text style={styles.contactValue}>support@loyalcupapp.com</Text>
               </View>
-              <Feather name="chevron-right" size={16} color="#CCC" />
+              <Feather name="chevron-right" size={16} color="#CBD5E1" />
             </TouchableOpacity>
 
             <View style={styles.contactDivider} />
 
             <TouchableOpacity style={styles.contactRow} onPress={() => Linking.openURL('https://loyalcupapp.com')}>
-              <View style={styles.contactIcon}><Feather name="globe" size={20} color="#00704A" /></View>
+              <View style={styles.contactIcon}><Feather name="globe" size={20} color="#F97316" /></View>
               <View style={styles.contactText}>
                 <Text style={styles.contactLabel}>Website</Text>
                 <Text style={styles.contactValue}>loyalcupapp.com</Text>
               </View>
-              <Feather name="chevron-right" size={16} color="#CCC" />
+              <Feather name="chevron-right" size={16} color="#CBD5E1" />
             </TouchableOpacity>
 
             <View style={styles.contactDivider} />
 
             <View style={styles.contactRow}>
-              <View style={styles.contactIcon}><Feather name="clock" size={20} color="#00704A" /></View>
+              <View style={styles.contactIcon}><Feather name="clock" size={20} color="#F97316" /></View>
               <View style={styles.contactText}>
                 <Text style={styles.contactLabel}>Response Time</Text>
                 <Text style={styles.contactValue}>Within 24 hours · Mon–Fri</Text>
@@ -185,23 +185,23 @@ export default function HelpScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:      { flex: 1, backgroundColor: '#F5F5F5' },
-  header:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#EEE' },
+  container:      { flex: 1, backgroundColor: '#F8FAFC' },
+  header:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   headerSide:     { width: 40, padding: 4 },
-  headerTitle:    { fontSize: 18, fontWeight: '800', color: '#000' },
+  headerTitle:    { fontSize: 18, fontWeight: '800', color: '#101828' },
   scroll:         { paddingVertical: 20, paddingHorizontal: 16, paddingBottom: 40 },
   section:        { marginBottom: 24 },
-  sectionTitle:   { fontSize: 11, fontWeight: '700', color: '#999', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10, marginLeft: 4 },
-  card:           { backgroundColor: '#FFF', borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-  faqItem:        { paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
+  sectionTitle:   { fontSize: 11, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10, marginLeft: 4 },
+  card:           { backgroundColor: '#FFFFFF', borderRadius: 16, overflow: 'hidden', shadowColor: '#101828', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  faqItem:        { paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' },
   faqRow:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
-  faqQ:           { fontSize: 15, fontWeight: '600', color: '#000', flex: 1, lineHeight: 21 },
-  faqA:           { marginTop: 10, fontSize: 14, color: '#555', lineHeight: 22 },
+  faqQ:           { fontSize: 15, fontWeight: '600', color: '#101828', flex: 1, lineHeight: 21 },
+  faqA:           { marginTop: 10, fontSize: 14, color: '#475569', lineHeight: 22 },
   contactRow:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 14 },
-  contactDivider: { height: 1, backgroundColor: '#F5F5F5', marginLeft: 66 },
-  contactIcon:    { width: 40, height: 40, borderRadius: 20, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center' },
+  contactDivider: { height: 1, backgroundColor: '#F8FAFC', marginLeft: 66 },
+  contactIcon:    { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
   contactText:    { flex: 1 },
-  contactLabel:   { fontSize: 12, color: '#999', fontWeight: '600', marginBottom: 2 },
-  contactValue:   { fontSize: 15, fontWeight: '600', color: '#000' },
-  version:        { textAlign: 'center', fontSize: 12, color: '#CCC', marginTop: 8 },
+  contactLabel:   { fontSize: 12, color: '#94A3B8', fontWeight: '600', marginBottom: 2 },
+  contactValue:   { fontSize: 15, fontWeight: '600', color: '#101828' },
+  version:        { textAlign: 'center', fontSize: 12, color: '#CBD5E1', marginTop: 8 },
 });

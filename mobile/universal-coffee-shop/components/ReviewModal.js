@@ -53,7 +53,7 @@ export default function ReviewModal({ visible, orderId, shopId, shopName, onClos
               {shopName ? <Text style={styles.subtitle}>{shopName}</Text> : null}
             </View>
             <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
-              <Feather name="x" size={22} color="#666" />
+              <Feather name="x" size={22} color="#64748B" />
             </TouchableOpacity>
           </View>
 
@@ -107,18 +107,18 @@ export default function ReviewModal({ visible, orderId, shopId, shopName, onClos
 
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
-  sheet: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 40 },
-  handle: { width: 40, height: 4, backgroundColor: '#DDD', borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 8 },
-  header: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  title: { fontSize: 20, fontWeight: '700', color: '#000' },
-  subtitle: { fontSize: 14, color: '#666', marginTop: 2 },
+  sheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 40 },
+  handle: { width: 40, height: 4, backgroundColor: '#CBD5E1', borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 8 },
+  header: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  title: { fontSize: 20, fontWeight: '700', color: '#101828' },
+  subtitle: { fontSize: 14, color: '#64748B', marginTop: 2 },
   closeBtn: { padding: 4, marginTop: 2 },
   starsRow: { flexDirection: 'row', justifyContent: 'center', gap: 8, paddingTop: 24, paddingBottom: 4 },
   starBtn: { padding: 4 },
   ratingLabel: { textAlign: 'center', fontSize: 16, fontWeight: '600', color: '#F59E0B', minHeight: 24, marginBottom: 16 },
-  input: { marginHorizontal: 20, borderWidth: 1.5, borderColor: '#E5E7EB', borderRadius: 12, padding: 14, fontSize: 15, color: '#000', textAlignVertical: 'top', minHeight: 80, marginBottom: 12 },
+  input: { marginHorizontal: 20, borderWidth: 1.5, borderColor: '#E5E7EB', borderRadius: 12, padding: 14, fontSize: 15, color: '#101828', textAlignVertical: 'top', minHeight: 80, marginBottom: 12 },
   error: { marginHorizontal: 20, color: '#EF4444', fontSize: 13, marginBottom: 8 },
-  submitBtn: { marginHorizontal: 20, backgroundColor: '#000', borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 4 },
+  submitBtn: { marginHorizontal: 20, backgroundColor: '#101828', borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 4 },
   submitBtnDisabled: { opacity: 0.4 },
   submitText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
 });

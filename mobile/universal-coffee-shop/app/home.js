@@ -123,8 +123,8 @@ const CardBanner = ({ bannerUrl, logoUrl, shopName, open }) => {
         )}
 
         {open !== null && (
-          <View style={[styles.openBadge, { backgroundColor: open ? '#00704A' : '#4b5563' }]}>
-            <View style={[styles.openDot, { backgroundColor: open ? '#4ade80' : '#9ca3af' }]} />
+          <View style={[styles.openBadge, { backgroundColor: open ? '#15803D' : '#4b5563' }]}>
+            <View style={[styles.openDot, { backgroundColor: open ? '#BBF7D0' : '#9ca3af' }]} />
             <Text style={styles.openBadgeText}>{open ? 'Open' : 'Closed'}</Text>
           </View>
         )}
@@ -135,7 +135,7 @@ const CardBanner = ({ bannerUrl, logoUrl, shopName, open }) => {
   return (
     <View style={styles.cardBannerWrap}>
       <LinearGradient
-        colors={['#1a0a00', '#2d1200', '#1a2e1a']}
+        colors={['#0F172A', '#111827', '#2563EB']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
@@ -169,8 +169,8 @@ const CardBanner = ({ bannerUrl, logoUrl, shopName, open }) => {
       </View>
 
       {open !== null && (
-        <View style={[styles.openBadge, { backgroundColor: open ? '#00704A' : '#4b5563' }]}>
-          <View style={[styles.openDot, { backgroundColor: open ? '#4ade80' : '#9ca3af' }]} />
+        <View style={[styles.openBadge, { backgroundColor: open ? '#15803D' : '#4b5563' }]}>
+          <View style={[styles.openDot, { backgroundColor: open ? '#BBF7D0' : '#9ca3af' }]} />
           <Text style={styles.openBadgeText}>{open ? 'Open' : 'Closed'}</Text>
         </View>
       )}
@@ -228,7 +228,7 @@ const ShopCard = ({ item, onPress, distanceKm, isFav, onToggleFav }) => {
 
         {item?.address && (
           <View style={styles.shopDetailRow}>
-            <Feather name="map-pin" size={11} color="#999" />
+            <Feather name="map-pin" size={11} color="#94A3B8" />
             <Text style={styles.shopDetailText} numberOfLines={1}>{item.address}</Text>
           </View>
         )}
@@ -243,7 +243,7 @@ const ShopCard = ({ item, onPress, distanceKm, isFav, onToggleFav }) => {
 
           {distanceKm !== null && distanceKm !== undefined && (
             <View style={styles.shopBadge}>
-              <Feather name="navigation" size={11} color="#00704A" />
+              <Feather name="navigation" size={11} color="#F97316" />
               <Text style={styles.shopBadgeText}>{kmToDisplay(distanceKm)}</Text>
             </View>
           )}
@@ -444,7 +444,7 @@ export default function HomeScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#00704A" />
+          <ActivityIndicator size="large" color="#F97316" />
           <Text style={styles.loadingText}>Finding shops...</Text>
         </View>
       </SafeAreaView>
@@ -470,7 +470,7 @@ export default function HomeScreen() {
 
           <View style={styles.headerButtons}>
             <TouchableOpacity style={styles.headerButton} onPress={() => router.push('/cart')}>
-              <Feather name="shopping-bag" size={22} color="#000" />
+              <Feather name="shopping-bag" size={22} color="#101828" />
               {cartCount > 0 && (
                 <View style={styles.headerBadge}>
                   <Text style={styles.headerBadgeText}>{cartCount}</Text>
@@ -479,14 +479,14 @@ export default function HomeScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.headerButton} onPress={() => router.push('/profile')}>
-              <Feather name="user" size={22} color="#000" />
+              <Feather name="user" size={22} color="#101828" />
             </TouchableOpacity>
           </View>
         </View>
 
         <View style={styles.searchContainer}>
           <View style={styles.searchBar}>
-            <Feather name="search" size={18} color="#999" />
+            <Feather name="search" size={18} color="#94A3B8" />
             <TextInput
               style={styles.searchInput}
               placeholder="Search shops, drinks..."
@@ -497,7 +497,7 @@ export default function HomeScreen() {
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Feather name="x" size={18} color="#999" />
+                <Feather name="x" size={18} color="#94A3B8" />
               </TouchableOpacity>
             )}
           </View>
@@ -518,7 +518,7 @@ export default function HomeScreen() {
                     ? '#fff'
                     : f.key === 'favorites'
                     ? '#ef4444'
-                    : '#666'
+                    : '#64748B'
                 }
               />
               <Text style={[styles.filterChipText, selectedFilter === f.key && styles.filterChipTextActive]}>
@@ -534,7 +534,7 @@ export default function HomeScreen() {
           <Feather
             name={selectedFilter === 'favorites' ? 'heart' : 'coffee'}
             size={60}
-            color="#DDD"
+            color="#CBD5E1"
           />
           <Text style={styles.emptyTitle}>
             {selectedFilter === 'favorites' ? 'No favorites yet' : 'No shops found'}
@@ -571,13 +571,31 @@ export default function HomeScreen() {
           }}
           contentContainerStyle={styles.shopsList}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#00704A" />}
-          ListHeaderComponent={
-            <Text style={styles.resultsCount}>
-              {filteredShops.length} {filteredShops.length === 1 ? 'shop' : 'shops'}
-              {selectedFilter !== 'all' ? ` · ${filters.find(f => f.key === selectedFilter)?.label}` : ''}
-            </Text>
-          }
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#F97316" />}
+          ListHeaderComponent={(
+            <View>
+              <LinearGradient
+                colors={['#0F172A', '#111827', '#2563EB']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.heroPanel}
+              >
+                <View style={styles.heroPanelIcon}>
+                  <Feather name="coffee" size={22} color="#F97316" />
+                </View>
+
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.heroPanelEyebrow}>LOCAL COFFEE, READY FAST</Text>
+                  <Text style={styles.heroPanelTitle}>Find the cup that fits this moment.</Text>
+                </View>
+              </LinearGradient>
+
+              <Text style={styles.resultsCount}>
+                {filteredShops.length} {filteredShops.length === 1 ? 'shop' : 'shops'}
+                {selectedFilter !== 'all' ? ` · ${filters.find(f => f.key === selectedFilter)?.label}` : ''}
+              </Text>
+            </View>
+          )}
         />
       )}
     </SafeAreaView>
@@ -585,29 +603,33 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container:            { flex: 1, backgroundColor: '#FAFAFA' },
+  container:            { flex: 1, backgroundColor: '#F8FAFC' },
   centered:             { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText:          { marginTop: 12, fontSize: 15, color: '#999' },
-  header:               { backgroundColor: '#FFF', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  loadingText:          { marginTop: 12, fontSize: 15, color: '#94A3B8' },
+  header:               { backgroundColor: '#F8FAFC', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   headerTop:            { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  greeting:             { fontSize: 22, fontWeight: '800', color: '#000' },
-  subGreeting:          { fontSize: 13, color: '#999', marginTop: 2 },
+  greeting:             { fontSize: 23, fontWeight: '900', color: '#101828' },
+  subGreeting:          { fontSize: 13, color: '#94A3B8', marginTop: 2 },
   headerButtons:        { flexDirection: 'row', gap: 10 },
-  headerButton:         { width: 42, height: 42, borderRadius: 21, backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center', position: 'relative' },
+  headerButton:         { width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center', position: 'relative', borderWidth: 1, borderColor: '#E5E7EB' },
   headerBadge:          { position: 'absolute', top: -3, right: -3, backgroundColor: '#FF3B30', borderRadius: 9, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 },
   headerBadgeText:      { color: '#FFF', fontSize: 11, fontWeight: '800' },
   searchContainer:      { marginBottom: 12 },
-  searchBar:            { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, gap: 10 },
-  searchInput:          { flex: 1, fontSize: 15, color: '#000' },
+  searchBar:            { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 12, gap: 10, borderWidth: 1, borderColor: '#E5E7EB' },
+  searchInput:          { flex: 1, fontSize: 15, color: '#101828' },
   filtersRow:           { flexDirection: 'row', gap: 8, paddingBottom: 4 },
-  filterChip:           { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#F5F5F5', borderRadius: 20 },
-  filterChipActive:     { backgroundColor: '#00704A' },
-  filterChipText:       { fontSize: 13, fontWeight: '600', color: '#666' },
+  filterChip:           { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: '#FFFFFF', borderRadius: 20, borderWidth: 1, borderColor: '#E5E7EB' },
+  filterChipActive:     { backgroundColor: '#F97316' },
+  filterChipText:       { fontSize: 13, fontWeight: '600', color: '#64748B' },
   filterChipTextActive: { color: '#FFF' },
-  resultsCount:         { paddingTop: 4, paddingBottom: 8, fontSize: 12, fontWeight: '600', color: '#999' },
+  heroPanel:            { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 22, padding: 16, marginTop: 4, marginBottom: 14, overflow: 'hidden' },
+  heroPanelIcon:        { width: 44, height: 44, borderRadius: 22, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center' },
+  heroPanelEyebrow:     { color: 'rgba(255,255,255,0.62)', fontSize: 10, fontWeight: '900', letterSpacing: 1.2, marginBottom: 3 },
+  heroPanelTitle:       { color: '#FFF', fontSize: 17, fontWeight: '900', lineHeight: 22 },
+  resultsCount:         { paddingBottom: 10, fontSize: 12, fontWeight: '700', color: '#94A3B8' },
   shopsList:            { paddingHorizontal: 16, paddingBottom: 24 },
 
-  shopCard:             { backgroundColor: '#FFF', borderRadius: 16, marginBottom: 14, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3 },
+  shopCard:             { backgroundColor: '#FFFFFF', borderRadius: 22, marginBottom: 14, overflow: 'hidden', borderWidth: 1, borderColor: '#E5E7EB', shadowColor: '#101828', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.08, shadowRadius: 18, elevation: 4 },
   offerRibbon:          { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#f59e0b', paddingHorizontal: 12, paddingVertical: 5 },
   offerRibbonText:      { color: '#fff', fontSize: 11, fontWeight: '700' },
 
@@ -615,7 +637,7 @@ const styles = StyleSheet.create({
   cardBannerImg:        { width: '100%', height: '100%' },
   cardBannerScrim:      { position: 'absolute', left: 0, right: 0, bottom: 0, height: 70 },
 
-  logoBadge:            { position: 'absolute', bottom: 10, left: 12, width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFF', overflow: 'hidden', borderWidth: 2, borderColor: '#FFF', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 4, elevation: 4 },
+  logoBadge:            { position: 'absolute', bottom: 10, left: 12, width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFFFFF', overflow: 'hidden', borderWidth: 2, borderColor: '#FFFFFF', shadowColor: '#101828', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 4, elevation: 4 },
   logoBadgeImg:         { width: '100%', height: '100%' },
 
   openBadge:            { position: 'absolute', top: 10, right: 10, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20 },
@@ -632,17 +654,17 @@ const styles = StyleSheet.create({
   heartButton:          { position: 'absolute', top: 10, left: 10, width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center' },
 
   shopCardContent:      { padding: 14 },
-  shopName:             { fontSize: 17, fontWeight: '800', color: '#000', marginBottom: 3 },
-  shopDescription:      { fontSize: 13, color: '#888', lineHeight: 18, marginBottom: 6 },
+  shopName:             { fontSize: 17, fontWeight: '800', color: '#101828', marginBottom: 3 },
+  shopDescription:      { fontSize: 13, color: '#64748B', lineHeight: 18, marginBottom: 6 },
   shopDetailRow:        { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 10 },
-  shopDetailText:       { fontSize: 12, color: '#999', flex: 1 },
+  shopDetailText:       { fontSize: 12, color: '#94A3B8', flex: 1 },
   shopFooter:           { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  shopBadge:            { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#F5F5F5', borderRadius: 8 },
-  shopBadgeText:        { fontSize: 11, fontWeight: '600', color: '#555' },
+  shopBadge:            { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: '#F8FAFC', borderRadius: 8 },
+  shopBadgeText:        { fontSize: 11, fontWeight: '600', color: '#475569' },
 
   emptyState:           { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
-  emptyTitle:           { fontSize: 20, fontWeight: '700', color: '#000', marginTop: 16, marginBottom: 6 },
-  emptySubtitle:        { fontSize: 14, color: '#999', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
-  clearButton:          { paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#00704A', borderRadius: 25 },
+  emptyTitle:           { fontSize: 20, fontWeight: '700', color: '#101828', marginTop: 16, marginBottom: 6 },
+  emptySubtitle:        { fontSize: 14, color: '#94A3B8', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+  clearButton:          { paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#F97316', borderRadius: 25 },
   clearButtonText:      { color: '#FFF', fontSize: 14, fontWeight: '700' },
 });
