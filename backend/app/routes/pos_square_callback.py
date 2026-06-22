@@ -151,6 +151,25 @@ async def square_callback(request: Request, db=Depends(get_supabase)):
 
     auto_location_id = locations[0].id if len(locations) == 1 else None
 
+    if auto_location_id:
+        duplicate_query = (
+            svc.table("pos_connections")
+            .select("shop_id, merchant_id")
+            .eq("provider", "square")
+            .eq("location_id", auto_location_id)
+            .neq("shop_id", shop_id)
+        )
+        if merchant_id:
+            duplicate_query = duplicate_query.eq("merchant_id", merchant_id)
+
+        duplicate_location = duplicate_query.limit(1).execute()
+        if duplicate_location.data:
+            logger.warning(
+                f"[Square Callback] Auto-selected location {auto_location_id} "
+                f"is already assigned; leaving shop={shop_id} without a location"
+            )
+            auto_location_id = None
+
     existing_conn = (
         svc.table("pos_connections")
         .select("id")
@@ -212,7 +231,7 @@ async def square_callback(request: Request, db=Depends(get_supabase)):
     synced = "true" if "error" not in sync_summary else "partial"
 
     location_param = ""
-    if len(locations) > 1:
+    if len(locations) > 1 or not auto_location_id:
         location_param = "&needs_location=true"
     elif auto_location_id:
         location_param = f"&location_id={auto_location_id}"

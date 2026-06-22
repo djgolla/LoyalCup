@@ -181,7 +181,7 @@ export default function ConnectSquarePage() {
       toast.success("Square location set! You're ready to accept orders.");
     } catch (e) {
       setError(e.message || "Failed to set location.");
-      toast.error("Failed to set location");
+      toast.error(e.message || "Failed to set location");
     } finally {
       setSettingLocation(false);
     }

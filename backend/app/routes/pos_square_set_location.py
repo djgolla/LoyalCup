@@ -49,7 +49,7 @@ async def set_square_location(
     # Check POS connection exists
     conn_check = (
         svc.table("pos_connections")
-        .select("id, status")
+        .select("id, status, merchant_id")
         .eq("shop_id", body.shop_id)
         .eq("provider", "square")
         .limit(1)
@@ -65,6 +65,27 @@ async def set_square_location(
         raise HTTPException(
             status_code=400,
             detail="Square is not connected. Please reconnect before setting a location.",
+        )
+
+    conn = conn_check.data[0]
+    duplicate_query = (
+        svc.table("pos_connections")
+        .select("shop_id, merchant_id")
+        .eq("provider", "square")
+        .eq("location_id", body.location_id)
+        .neq("shop_id", body.shop_id)
+    )
+    if conn.get("merchant_id"):
+        duplicate_query = duplicate_query.eq("merchant_id", conn.get("merchant_id"))
+
+    duplicate = duplicate_query.limit(1).execute()
+    if duplicate.data:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "That Square location is already assigned to another LoyalCup "
+                "location. Choose a different Square location."
+            ),
         )
 
     # Update location
