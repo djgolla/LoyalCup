@@ -463,8 +463,15 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <View>
-            <Text style={styles.greeting}>{getGreeting(profile?.full_name)}</Text>
+          <View style={styles.headerTextWrap}>
+            <Text
+              style={styles.greeting}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
+            >
+              {getGreeting(profile?.full_name)}
+            </Text>
             <Text style={styles.subGreeting}>Find your next coffee</Text>
           </View>
 
@@ -607,7 +614,8 @@ const styles = StyleSheet.create({
   centered:             { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText:          { marginTop: 12, fontSize: 15, color: '#94A3B8' },
   header:               { backgroundColor: '#F8FAFC', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  headerTop:            { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  headerTop:            { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 12 },
+  headerTextWrap:       { flex: 1, minWidth: 0, marginRight: 12 },
   greeting:             { fontSize: 23, fontWeight: '900', color: '#101828' },
   subGreeting:          { fontSize: 13, color: '#94A3B8', marginTop: 2 },
   headerButtons:        { flexDirection: 'row', gap: 10 },
