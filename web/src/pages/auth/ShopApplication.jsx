@@ -6,6 +6,9 @@ import { toast } from 'sonner';
 import supabase from '../../lib/supabase';
 import { apiUrl } from '../../api/client';
 
+const BASE_PRICE = 150;
+const ADDITIONAL_LOCATION_PRICE = 50;
+
 export default function ShopApplication() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -302,7 +305,7 @@ export default function ShopApplication() {
           </motion.button>
 
           <p className="text-center text-xs text-gray-400">
-            Next step: $200/mo subscription · Card required · Activates instantly · Cancel anytime
+            Next step: ${BASE_PRICE}/mo base subscription · +${ADDITIONAL_LOCATION_PRICE}/mo per additional location · Cancel anytime
           </p>
         </form>
       </motion.div>

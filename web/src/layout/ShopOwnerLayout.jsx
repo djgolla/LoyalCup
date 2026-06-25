@@ -10,6 +10,7 @@ const SETUP_ROUTES = [
   '/shop-owner/settings',
   '/shop-owner/connect-square',
 ];
+const BASE_PRICE = 150;
 
 export default function ShopOwnerLayout() {
   const { shop, loading } = useShop();
@@ -59,7 +60,7 @@ export default function ShopOwnerLayout() {
               onClick={() => navigate('/shop-owner/subscribe')}
               className="w-full bg-gradient-to-r from-amber-600 to-orange-600 text-white py-3 rounded-xl font-bold hover:opacity-90 transition flex items-center justify-center gap-2"
             >
-              <CreditCard size={18} /> Subscribe — $200/mo
+              <CreditCard size={18} /> Subscribe — ${BASE_PRICE}/mo
             </button>
             <p className="mt-3 text-xs text-gray-400">Activates instantly · Cancel anytime</p>
           </div>

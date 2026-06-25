@@ -1,6 +1,9 @@
 import { useNavigate } from "react-router-dom";
 import { CheckCircle, CreditCard, ArrowRight } from "lucide-react";
 
+const BASE_PRICE = 150;
+const ADDITIONAL_LOCATION_PRICE = 50;
+
 export default function ApplicationPending() {
   const navigate = useNavigate();
 
@@ -33,7 +36,9 @@ export default function ApplicationPending() {
               </li>
               <li className="flex items-center gap-2 opacity-60">
                 <CreditCard className="w-4 h-4 shrink-0" />
-                <span>Subscribe to activate ($200/mo · card required · cancel anytime)</span>
+                <span>
+                  Subscribe to activate (${BASE_PRICE}/mo base · +${ADDITIONAL_LOCATION_PRICE}/mo per additional location · cancel anytime)
+                </span>
               </li>
               <li className="flex items-center gap-2 opacity-40">
                 <CheckCircle className="w-4 h-4 shrink-0" />

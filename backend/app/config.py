@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     stripe_publishable_key: str = Field(default="")
     stripe_webhook_secret: str = Field(default="")
     stripe_price_id: str = Field(default="")
+    stripe_location_price_id: str = Field(default="")
 
     # App
     frontend_url: str = Field(default="http://localhost:5173")

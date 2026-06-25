@@ -12,11 +12,13 @@ import PageLoader from '../../components/ui/PageLoader';
 import { API_ORIGIN } from '../../api/client';
 
 const API = API_ORIGIN || 'http://localhost:8000';
+const BASE_PRICE = 150;
+const ADDITIONAL_LOCATION_PRICE = 50;
 
 export default function Subscribe() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { shop, loadShop } = useShop();
+  const { shop, shops, loadShop } = useShop();
   const { refreshSession } = useAuth();
   const [promoCode, setPromoCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -205,6 +207,18 @@ export default function Subscribe() {
     'Priority support',
     'Your rate locked in forever',
   ];
+  const billableLocationCount = Math.max(
+    billingStatus?.location_count || 0,
+    shops?.length || 0,
+    billingStatus?.shops?.length || 0,
+    1
+  );
+  const additionalLocationCount =
+    billingStatus?.additional_location_count ??
+    Math.max(0, billableLocationCount - 1);
+  const estimatedMonthlyTotal =
+    billingStatus?.estimated_monthly_amount ??
+    (BASE_PRICE + additionalLocationCount * ADDITIONAL_LOCATION_PRICE);
 
   if (subscribed) {
     return (
@@ -257,7 +271,8 @@ export default function Subscribe() {
           Activate Your Subscription
         </h1>
         <p className="text-gray-500 dark:text-gray-400">
-          One flat price. Everything included. Your rate locked in forever.
+          Your first location is ${BASE_PRICE}/mo. Additional locations are ${ADDITIONAL_LOCATION_PRICE}/mo each.
+          Your rate is locked in.
         </p>
       </motion.div>
 
@@ -311,7 +326,7 @@ export default function Subscribe() {
               <div>
                 <p className="font-bold text-amber-800 dark:text-amber-400 text-sm">Price Lock Guarantee</p>
                 <p className="text-sm text-amber-700 dark:text-amber-500 mt-0.5">
-                  The rate you subscribe at today is your rate forever — even if we raise prices for new shops.
+                  The rate you subscribe at today is your rate forever — including the additional-location rate for this account.
                 </p>
               </div>
             </div>
@@ -324,10 +339,29 @@ export default function Subscribe() {
         >
           <div className="text-center mb-8">
             <div className="flex items-end justify-center gap-1 mb-1">
-              <span className="text-6xl font-black text-gray-900 dark:text-white">$200</span>
+              <span className="text-6xl font-black text-gray-900 dark:text-white">${BASE_PRICE}</span>
               <span className="text-xl text-gray-400 mb-2">/mo</span>
             </div>
-            <p className="text-gray-500 dark:text-gray-400 text-sm">No setup fee · Cancel anytime</p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">Base plan includes your first location</p>
+          </div>
+
+          <div className="mb-6 rounded-2xl bg-gray-50 dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 p-4">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-600 dark:text-gray-300">First location</span>
+              <span className="font-bold text-gray-900 dark:text-white">${BASE_PRICE}/mo</span>
+            </div>
+            <div className="mt-2 flex items-center justify-between text-sm">
+              <span className="text-gray-600 dark:text-gray-300">
+                Additional locations {additionalLocationCount > 0 ? `x ${additionalLocationCount}` : ''}
+              </span>
+              <span className="font-bold text-gray-900 dark:text-white">
+                {additionalLocationCount > 0 ? `$${additionalLocationCount * ADDITIONAL_LOCATION_PRICE}/mo` : '$0/mo'}
+              </span>
+            </div>
+            <div className="mt-3 pt-3 border-t border-gray-200 dark:border-neutral-700 flex items-center justify-between">
+              <span className="font-bold text-gray-900 dark:text-white">Estimated monthly total</span>
+              <span className="text-xl font-black text-amber-700 dark:text-amber-400">${estimatedMonthlyTotal}/mo</span>
+            </div>
           </div>
 
           <div className="mb-6">
@@ -363,7 +397,7 @@ export default function Subscribe() {
             ) : noSession ? (
               <><LogIn className="w-5 h-5" /> Log In to Subscribe</>
             ) : (
-              <><CreditCard className="w-5 h-5" /> Subscribe — $200/mo <ArrowRight className="w-5 h-5" /></>
+              <><CreditCard className="w-5 h-5" /> Subscribe — ${estimatedMonthlyTotal}/mo <ArrowRight className="w-5 h-5" /></>
             )}
           </motion.button>
 

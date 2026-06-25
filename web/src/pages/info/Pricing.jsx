@@ -4,19 +4,20 @@ import { motion, useInView, useAnimation } from 'framer-motion';
 import {
   Check, Coffee, Smartphone, BarChart3, Award,
   Menu, RefreshCw, ShoppingBag, Users, Headphones,
-  ArrowRight, Sparkles, Tag, Shield, Zap
+  ArrowRight, Sparkles, Tag, Shield, Zap, MapPin
 } from 'lucide-react';
 
-const FloatingCoffee = ({ delay = 0, style = {} }) => (
+const BASE_PRICE = 150;
+const ADDITIONAL_LOCATION_PRICE = 50;
+
+const FloatingAccent = ({ delay = 0, style = {} }) => (
   <motion.div
     initial={{ y: 0 }}
     animate={{ y: [-20, 20, -20] }}
     transition={{ duration: 4, delay, repeat: Infinity, ease: 'easeInOut' }}
-    className="absolute text-5xl opacity-10 pointer-events-none select-none"
+    className="absolute h-24 w-24 rounded-full bg-amber-300/20 blur-2xl pointer-events-none"
     style={style}
-  >
-    ☕
-  </motion.div>
+  />
 );
 
 const FeatureRow = ({ icon: Icon, title, desc, delay }) => {
@@ -91,7 +92,11 @@ export default function Pricing() {
     },
     {
       q: 'How does payment processing work for customer orders?',
-      a: 'All customer orders are processed through Square — the same system you already use. Square\'s standard processing fees apply to each transaction. LoyalCup\'s $200/mo platform fee is separate and covers everything else.',
+      a: `All customer orders are processed through Square — the same system you already use. Square's standard processing fees apply to each transaction. LoyalCup's $${BASE_PRICE}/mo platform fee is separate and covers the first location.`,
+    },
+    {
+      q: 'What if I have more than one location?',
+      a: `Your first location is included in the $${BASE_PRICE}/mo base plan. Additional locations are $${ADDITIONAL_LOCATION_PRICE}/mo each, so every location can have its own menu, Square connection, ordering, and dashboard data.`,
     },
     {
       q: 'What happens to my price if you raise it later?',
@@ -111,10 +116,10 @@ export default function Pricing() {
     <div className="min-h-screen overflow-hidden">
 
       {/* ── Hero ── */}
-      <div className="relative bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 dark:from-neutral-900 dark:via-neutral-800 dark:to-neutral-900 py-32 overflow-hidden">
-        <FloatingCoffee delay={0} style={{ top: '10%',  left:  '5%'  }} />
-        <FloatingCoffee delay={1} style={{ top: '20%',  right: '8%'  }} />
-        <FloatingCoffee delay={2} style={{ bottom: '15%', left: '15%' }} />
+      <div className="relative bg-gradient-to-br from-amber-50 via-white to-orange-50 dark:from-neutral-950 dark:via-neutral-900 dark:to-neutral-950 py-28 overflow-hidden">
+        <FloatingAccent delay={0} style={{ top: '10%',  left:  '5%'  }} />
+        <FloatingAccent delay={1} style={{ top: '20%',  right: '8%'  }} />
+        <FloatingAccent delay={2} style={{ bottom: '15%', left: '15%' }} />
 
         <div className="max-w-5xl mx-auto px-4 text-center relative z-10">
           <motion.div
@@ -136,11 +141,11 @@ export default function Pricing() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.2 }}
-            className="text-6xl lg:text-8xl font-black text-gray-900 dark:text-white mb-6 leading-tight"
+            className="text-5xl lg:text-7xl font-black text-gray-900 dark:text-white mb-6 leading-tight"
           >
-            One price.{' '}
+            Built for local shops.{' '}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700">
-              Everything included.
+              Priced clearly.
             </span>
           </motion.h1>
 
@@ -150,8 +155,8 @@ export default function Pricing() {
             transition={{ duration: 0.8, delay: 0.35 }}
             className="text-2xl text-gray-600 dark:text-gray-400 mb-12 max-w-3xl mx-auto font-light"
           >
-            No tiers. No hidden fees. No "you need to upgrade for that."
-            Everything LoyalCup offers, at one flat monthly rate.
+            One monthly platform fee for your first location. Add more locations only when you need them.
+            No setup fee, no long-term contract, no surprise feature tiers.
           </motion.p>
 
           {/* ── Pricing Card ── */}
@@ -168,16 +173,28 @@ export default function Pricing() {
               {/* Badge */}
               <div className="absolute -top-4 left-1/2 -translate-x-1/2">
                 <span className="bg-gradient-to-r from-amber-600 to-orange-600 text-white text-sm font-bold px-6 py-2 rounded-full shadow-lg whitespace-nowrap">
-                  🔒 Your rate is locked in forever
+                  Your rate is locked in forever
                 </span>
               </div>
 
               <div className="text-center mb-8 mt-2">
                 <div className="flex items-end justify-center gap-2 mb-2">
-                  <span className="text-7xl font-black text-gray-900 dark:text-white">$200</span>
+                  <span className="text-7xl font-black text-gray-900 dark:text-white">${BASE_PRICE}</span>
                   <span className="text-2xl text-gray-500 dark:text-gray-400 mb-3">/mo</span>
                 </div>
-                <p className="text-gray-500 dark:text-gray-400">per shop · cancel anytime</p>
+                <p className="text-gray-500 dark:text-gray-400">includes your first location · cancel anytime</p>
+              </div>
+
+              <div className="mb-6 rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4 text-left">
+                <div className="flex items-start gap-3">
+                  <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-amber-700 dark:text-amber-400" />
+                  <div>
+                    <p className="font-bold text-amber-900 dark:text-amber-300">Multi-location shops</p>
+                    <p className="mt-1 text-sm text-amber-800 dark:text-amber-400">
+                      Additional locations are ${ADDITIONAL_LOCATION_PRICE}/mo each. Each location keeps its own menu, Square setup, and orders.
+                    </p>
+                  </div>
+                </div>
               </div>
 
               {/* Quick feature list */}
@@ -217,7 +234,7 @@ export default function Pricing() {
                 onClick={() => navigate('/shop-application')}
                 className="w-full bg-gradient-to-r from-amber-600 to-orange-600 text-white py-4 rounded-2xl font-bold text-lg shadow-xl flex items-center justify-center gap-2 group"
               >
-                Get Started — $200/month
+                Get Started — ${BASE_PRICE}/month
                 <motion.div animate={{ x: [0, 4, 0] }} transition={{ duration: 1.5, repeat: Infinity }}>
                   <ArrowRight className="w-5 h-5" />
                 </motion.div>
@@ -253,7 +270,7 @@ export default function Pricing() {
               Everything you need to run your shop
             </h2>
             <p className="text-xl text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">
-              No add-ons. No tiers. Every feature, every update, every improvement — included.
+                Every core feature, every update, and every improvement is included with your active locations.
             </p>
           </motion.div>
 
@@ -307,7 +324,7 @@ export default function Pricing() {
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
           >
-            <div className="text-6xl mb-6">🔒</div>
+            <Shield className="w-16 h-16 mx-auto mb-6 text-white" />
             <h2 className="text-4xl lg:text-5xl font-black mb-6">
               Your rate is locked in. Forever.
             </h2>
@@ -381,7 +398,7 @@ export default function Pricing() {
             transition={{ delay: 0.2 }}
             className="text-xl text-gray-500 dark:text-gray-400 mb-10 max-w-2xl mx-auto"
           >
-            Join LoyalCup today and lock in your rate at $200/month forever.
+            Join LoyalCup today and lock in your rate at ${BASE_PRICE}/month forever.
             Setup takes under 30 minutes.
           </motion.p>
 
@@ -412,7 +429,7 @@ export default function Pricing() {
           </motion.div>
 
           <p className="text-sm text-gray-400 dark:text-gray-500 mt-6">
-            $200/mo · Card required at signup · Cancel anytime from your dashboard
+            ${BASE_PRICE}/mo base · +${ADDITIONAL_LOCATION_PRICE}/mo per additional location · Cancel anytime
           </p>
         </div>
       </div>

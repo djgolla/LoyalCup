@@ -8,6 +8,11 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, validator
 
 from app.services.shop_service import shop_service
+from app.services.billing_service import (
+    find_active_subscription_id,
+    list_owner_billing_shops,
+    sync_owner_subscription_location_quantity,
+)
 from app.utils.security import require_auth, require_admin
 from app.database import get_supabase
 
@@ -214,8 +219,40 @@ async def create_shop(shop_data: ShopCreate, user: dict = Depends(require_auth()
     user_id = user.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="User ID not found in token")
+
+    db = get_supabase()
+    sc = db.get_service_client()
+    existing_shops = list_owner_billing_shops(sc, user_id)
+    has_active_subscription = bool(find_active_subscription_id(existing_shops))
+
     data = {k: v for k, v in shop_data.dict().items() if v is not None}
+    if has_active_subscription:
+        data["status"] = "pending_payment"
+        data["mobile_ordering_enabled"] = False
+
     shop = await shop_service.create_shop(data, user_id)
+
+    if has_active_subscription:
+        try:
+            sync_result = sync_owner_subscription_location_quantity(sc, user_id)
+            if sync_result.get("synced"):
+                shop = await shop_service.update_shop(shop["id"], {
+                    "status": "active",
+                    "mobile_ordering_enabled": True,
+                })
+        except Exception as e:
+            await shop_service.update_shop(shop["id"], {
+                "status": "pending_payment",
+                "mobile_ordering_enabled": False,
+            })
+            raise HTTPException(
+                status_code=402,
+                detail=(
+                    "Location was created but billing could not be updated. "
+                    f"{str(e)}"
+                ),
+            )
+
     return {"shop": shop}
 
 
@@ -241,6 +278,17 @@ async def delete_shop(shop_id: str, user: dict = Depends(require_auth())):
     if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     success = await shop_service.delete_shop(shop_id)
+    try:
+        db = get_supabase()
+        sync_owner_subscription_location_quantity(db.get_service_client(), user_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Shop was deactivated, but billing could not be updated automatically. "
+                f"{str(e)}"
+            ),
+        )
     return {"success": success}
 
 

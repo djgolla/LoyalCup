@@ -18,12 +18,23 @@ from typing import Optional
 from app.utils.security import require_auth
 from app.database import get_supabase
 from app.config import settings
+from app.services.billing_service import (
+    ADDITIONAL_LOCATION_PRICE_ID,
+    BASE_LOCATION_PRICE_ID,
+    additional_location_quantity,
+    billable_location_count,
+    billing_amount_summary,
+    build_checkout_line_items,
+    find_owner_billing_shop,
+    list_owner_billing_shops,
+    sync_owner_subscription_location_quantity,
+)
 
 router = APIRouter(prefix="/api/v1/billing", tags=["billing"])
 logger = logging.getLogger(__name__)
 
 stripe.api_key = settings.stripe_secret_key
-PRICE_ID = settings.stripe_price_id
+PRICE_ID = BASE_LOCATION_PRICE_ID
 WEBHOOK_SECRET = settings.stripe_webhook_secret
 
 
@@ -80,27 +91,26 @@ async def create_checkout_session(
     db = get_supabase()
     sc = db.get_service_client()
 
-    shop_resp = (
-        sc.table("shops")
-        .select("id, name, stripe_customer_id, stripe_subscription_id, status")
-        .eq("owner_id", user_id)
-        .order("created_at")
-        .limit(1)
-        .execute()
-    )
-
-    if not shop_resp.data:
+    owner_shops = list_owner_billing_shops(sc, user_id)
+    if not owner_shops:
         raise HTTPException(
             status_code=404,
             detail="Shop not found — please complete your application first"
         )
 
-    shop = shop_resp.data[0]
+    shop = find_owner_billing_shop(owner_shops)
+    location_count = billable_location_count(owner_shops)
+    additional_qty = additional_location_quantity(location_count)
 
     if shop.get("stripe_subscription_id") and shop.get("status") == "active":
         raise HTTPException(status_code=400, detail="Your shop already has an active subscription")
 
     try:
+        try:
+            line_items = build_checkout_line_items(location_count)
+        except ValueError as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
         stripe_customer_id = shop.get("stripe_customer_id")
 
         if not stripe_customer_id:
@@ -118,13 +128,23 @@ async def create_checkout_session(
         session_params = {
             "customer": stripe_customer_id,
             "payment_method_types": ["card"],
-            "line_items": [{"price": PRICE_ID, "quantity": 1}],
+            "line_items": line_items,
             "mode": "subscription",
             "success_url": f"{settings.frontend_url}/shop-owner/subscribe?success=true",
             "cancel_url": f"{settings.frontend_url}/shop-owner/subscribe?cancelled=true",
-            "metadata": {"shop_id": shop["id"], "owner_id": user_id},
+            "metadata": {
+                "shop_id": shop["id"],
+                "owner_id": user_id,
+                "location_count": str(location_count),
+                "additional_location_count": str(additional_qty),
+            },
             "subscription_data": {
-                "metadata": {"shop_id": shop["id"], "owner_id": user_id},
+                "metadata": {
+                    "shop_id": shop["id"],
+                    "owner_id": user_id,
+                    "location_count": str(location_count),
+                    "additional_location_count": str(additional_qty),
+                },
             },
             "allow_promotion_codes": True,
         }
@@ -144,7 +164,13 @@ async def create_checkout_session(
                 logger.warning(f"[Billing] Promo code lookup failed: {e}")
 
         session = stripe.checkout.Session.create(**session_params)
-        logger.info(f"[Billing] Checkout session created for shop {shop['id']}")
+        logger.info(
+            "[Billing] Checkout session created for owner=%s shop=%s locations=%s additional=%s",
+            user_id,
+            shop["id"],
+            location_count,
+            additional_qty,
+        )
 
         return {"checkout_url": session.url, "session_id": session.id}
 
@@ -242,6 +268,16 @@ async def stripe_webhook(
                 logger.info(f"[Billing] Activated all pending shops for owner {owner_id}")
             except Exception as e:
                 logger.warning(f"[Billing] Could not activate sibling shops for owner {owner_id}: {e}")
+
+            try:
+                sync_owner_subscription_location_quantity(
+                    sc,
+                    owner_id,
+                    subscription_id=subscription_id,
+                    proration_behavior="none",
+                )
+            except Exception as e:
+                logger.warning(f"[Billing] Could not sync subscription quantities for owner {owner_id}: {e}")
 
         logger.info(f"[Billing] Shop {shop_id} ACTIVATED ✓")
 
@@ -351,27 +387,14 @@ async def get_subscription_status(user: dict = Depends(require_auth())):
     db = get_supabase()
     sc = db.get_service_client()
 
-    shop_resp = (
-        sc.table("shops")
-        .select("id, name, subscription_status, stripe_subscription_id, stripe_customer_id, status")
-        .eq("owner_id", user_id)
-        .order("created_at")
-        .execute()
-    )
+    owner_shops = list_owner_billing_shops(sc, user_id)
 
-    if not shop_resp.data:
+    if not owner_shops:
         raise HTTPException(status_code=404, detail="Shop not found")
 
-    shops = shop_resp.data or []
-    shop = next(
-        (
-            row for row in shops
-            if row.get("status") == "active"
-            or row.get("subscription_status") == "active"
-            or row.get("stripe_subscription_id")
-        ),
-        shops[0],
-    )
+    shops = owner_shops
+    shop = find_owner_billing_shop(shops)
+    location_count = billable_location_count(shops)
 
     return {
         "subscribed": any(
@@ -384,6 +407,9 @@ async def get_subscription_status(user: dict = Depends(require_auth())):
         "status": shop.get("subscription_status") or "none",
         "shop_status": shop.get("status"),
         "subscription_id": shop.get("stripe_subscription_id"),
+        "base_price_id_configured": bool(BASE_LOCATION_PRICE_ID),
+        "additional_location_price_id_configured": bool(ADDITIONAL_LOCATION_PRICE_ID),
+        **billing_amount_summary(location_count),
     }
 
 
