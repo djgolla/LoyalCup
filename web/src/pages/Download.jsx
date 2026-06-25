@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { Apple, ArrowRight, Coffee, Gift, MapPin, Play, ShoppingBag, Smartphone } from "lucide-react";
 
-const APP_STORE_URL = "https://apps.apple.com/app/loyalcup";
+const APP_STORE_URL = "https://apps.apple.com/us/app/loyalcup/id6780598444";
 const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.loyalcup";
 
 const appScreens = [

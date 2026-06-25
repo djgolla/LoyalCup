@@ -75,7 +75,7 @@ export default function Home() {
 
   const handleDownloadApp = () => {
     const ua = navigator.userAgent.toLowerCase();
-    if (/iphone|ipad|ipod/.test(ua)) window.open('https://apps.apple.com/app/loyalcup', '_blank');
+    if (/iphone|ipad|ipod/.test(ua)) window.open('https://apps.apple.com/us/app/loyalcup/id6780598444', '_blank');
     else if (/android/.test(ua)) window.open('https://play.google.com/store/apps/details?id=com.loyalcup', '_blank');
     else navigate('/download');
   };
