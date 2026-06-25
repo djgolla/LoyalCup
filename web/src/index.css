@@ -2,7 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
-/*  global -- tw3 hopefullY?  */
+:root {
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
 body {
-  @apply bg-gray-100 dark:bg-neutral-900;
+  @apply bg-[#f6f4f0] text-slate-950 antialiased dark:bg-neutral-950;
+}
+
+::selection {
+  @apply bg-orange-500 text-white;
 }

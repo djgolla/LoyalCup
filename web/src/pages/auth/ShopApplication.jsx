@@ -143,26 +143,37 @@ export default function ShopApplication() {
     }
   };
 
-  const ic = 'w-full px-4 py-3 border-2 border-gray-200 dark:border-neutral-700 rounded-xl bg-white dark:bg-neutral-800 text-gray-900 dark:text-white focus:outline-none focus:border-amber-500 transition';
+  const ic = 'w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 transition focus:border-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-100 dark:border-neutral-700 dark:bg-neutral-800 dark:text-white';
 
   return (
-    <div className="max-w-2xl mx-auto py-12 px-4">
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-8 text-center">
-        <h1 className="text-4xl font-black text-gray-900 dark:text-white mb-2">Join LoyalCup</h1>
-        <p className="text-gray-500 dark:text-gray-400 text-lg">
-          Tell us about your shop — then subscribe to go live instantly.
-        </p>
-        <div className="flex items-center justify-center gap-3 mt-6 flex-wrap">
-          <div className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-full text-sm font-bold">
-            <span>1</span> <span>Shop Details</span>
+    <div className="bg-[#f6f4f0] px-4 py-12 dark:bg-neutral-950">
+      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 lg:grid-cols-[0.9fr_1.1fr]">
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="lg:sticky lg:top-28 lg:self-start">
+        <div className="rounded-[2rem] bg-[#080d19] p-8 text-white shadow-2xl">
+          <div className="mb-6 inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-bold">
+            <Store className="h-4 w-4 text-orange-400" />
+            Shop owner onboarding
           </div>
-          <div className="w-6 h-0.5 bg-gray-300 dark:bg-neutral-700" />
-          <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-neutral-800 text-gray-400 rounded-full text-sm font-bold">
-            <span>2</span> <span>Subscribe &amp; Activate</span>
-          </div>
-          <div className="w-6 h-0.5 bg-gray-300 dark:bg-neutral-700" />
-          <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-neutral-800 text-gray-400 rounded-full text-sm font-bold">
-            <span>3</span> <span>Connect Square &amp; Go Live</span>
+          <h1 className="text-4xl font-black leading-tight sm:text-5xl">Join LoyalCup</h1>
+          <p className="mt-4 text-lg leading-8 text-slate-300">
+            Tell us about your shop and locations. After this, you subscribe, connect Square, and go live.
+          </p>
+          <div className="mt-8 space-y-3">
+            {[
+              ['1', 'Shop details', 'Business account and location information'],
+              ['2', 'Subscribe', `$${BASE_PRICE}/mo base + $${ADDITIONAL_LOCATION_PRICE}/mo per extra location`],
+              ['3', 'Connect Square', 'Link each LoyalCup shop to the right Square location'],
+            ].map(([step, title, desc], index) => (
+              <div key={step} className={`rounded-2xl border p-4 ${index === 0 ? 'border-orange-400 bg-orange-500/15' : 'border-white/10 bg-white/[0.06]'}`}>
+                <div className="flex gap-3">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-sm font-black text-slate-950">{step}</span>
+                  <span>
+                    <span className="block font-black">{title}</span>
+                    <span className="mt-1 block text-sm leading-5 text-slate-300">{desc}</span>
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </motion.div>
@@ -171,12 +182,12 @@ export default function ShopApplication() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="bg-white dark:bg-neutral-900 rounded-2xl shadow-xl border border-gray-200 dark:border-neutral-800 p-8"
+        className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-xl dark:border-neutral-800 dark:bg-neutral-900 sm:p-8"
       >
         <form onSubmit={handleSubmit} className="space-y-5">
 
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
+              <label className="mb-2 flex items-center gap-1.5 text-sm font-black text-slate-700 dark:text-gray-300">
               <Store className="w-4 h-4" /> Business Name *
             </label>
             <input name="businessName" value={formData.businessName} onChange={handleChange}
@@ -184,7 +195,7 @@ export default function ShopApplication() {
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
+              <label className="mb-2 flex items-center gap-1.5 text-sm font-black text-slate-700 dark:text-gray-300">
               <FileText className="w-4 h-4" /> About Your Shop (optional)
             </label>
             <textarea name="description" value={formData.description} onChange={handleChange}
@@ -193,7 +204,7 @@ export default function ShopApplication() {
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
+              <label className="mb-2 flex items-center gap-1.5 text-sm font-black text-slate-700 dark:text-gray-300">
               <Mail className="w-4 h-4" /> Email Address *
             </label>
             <input name="email" type="email" value={formData.email} onChange={handleChange}
@@ -201,7 +212,7 @@ export default function ShopApplication() {
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+            <label className="mb-2 block text-sm font-black text-slate-700 dark:text-gray-300">
               Password * <span className="text-gray-400 font-normal">(you'll use this to log in)</span>
             </label>
             <input name="password" type="password" value={formData.password} onChange={handleChange}
@@ -210,60 +221,60 @@ export default function ShopApplication() {
 
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3">
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+              <label className="flex items-center gap-1.5 text-sm font-black text-slate-700 dark:text-gray-300">
                 <MapPin className="w-4 h-4" /> Location{locations.length > 1 ? 's' : ''} *
               </label>
               <button type="button" onClick={addLocation}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 font-bold text-sm">
+                className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-3 py-2 text-sm font-black text-orange-700 dark:bg-orange-950/30 dark:text-orange-300">
                 <Plus className="w-4 h-4" /> Add Location
               </button>
             </div>
 
             {locations.map((location, index) => (
-              <div key={index} className="rounded-2xl border-2 border-gray-200 dark:border-neutral-800 p-4 space-y-4">
+              <div key={index} className="space-y-4 rounded-[1.5rem] border border-slate-200 bg-[#fbfaf7] p-4 dark:border-neutral-800 dark:bg-neutral-950/40">
                 <div className="flex items-center justify-between gap-3">
-                  <h3 className="font-bold text-gray-900 dark:text-white">Location {index + 1}</h3>
+                  <h3 className="font-black text-slate-950 dark:text-white">Location {index + 1}</h3>
                   {locations.length > 1 && (
                     <button type="button" onClick={() => removeLocation(index)}
-                      className="inline-flex items-center gap-1 text-sm font-bold text-red-500">
+                      className="inline-flex items-center gap-1 text-sm font-black text-red-500">
                       <Trash2 className="w-4 h-4" /> Remove
                     </button>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Location Name</label>
+                  <label className="mb-2 block text-sm font-black text-slate-700 dark:text-gray-300">Location Name</label>
                   <input value={location.name} onChange={e => handleLocationChange(index, 'name', e.target.value)}
                     placeholder={index === 0 ? formData.businessName || 'Brew & Bean Coffee' : `${formData.businessName || 'Brew & Bean'} - Downtown`}
                     className={ic} />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Street Address *</label>
+                  <label className="mb-2 block text-sm font-black text-slate-700 dark:text-gray-300">Street Address *</label>
                   <input value={location.address} onChange={e => handleLocationChange(index, 'address', e.target.value)}
                     placeholder="123 Main St" required className={ic} />
                 </div>
 
                 <div className="grid grid-cols-3 gap-3">
                   <div className="col-span-1">
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">City *</label>
+                    <label className="mb-2 block text-sm font-black text-slate-700 dark:text-gray-300">City *</label>
                     <input value={location.city} onChange={e => handleLocationChange(index, 'city', e.target.value)}
                       placeholder="Austin" required className={ic} />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">State *</label>
+                    <label className="mb-2 block text-sm font-black text-slate-700 dark:text-gray-300">State *</label>
                     <input value={location.state} onChange={e => handleLocationChange(index, 'state', e.target.value)}
                       placeholder="TX" required maxLength={2} className={ic} />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">ZIP *</label>
+                    <label className="mb-2 block text-sm font-black text-slate-700 dark:text-gray-300">ZIP *</label>
                     <input value={location.zip} onChange={e => handleLocationChange(index, 'zip', e.target.value)}
                       placeholder="78701" required className={ic} />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
+                  <label className="mb-2 flex items-center gap-1.5 text-sm font-black text-slate-700 dark:text-gray-300">
                     <Phone className="w-4 h-4" /> Phone *
                   </label>
                   <input type="tel" value={location.phone} onChange={e => handleLocationChange(index, 'phone', e.target.value)}
@@ -271,7 +282,7 @@ export default function ShopApplication() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-1.5">
+                  <label className="mb-2 flex items-center gap-1.5 text-sm font-black text-slate-700 dark:text-gray-300">
                     <Globe className="w-4 h-4" /> Website (optional)
                   </label>
                   <input type="url" value={location.website} onChange={e => handleLocationChange(index, 'website', e.target.value)}
@@ -283,12 +294,12 @@ export default function ShopApplication() {
 
           <label className="flex items-start gap-3 cursor-pointer">
             <input type="checkbox" name="agreeToTerms" checked={formData.agreeToTerms}
-              onChange={handleChange} className="mt-1 w-4 h-4 accent-amber-500" />
-            <span className="text-sm text-gray-600 dark:text-gray-400">
+              onChange={handleChange} className="mt-1 h-4 w-4 accent-orange-500" />
+            <span className="text-sm text-slate-600 dark:text-gray-400">
               I agree to the{' '}
-              <a href="/terms" className="text-amber-600 hover:underline" target="_blank">Terms of Service</a>
+              <a href="/terms" className="text-orange-600 hover:underline" target="_blank">Terms of Service</a>
               {' '}and{' '}
-              <a href="/privacy" className="text-amber-600 hover:underline" target="_blank">Privacy Policy</a>
+              <a href="/privacy" className="text-orange-600 hover:underline" target="_blank">Privacy Policy</a>
             </span>
           </label>
 
@@ -297,18 +308,19 @@ export default function ShopApplication() {
             whileTap={{ scale: 0.98 }}
             type="submit"
             disabled={loading}
-            className="w-full bg-gradient-to-r from-amber-600 to-orange-600 text-white py-4 rounded-2xl font-bold text-lg shadow-xl flex items-center justify-center gap-3 disabled:opacity-60 mt-2"
+            className="mt-2 flex w-full items-center justify-center gap-3 rounded-full bg-[#f4762c] py-4 text-lg font-black text-white shadow-xl disabled:opacity-60"
           >
             {loading ? 'Creating your account...' : (
               <>Continue to Subscribe <ArrowRight className="w-5 h-5" /></>
             )}
           </motion.button>
 
-          <p className="text-center text-xs text-gray-400">
+          <p className="text-center text-xs text-slate-400">
             Next step: ${BASE_PRICE}/mo base subscription · +${ADDITIONAL_LOCATION_PRICE}/mo per additional location · Cancel anytime
           </p>
         </form>
       </motion.div>
+      </div>
     </div>
   );
 }

@@ -1,108 +1,61 @@
-import { useRef, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, useScroll, useTransform, useInView, useAnimation } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
-  Coffee, Gift, Smartphone, ArrowRight,
-  Sparkles, Download, Star, MapPin, Zap
+  ArrowRight,
+  BarChart3,
+  Check,
+  Coffee,
+  Gift,
+  MapPin,
+  ReceiptText,
+  ShieldCheck,
+  ShoppingBag,
+  Smartphone,
+  Store,
 } from 'lucide-react';
 import { apiUrl, parseJsonResponse } from '../../api/client';
 
-const FloatingCoffee = ({ delay = 0, style = {} }) => (
-  <motion.div
-    initial={{ y: 0 }}
-    animate={{ y: [-20, 20, -20] }}
-    transition={{ duration: 4, delay, repeat: Infinity, ease: 'easeInOut' }}
-    className="absolute text-6xl opacity-20 pointer-events-none select-none"
-    style={style}
-  >
-    ☕
-  </motion.div>
-);
-
-const CountUpNumber = ({ end, duration = 2 }) => {
-  const [count, setCount] = useState(0);
-  const ref = useRef(null);
-  const isInView = useInView(ref, { once: true });
-  useEffect(() => {
-    if (!isInView) return;
-    let start = 0;
-    const increment = end / (duration * 60);
-    const timer = setInterval(() => {
-      start += increment;
-      if (start >= end) { setCount(end); clearInterval(timer); }
-      else setCount(Math.floor(start));
-    }, 1000 / 60);
-    return () => clearInterval(timer);
-  }, [isInView, end, duration]);
-  return <span ref={ref}>{count.toLocaleString()}</span>;
+const APP_SCREENS = {
+  welcome: '/app-screens/welcome.jpg',
+  discover: '/app-screens/discover.jpg',
+  profile: '/app-screens/profile.jpg',
+  shop: '/app-screens/shop.jpg',
+  item: '/app-screens/item.jpg',
 };
 
-const StatCard = ({ num, label, suffix, loading, delay }) => (
-  <motion.div
-    initial={{ opacity: 0, scale: 0.5 }}
-    whileInView={{ opacity: 1, scale: 1 }}
-    viewport={{ once: true }}
-    transition={{ duration: 0.5, delay }}
-    className="text-center"
-  >
-    {loading ? (
-      <div className="flex flex-col items-center gap-2">
-        <div className="h-12 w-24 bg-gray-200 dark:bg-neutral-700 rounded-xl animate-pulse mx-auto" />
-        <div className="h-4 w-20 bg-gray-200 dark:bg-neutral-700 rounded-lg animate-pulse mx-auto" />
-      </div>
-    ) : (
-      <>
-        <motion.div
-          className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-600 to-orange-600 mb-2"
-          whileHover={{ scale: 1.1 }}
-        >
-          <CountUpNumber end={num} />{suffix}
-        </motion.div>
-        <div className="text-gray-600 dark:text-gray-400 font-medium">{label}</div>
-      </>
-    )}
-  </motion.div>
+const Metric = ({ value, label, loading }) => (
+  <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-5 backdrop-blur">
+    <div className="text-3xl font-black text-white">
+      {loading ? '...' : value}
+    </div>
+    <div className="mt-1 text-sm font-medium text-slate-300">{label}</div>
+  </div>
 );
 
-const FeatureCard = ({ icon: Icon, title, description, color, delay }) => {
-  const controls = useAnimation();
-  const ref = useRef(null);
-  const isInView = useInView(ref, { once: true });
-  useEffect(() => { if (isInView) controls.start('visible'); }, [isInView, controls]);
-  return (
-    <motion.div
-      ref={ref}
-      initial="hidden"
-      animate={controls}
-      variants={{
-        hidden:  { opacity: 0, y: 50 },
-        visible: { opacity: 1, y: 0, transition: { duration: 0.6, delay } },
-      }}
-      whileHover={{ y: -10, transition: { duration: 0.2 } }}
-      className="relative group"
-    >
-      <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 to-orange-500/20 rounded-3xl blur-xl group-hover:blur-2xl transition-all duration-300 opacity-0 group-hover:opacity-100" />
-      <div className="relative bg-white dark:bg-neutral-900 rounded-3xl p-8 shadow-xl border border-gray-100 dark:border-neutral-800 hover:border-amber-500/50 transition-all duration-300">
-        <motion.div
-          whileHover={{ rotate: 360, scale: 1.1 }}
-          transition={{ duration: 0.6 }}
-          className={`w-20 h-20 ${color} rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg`}
-        >
-          <Icon className="w-10 h-10 text-white" />
-        </motion.div>
-        <h3 className="text-2xl font-bold mb-3 text-gray-900 dark:text-white text-center">{title}</h3>
-        <p className="text-gray-600 dark:text-gray-400 text-lg text-center leading-relaxed">{description}</p>
-      </div>
-    </motion.div>
-  );
-};
+const ProductShot = ({ src, alt, className = '' }) => (
+  <div className={`rounded-[2rem] border border-white/15 bg-white/10 p-2 shadow-2xl shadow-black/30 ${className}`}>
+    <img
+      src={src}
+      alt={alt}
+      className="h-full w-full rounded-[1.55rem] object-cover"
+      loading="lazy"
+    />
+  </div>
+);
+
+const FeatureCard = ({ icon: Icon, title, body }) => (
+  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+      <Icon className="h-6 w-6" />
+    </div>
+    <h3 className="text-xl font-black text-slate-950">{title}</h3>
+    <p className="mt-2 leading-relaxed text-slate-600">{body}</p>
+  </div>
+);
 
 export default function Home() {
   const navigate = useNavigate();
-  const { scrollY } = useScroll();
-  const heroOpacity = useTransform(scrollY, [0, 300], [1, 0]);
-  const heroScale   = useTransform(scrollY, [0, 300], [1, 0.9]);
-
   const [statsLoading, setStatsLoading] = useState(true);
   const [stats, setStats] = useState({ shopCount: 0, orderCount: 0, userCount: 0 });
 
@@ -113,7 +66,7 @@ export default function Home() {
         const data = await parseJsonResponse(response);
         setStats(data);
       } catch {
-        // If RPCs don't exist yet, silently show 0s — no crash
+        // Keep the public page resilient if stats RPCs are unavailable.
       } finally {
         setStatsLoading(false);
       }
@@ -122,323 +75,275 @@ export default function Home() {
 
   const handleDownloadApp = () => {
     const ua = navigator.userAgent.toLowerCase();
-    if (/iphone|ipad|ipod/.test(ua))  window.open('https://apps.apple.com/app/loyalcup', '_blank');
-    else if (/android/.test(ua))       window.open('https://play.google.com/store/apps/details?id=com.loyalcup', '_blank');
-    else                               navigate('/download');
+    if (/iphone|ipad|ipod/.test(ua)) window.open('https://apps.apple.com/app/loyalcup', '_blank');
+    else if (/android/.test(ua)) window.open('https://play.google.com/store/apps/details?id=com.loyalcup', '_blank');
+    else navigate('/download');
   };
 
-  const statsRow = [
-    { num: stats.shopCount,  label: 'Local Shops',     suffix: '+' },
-    { num: stats.userCount,  label: 'Happy Customers', suffix: '+' },
-    { num: stats.orderCount, label: 'Orders Placed',   suffix: '+' },
-    { num: 4.8,              label: 'Average Rating',  suffix: '★' },
-  ];
-
   return (
-    <div className="min-h-screen overflow-hidden">
-
-      {/* ── Hero ─────────────────────────────────────────────────────────── */}
-      <div className="relative bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 dark:from-neutral-900 dark:via-neutral-800 dark:to-neutral-900 py-32 overflow-hidden">
-        <FloatingCoffee delay={0} style={{ top: '10%',    left:  '5%'  }} />
-        <FloatingCoffee delay={1} style={{ top: '20%',    right: '8%'  }} />
-        <FloatingCoffee delay={2} style={{ bottom: '15%', left:  '15%' }} />
-
-        <motion.div
-          style={{ opacity: heroOpacity, scale: heroScale }}
-          className="max-w-7xl mx-auto px-4 relative z-10"
-        >
+    <div className="overflow-hidden bg-[#f6f4f0] text-slate-950">
+      <section className="relative bg-[#080d19]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_12%,rgba(244,118,44,0.30),transparent_28%),radial-gradient(circle_at_20%_84%,rgba(43,92,184,0.32),transparent_34%)]" />
+        <div className="relative mx-auto grid min-h-[760px] max-w-7xl grid-cols-1 items-center gap-14 px-4 py-20 sm:px-6 lg:grid-cols-[1.02fr_0.98fr] lg:px-8 lg:py-24">
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            className="text-center mb-12"
+            transition={{ duration: 0.55 }}
           >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="inline-block mb-8"
-            >
-              <div className="flex items-center gap-3 bg-white dark:bg-neutral-800 px-8 py-4 rounded-full shadow-2xl backdrop-blur-sm border border-amber-200 dark:border-amber-900">
-                <motion.div animate={{ rotate: 360 }} transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}>
-                  <Coffee className="w-6 h-6 text-amber-700" />
-                </motion.div>
-                <span className="text-sm font-bold text-gray-900 dark:text-white tracking-wide uppercase">
-                  Supporting Local Coffee Shops
-                </span>
-                <Sparkles className="w-5 h-5 text-amber-600" />
-              </div>
-            </motion.div>
-
-            <motion.h1
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.3 }}
-              className="text-6xl lg:text-8xl font-black text-gray-900 dark:text-white mb-8 leading-tight"
-            >
-              Discover Local Coffee.{' '}
-              <motion.span
-                className="text-transparent bg-clip-text bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 inline-block"
-                animate={{ backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
-                transition={{ duration: 5, repeat: Infinity }}
-                style={{ backgroundSize: '200% 200%' }}
-              >
-                Stay Loyal.
-              </motion.span>
-            </motion.h1>
-
-            <motion.p
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.4 }}
-              className="text-2xl lg:text-3xl text-gray-700 dark:text-gray-300 mb-12 max-w-4xl mx-auto font-light leading-relaxed"
-            >
-              Order ahead, earn rewards, and support your favorite local coffee shops — all in one place.
-            </motion.p>
-
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, delay: 0.5 }}
-              className="flex flex-col sm:flex-row gap-4 justify-center mb-8"
-            >
-              <motion.button
-                whileHover={{ scale: 1.05, boxShadow: '0 20px 60px rgba(245,158,11,0.4)' }}
-                whileTap={{ scale: 0.95 }}
-                onClick={handleDownloadApp}
-                className="group relative px-10 py-5 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-full text-xl font-bold shadow-2xl overflow-hidden"
-              >
-                <motion.div
-                  className="absolute inset-0 bg-gradient-to-r from-orange-600 to-amber-600"
-                  initial={{ x: '100%' }} whileHover={{ x: 0 }} transition={{ duration: 0.3 }}
-                />
-                <span className="relative flex items-center justify-center gap-3">
-                  <Smartphone className="w-6 h-6" />
-                  Download App
-                  <motion.div animate={{ x: [0, 5, 0] }} transition={{ duration: 1.5, repeat: Infinity }}>
-                    <ArrowRight className="w-6 h-6" />
-                  </motion.div>
-                </span>
-              </motion.button>
-            </motion.div>
-
-            <motion.p
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }}
-              className="text-gray-500 dark:text-gray-400 text-sm"
-            >
-              Available free on iOS and Android
-            </motion.p>
-          </motion.div>
-        </motion.div>
-
-        <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-white dark:from-neutral-900 to-transparent" />
-      </div>
-
-      {/* ── Live Stats ───────────────────────────────────────────────────── */}
-      <div className="py-20 bg-white dark:bg-neutral-900">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {statsRow.map((stat, i) => (
-              <StatCard
-                key={i}
-                num={stat.num}
-                label={stat.label}
-                suffix={stat.suffix}
-                loading={statsLoading && i < 3}
-                delay={i * 0.1}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ── How It Works ─────────────────────────────────────────────────── */}
-      <div className="py-32 bg-gradient-to-b from-white to-gray-50 dark:from-neutral-900 dark:to-neutral-800 relative overflow-hidden">
-        <div className="max-w-7xl mx-auto px-4 relative z-10">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8 }}
-            className="text-center mb-20"
-          >
-            <div className="inline-block mb-6">
-              <div className="bg-amber-100 dark:bg-amber-900/20 px-6 py-3 rounded-full">
-                <span className="text-amber-700 dark:text-amber-400 font-bold text-sm uppercase tracking-wider">
-                  Simple Process
-                </span>
-              </div>
+            <div className="mb-7 inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-bold text-white shadow-sm backdrop-blur">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-orange-600">
+                <Coffee className="h-4 w-4" />
+              </span>
+              Local coffee, ready fast
             </div>
-            <h2 className="text-5xl lg:text-6xl font-black text-gray-900 dark:text-white mb-6">
-              How It Works
-            </h2>
-            <p className="text-2xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
-              Get your coffee fix in three simple steps
+
+            <h1 className="max-w-3xl text-5xl font-black leading-[1.02] text-white sm:text-6xl lg:text-7xl">
+              The ordering app built for neighborhood coffee shops.
+            </h1>
+            <p className="mt-7 max-w-2xl text-xl leading-8 text-slate-300">
+              LoyalCup gives customers a polished way to discover shops, order ahead, and earn rewards, while owners keep Square as the source of truth.
             </p>
-          </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-            <FeatureCard
-              icon={Smartphone}
-              title="Download the App"
-              description="Get the LoyalCup app on iOS or Android and create your account in seconds"
-              color="bg-gradient-to-br from-blue-500 to-cyan-500"
-              delay={0.2}
-            />
-            <FeatureCard
-              icon={MapPin}
-              title="Find Your Spot"
-              description="Discover local coffee shops near you, browse their full menu, and order ahead"
-              color="bg-gradient-to-br from-amber-500 to-orange-500"
-              delay={0.4}
-            />
-            <FeatureCard
-              icon={Gift}
-              title="Earn Every Visit"
-              description="Rack up loyalty points with every order and redeem them for free drinks"
-              color="bg-gradient-to-br from-purple-500 to-pink-500"
-              delay={0.6}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* ── Why people love it ───────────────────────────────────────────── */}
-      <div className="py-24 bg-white dark:bg-neutral-900">
-        <div className="max-w-5xl mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-4xl lg:text-5xl font-black text-gray-900 dark:text-white mb-4">
-              Everything you want from your local café
-            </h2>
-            <p className="text-xl text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">
-              Skip the line, earn perks, and support the places that make your neighborhood great
-            </p>
-          </motion.div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[
-              { icon: Zap,    color: 'text-amber-600',  bg: 'bg-amber-50 dark:bg-amber-900/20',   title: 'Order Ahead',  desc: 'Skip the wait. Your order is ready when you walk in the door.' },
-              { icon: Star,   color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-900/20', title: 'Real Rewards', desc: 'Points on every purchase. Redeem for free drinks at any shop you visit.' },
-              { icon: Coffee, color: 'text-orange-600', bg: 'bg-orange-50 dark:bg-orange-900/20', title: 'Local First',  desc: 'Every shop on LoyalCup is an independent local café. No chains.' },
-            ].map((item, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.15 }}
-                className="flex flex-col gap-4 p-6 rounded-2xl border border-gray-100 dark:border-neutral-800 bg-gray-50 dark:bg-neutral-800/50"
+            <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={handleDownloadApp}
+                className="inline-flex items-center justify-center gap-3 rounded-full bg-[#f4762c] px-7 py-4 text-base font-black text-white shadow-xl shadow-orange-950/30 transition hover:bg-[#ff8642]"
               >
-                <div className={`w-12 h-12 ${item.bg} rounded-xl flex items-center justify-center`}>
-                  <item.icon className={`w-6 h-6 ${item.color}`} />
+                <Smartphone className="h-5 w-5" />
+                Get the app
+                <ArrowRight className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/shop-application')}
+                className="inline-flex items-center justify-center gap-3 rounded-full border border-white/15 bg-white px-7 py-4 text-base font-black text-slate-950 transition hover:bg-slate-100"
+              >
+                List your shop
+              </button>
+            </div>
+
+            <div className="mt-10 grid max-w-2xl grid-cols-3 gap-3">
+              <Metric
+                value={`${(stats.shopCount || 0).toLocaleString()}+`}
+                label="shops"
+                loading={statsLoading}
+              />
+              <Metric
+                value={`${(stats.userCount || 0).toLocaleString()}+`}
+                label="customers"
+                loading={statsLoading}
+              />
+              <Metric
+                value={`${(stats.orderCount || 0).toLocaleString()}+`}
+                label="orders"
+                loading={statsLoading}
+              />
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.65, delay: 0.1 }}
+            className="relative min-h-[620px]"
+          >
+            <ProductShot
+              src={APP_SCREENS.discover}
+              alt="LoyalCup app showing nearby coffee shops"
+              className="absolute left-0 top-8 h-[560px] w-[270px] rotate-[-4deg]"
+            />
+            <ProductShot
+              src={APP_SCREENS.profile}
+              alt="LoyalCup app showing loyalty rewards"
+              className="absolute right-0 top-0 hidden h-[600px] w-[288px] rotate-[5deg] sm:block"
+            />
+            <div className="absolute bottom-10 left-12 right-6 rounded-3xl border border-white/15 bg-white/95 p-5 shadow-2xl sm:left-28">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#101827] text-white">
+                  <ReceiptText className="h-6 w-6" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-gray-900 dark:text-white text-lg mb-1">{item.title}</h3>
-                  <p className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed">{item.desc}</p>
+                  <p className="text-sm font-bold uppercase tracking-[0.16em] text-slate-500">Square connected</p>
+                  <p className="text-lg font-black text-slate-950">Orders print at the counter.</p>
                 </div>
-              </motion.div>
-            ))}
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      <section className="border-b border-slate-200 bg-white">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-4 px-4 py-7 sm:px-6 md:grid-cols-3 lg:px-8">
+          {[
+            'Customer mobile app for discovery, ordering, and rewards',
+            'Square menu sync, Square payments, Square order printing',
+            '$150/mo base plan with clear multi-location pricing',
+          ].map((item) => (
+            <div key={item} className="flex items-center gap-3 text-sm font-bold text-slate-700">
+              <Check className="h-5 w-5 shrink-0 text-orange-600" />
+              {item}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 items-center gap-14 lg:grid-cols-[0.95fr_1.05fr]">
+          <div>
+            <p className="text-sm font-black uppercase tracking-[0.18em] text-orange-600">For customers</p>
+            <h2 className="mt-4 text-4xl font-black leading-tight text-slate-950 sm:text-5xl">
+              A coffee app that feels finished from the first tap.
+            </h2>
+            <p className="mt-5 text-lg leading-8 text-slate-600">
+              The mobile experience matches the habits customers already have: search nearby, open a shop, customize an item, pay, pick up, earn points.
+            </p>
+            <div className="mt-8 grid gap-4 sm:grid-cols-2">
+              <FeatureCard
+                icon={MapPin}
+                title="Discover local"
+                body="Customers find nearby shops, see open status, browse menus, and pick the right cup for the moment."
+              />
+              <FeatureCard
+                icon={Gift}
+                title="Earn rewards"
+                body="Points and rewards live in the app, so regulars have a reason to keep coming back."
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <img src={APP_SCREENS.shop} alt="LoyalCup shop menu screen" className="h-[520px] w-full rounded-3xl object-cover shadow-xl" />
+            <img src={APP_SCREENS.item} alt="LoyalCup item customization screen" className="mt-12 h-[520px] w-full rounded-3xl object-cover shadow-xl" />
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* ── Final Download CTA ───────────────────────────────────────────── */}
-      <div className="py-32 bg-gradient-to-b from-gray-50 to-white dark:from-neutral-800 dark:to-neutral-900">
-        <div className="max-w-5xl mx-auto px-4 text-center">
-          <motion.div
-            initial={{ scale: 0 }}
-            whileInView={{ scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ type: 'spring', duration: 0.8 }}
-          >
-            <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 2, repeat: Infinity }}>
-              <Smartphone className="w-24 h-24 text-amber-700 mx-auto mb-8" />
-            </motion.div>
-          </motion.div>
-
-          <motion.h2
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-5xl lg:text-6xl font-black text-gray-900 dark:text-white mb-8"
-          >
-            Ready to find your new favorite coffee spot?
-          </motion.h2>
-
-          <motion.p
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.2 }}
-            className="text-2xl text-gray-600 dark:text-gray-400 mb-12"
-          >
-            Download the app and join other coffee lovers supporting local businesses
-          </motion.p>
-
-          <motion.button
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.4 }}
-            whileHover={{ scale: 1.1, rotate: 2 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleDownloadApp}
-            className="group relative bg-gradient-to-r from-amber-600 to-orange-600 text-white px-12 py-6 rounded-full text-xl font-bold shadow-2xl hover:shadow-3xl transition-all overflow-hidden"
-          >
-            <motion.div
-              className="absolute inset-0 bg-gradient-to-r from-orange-600 to-amber-600"
-              initial={{ x: '-100%' }} whileHover={{ x: 0 }} transition={{ duration: 0.3 }}
-            />
-            <span className="relative flex items-center gap-3">
-              <Download className="w-6 h-6" />
-              Download LoyalCup
-              <ArrowRight className="w-6 h-6" />
-            </span>
-          </motion.button>
-
-          <motion.p
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.6 }}
-            className="mt-6 text-sm text-gray-400 dark:text-gray-500"
-          >
-            Free on iOS & Android
-          </motion.p>
-        </div>
-      </div>
-
-      {/* ── Shop owner strip ─────────────────────────────────────────────── */}
-      <div className="border-t border-gray-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 py-10">
-        <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <section className="bg-[#101827] py-24 text-white">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-14 px-4 sm:px-6 lg:grid-cols-[1fr_0.92fr] lg:px-8">
           <div>
-            <p className="text-gray-900 dark:text-white font-semibold text-sm">Own a coffee shop?</p>
-            <p className="text-gray-500 dark:text-gray-400 text-sm">
-              Join LoyalCup and put your shop in front of local coffee lovers.
+            <p className="text-sm font-black uppercase tracking-[0.18em] text-orange-400">For shop owners</p>
+            <h2 className="mt-4 text-4xl font-black leading-tight sm:text-5xl">
+              Mobile ordering without rebuilding your operations.
+            </h2>
+            <p className="mt-5 text-lg leading-8 text-slate-300">
+              LoyalCup sits on top of the Square setup shops already use. Menus sync from Square, customer payments run through Square, and orders land where staff expect them.
+            </p>
+            <div className="mt-9 grid gap-4 sm:grid-cols-2">
+              {[
+                { icon: ShoppingBag, title: 'Orders through Square', body: 'Paid customer orders are created in Square so your current fulfillment flow stays intact.' },
+                { icon: Store, title: 'Location aware', body: 'Each location can keep its own menu, Square connection, dashboard, and orders.' },
+                { icon: BarChart3, title: 'Owner dashboard', body: 'Track sales, menu activity, orders, customers, loyalty, and location performance.' },
+                { icon: ShieldCheck, title: 'Clean billing', body: '$150/mo for the first location, then $50/mo for each additional location.' },
+              ].map(({ icon: Icon, title, body }) => (
+                <div key={title} className="rounded-2xl border border-white/10 bg-white/[0.06] p-5">
+                  <Icon className="h-6 w-6 text-orange-400" />
+                  <h3 className="mt-4 text-lg font-black">{title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-300">{body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-5 shadow-2xl">
+            <div className="rounded-[1.5rem] bg-white p-5 text-slate-950">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-5">
+                <div>
+                  <p className="text-sm font-bold uppercase tracking-[0.16em] text-slate-500">Today</p>
+                  <h3 className="text-2xl font-black">Roast House Downtown</h3>
+                </div>
+                <span className="rounded-full bg-green-50 px-3 py-1 text-sm font-black text-green-700">Live</span>
+              </div>
+              <div className="mt-5 grid grid-cols-3 gap-3">
+                {[
+                  ['42', 'orders'],
+                  ['$368', 'revenue'],
+                  ['18', 'reward signups'],
+                ].map(([value, label]) => (
+                  <div key={label} className="rounded-2xl bg-slate-50 p-4">
+                    <div className="text-2xl font-black">{value}</div>
+                    <div className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">{label}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-5 space-y-3">
+                {[
+                  ['Iced Latte', 'Ready in 8 min', '$5.50'],
+                  ['Cold Brew', 'Ready in 6 min', '$4.75'],
+                  ['Honey Cappuccino', 'Ready in 10 min', '$6.25'],
+                ].map(([name, status, price]) => (
+                  <div key={name} className="flex items-center justify-between rounded-2xl border border-slate-200 p-4">
+                    <div>
+                      <p className="font-black">{name}</p>
+                      <p className="text-sm text-slate-500">{status}</p>
+                    </div>
+                    <p className="font-black text-orange-600">{price}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
+        <div className="rounded-[2rem] bg-white p-8 shadow-sm sm:p-12 lg:p-14">
+          <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-[0.9fr_1.1fr]">
+            <div>
+              <p className="text-sm font-black uppercase tracking-[0.18em] text-orange-600">Go live fast</p>
+              <h2 className="mt-4 text-4xl font-black leading-tight text-slate-950 sm:text-5xl">
+                Built to make the owner conversation easier.
+              </h2>
+              <p className="mt-5 text-lg leading-8 text-slate-600">
+                When a shop asks “Does this work with my locations and Square setup?” the answer is yes, without dragging them into a complicated technical explanation.
+              </p>
+            </div>
+            <div className="grid gap-4">
+              {[
+                ['1', 'Apply with one or multiple locations'],
+                ['2', 'Subscribe once with location-based billing'],
+                ['3', 'Connect each shop to the correct Square location'],
+                ['4', 'Import menus and start taking mobile orders'],
+              ].map(([number, label]) => (
+                <div key={number} className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-[#f8f6f2] p-5">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#101827] text-lg font-black text-white">
+                    {number}
+                  </div>
+                  <p className="text-lg font-black text-slate-900">{label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-white py-20">
+        <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-8 px-4 sm:px-6 md:flex-row md:items-center lg:px-8">
+          <div>
+            <p className="text-sm font-black uppercase tracking-[0.18em] text-orange-600">Ready when you are</p>
+            <h2 className="mt-3 text-4xl font-black text-slate-950">Launch your shop on LoyalCup.</h2>
+            <p className="mt-3 max-w-2xl text-lg text-slate-600">
+              Start with one location or bring the whole group. The customer experience stays clean either way.
             </p>
           </div>
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
             <button
+              type="button"
               onClick={() => navigate('/shop-application')}
-              className="px-5 py-2.5 bg-amber-600 text-white text-sm font-semibold rounded-xl hover:bg-amber-700 transition"
+              className="inline-flex items-center justify-center gap-3 rounded-full bg-[#f4762c] px-7 py-4 font-black text-white shadow-lg transition hover:bg-[#ff8642]"
             >
               List your shop
+              <ArrowRight className="h-5 w-5" />
             </button>
             <button
-              onClick={() => navigate('/login')}
-              className="px-5 py-2.5 text-gray-600 dark:text-gray-400 text-sm font-medium hover:text-amber-700 dark:hover:text-amber-400 transition"
+              type="button"
+              onClick={() => navigate('/pricing')}
+              className="inline-flex items-center justify-center rounded-full border border-slate-200 px-7 py-4 font-black text-slate-950 transition hover:bg-slate-50"
             >
-              Sign in →
+              See pricing
             </button>
           </div>
         </div>
-      </div>
-
+      </section>
     </div>
   );
 }

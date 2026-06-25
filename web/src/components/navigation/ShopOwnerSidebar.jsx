@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard, Menu as MenuIcon, FolderTree, Sliders,
   Settings as SettingsIcon, ShoppingBag, BarChart3, Award,
-  LogOut, Lock, Star, CreditCard, MapPin,
+  LogOut, Lock, Star, CreditCard, MapPin, Coffee,
 } from 'lucide-react';
 
 export default function ShopOwnerSidebar() {
@@ -14,9 +14,9 @@ export default function ShopOwnerSidebar() {
 
   const squareConnected = !!shop?.square_merchant_id;
 
-  const base     = 'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200 text-sm';
-  const active   = 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-semibold';
-  const inactive = 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-neutral-800';
+  const base     = 'flex items-center gap-3 rounded-2xl px-4 py-3 text-sm transition-colors duration-200';
+  const active   = 'bg-orange-50 text-orange-700 font-black dark:bg-orange-950/30 dark:text-orange-300';
+  const inactive = 'text-slate-600 hover:bg-slate-100 dark:text-gray-300 dark:hover:bg-neutral-800';
   const locked   = 'text-gray-400 dark:text-neutral-600 cursor-not-allowed pointer-events-none';
 
   const Link = ({ to, icon: Icon, children, requiresSquare = false }) => {
@@ -55,10 +55,18 @@ export default function ShopOwnerSidebar() {
   ) : null;
 
   return (
-    <aside className="w-64 bg-white dark:bg-[#1f1f1f] border-r border-gray-200 dark:border-neutral-800 flex flex-col shrink-0">
-      <div className="p-4 border-b border-gray-200 dark:border-neutral-800">
-        <h1 className="text-xl font-semibold text-amber-700">Shop Owner</h1>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-1 truncate">
+    <aside className="flex w-64 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="border-b border-slate-200 p-4 dark:border-neutral-800">
+        <div className="mb-4 flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#101827] text-orange-400">
+            <Coffee className="h-5 w-5" />
+          </span>
+          <div>
+            <h1 className="text-lg font-black text-slate-950 dark:text-white">LoyalCup</h1>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Owner</p>
+          </div>
+        </div>
+        <p className="mb-1 truncate text-sm font-black text-slate-800 dark:text-gray-100">
           {shop?.name || 'My Coffee Shop'}
         </p>
         {statusBadge}
@@ -70,7 +78,7 @@ export default function ShopOwnerSidebar() {
             <select
               value={selectedShopId || shop?.id || ''}
               onChange={(e) => selectShop(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:border-amber-500"
+              className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-orange-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950 dark:text-gray-100"
             >
               {shops.map((ownerShop) => (
                 <option key={ownerShop.id} value={ownerShop.id}>
@@ -99,11 +107,11 @@ export default function ShopOwnerSidebar() {
         <Section>Settings</Section>
         <Link to="/shop-owner/settings"       icon={SettingsIcon}>Shop Settings</Link>
         <Link to="/shop-owner/connect-square" icon={CreditCard}>
-          {squareConnected ? 'Square Connected ✓' : 'Connect Square'}
+          {squareConnected ? 'Square Connected' : 'Connect Square'}
         </Link>
       </nav>
 
-      <div className="p-3 border-t border-gray-200 dark:border-neutral-800">
+      <div className="border-t border-slate-200 p-3 dark:border-neutral-800">
         <button
           onClick={() => { logout(); navigate('/'); }}
           className={`${base} ${inactive} w-full text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20`}

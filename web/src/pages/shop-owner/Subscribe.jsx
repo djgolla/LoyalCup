@@ -1,5 +1,3 @@
-// web/src/pages/shop-owner/Subscribe.jsx - PASTE THIS ENTIRE FILE
-
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -76,7 +74,7 @@ export default function Subscribe() {
     if (success === 'true' && !toastShownRef.current) {
       toastShownRef.current = true;
       setIsProcessing(true);
-      toast.success('🎉 Payment received! Setting up your account...');
+      toast.success('Payment received. Setting up your account...');
 
       pollIntervalRef.current = setInterval(async () => {
         await loadBillingStatus();
@@ -235,7 +233,7 @@ export default function Subscribe() {
           >
             <Check className="w-10 h-10 text-white" />
           </motion.div>
-          <h1 className="text-4xl font-black text-gray-900 dark:text-white mb-3">You're all set! 🎉</h1>
+          <h1 className="text-4xl font-black text-gray-900 dark:text-white mb-3">You're all set.</h1>
           <p className="text-gray-500 dark:text-gray-400 mb-8 text-lg">
             Your LoyalCup subscription is active. Your rate is locked in.
           </p>
@@ -414,7 +412,7 @@ export default function Subscribe() {
               <li className="flex gap-2"><span className="font-bold text-amber-600">1.</span> You're redirected to Stripe's secure checkout</li>
               <li className="flex gap-2"><span className="font-bold text-amber-600">2.</span> Enter your card + promo code (if you have one)</li>
               <li className="flex gap-2"><span className="font-bold text-amber-600">3.</span> Subscription activates instantly</li>
-              <li className="flex gap-2"><span className="font-bold text-amber-600">4.</span> Connect Square and go live! 🎉</li>
+              <li className="flex gap-2"><span className="font-bold text-amber-600">4.</span> Connect Square and go live</li>
             </ol>
           </div>
         </motion.div>

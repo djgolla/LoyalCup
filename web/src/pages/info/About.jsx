@@ -1,184 +1,107 @@
-import { Coffee, Heart, Target, Users, Award, Sparkles } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ArrowRight, Coffee, Heart, RefreshCw, ShieldCheck, Store, Users } from 'lucide-react';
 
 export default function About() {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-neutral-900">
-      {/* Hero Section */}
-      <div className="bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 dark:from-neutral-900 dark:via-neutral-800 dark:to-neutral-900 py-20">
-        <div className="max-w-6xl mx-auto px-4 text-center">
-          <div className="flex justify-center mb-6">
-            <div className="bg-amber-700 p-4 rounded-full">
-              <Coffee className="text-white" size={48} />
+    <div className="bg-[#f6f4f0] text-slate-950">
+      <section className="bg-[#080d19] text-white">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[1fr_0.9fr] lg:px-8">
+          <div>
+            <div className="mb-7 inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-bold">
+              <Coffee className="h-4 w-4 text-orange-400" />
+              About LoyalCup
             </div>
+            <h1 className="max-w-4xl text-5xl font-black leading-[1.04] sm:text-6xl">
+              Local coffee shops deserve software that feels as good as the big chains.
+            </h1>
+            <p className="mt-6 max-w-2xl text-xl leading-8 text-slate-300">
+              LoyalCup gives independent coffee shops a polished customer app, built-in rewards, Square-connected ordering, and multi-location tools without forcing them into a new POS workflow.
+            </p>
           </div>
-          <h1 className="text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white mb-6">
-            About LoyalCup
-          </h1>
-          <p className="text-xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
-            Empowering local coffee shops with enterprise-level loyalty technology,
-            one cup at a time.
+          <div className="rounded-[2rem] border border-white/10 bg-white/10 p-3 shadow-2xl">
+            <img
+              src="/app-screens/discover.jpg"
+              alt="LoyalCup app showing local coffee shop discovery"
+              className="h-[560px] w-full rounded-[1.5rem] object-cover"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+          {[
+            {
+              icon: Heart,
+              title: 'Local first',
+              body: 'We are building for independent shops and the customers who want those shops to win.',
+            },
+            {
+              icon: RefreshCw,
+              title: 'Operationally practical',
+              body: 'Square stays central, so owners can add mobile ordering without rebuilding their counter workflow.',
+            },
+            {
+              icon: ShieldCheck,
+              title: 'Clear and durable',
+              body: 'Simple pricing, transparent setup, and tools that can grow from one location to several.',
+            },
+          ].map(({ icon: Icon, title, body }) => (
+            <div key={title} className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
+              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+                <Icon className="h-6 w-6" />
+              </div>
+              <h2 className="text-xl font-black">{title}</h2>
+              <p className="mt-2 leading-7 text-slate-600">{body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="bg-white py-20">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-12 px-4 sm:px-6 lg:grid-cols-2 lg:px-8">
+          <div>
+            <p className="text-sm font-black uppercase tracking-[0.18em] text-orange-600">How it works</p>
+            <h2 className="mt-4 text-4xl font-black leading-tight">One product, two sides of the counter.</h2>
+            <p className="mt-5 text-lg leading-8 text-slate-600">
+              Customers get an app they understand immediately. Owners get a dashboard that keeps ordering, menus, loyalty, and locations organized.
+            </p>
+          </div>
+          <div className="grid gap-4">
+            {[
+              { icon: Users, title: 'Customers discover and order', body: 'Nearby shops, menus, rewards, item customization, checkout, and pickup status live in the app.' },
+              { icon: Store, title: 'Owners manage the business', body: 'Shop owners manage menus, orders, settings, analytics, loyalty, Square connections, and location details.' },
+            ].map(({ icon: Icon, title, body }) => (
+              <div key={title} className="flex gap-4 rounded-2xl border border-slate-200 bg-[#f8f6f2] p-5">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#101827] text-orange-400">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-black">{title}</h3>
+                  <p className="mt-1 leading-7 text-slate-600">{body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-8 px-4 py-20 sm:px-6 md:flex-row md:items-center lg:px-8">
+        <div>
+          <p className="text-sm font-black uppercase tracking-[0.18em] text-orange-600">Join the platform</p>
+          <h2 className="mt-3 text-4xl font-black">Ready to bring your shop onto LoyalCup?</h2>
+          <p className="mt-3 max-w-2xl text-lg text-slate-600">
+            Start with one location or apply with multiple shops from day one.
           </p>
         </div>
-      </div>
-
-      <div className="max-w-6xl mx-auto px-4 py-16 space-y-16">
-
-        {/* Mission Section */}
-        <section className="bg-white dark:bg-neutral-800 rounded-xl shadow-lg p-8 lg:p-12">
-          <div className="flex items-center gap-3 mb-6">
-            <Target className="text-amber-700" size={32} />
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-              Our Mission
-            </h2>
-          </div>
-          <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed mb-4">
-            LoyalCup was born from a simple observation: while big chains have
-            sophisticated mobile apps and loyalty programs, local coffee shops struggle to compete
-            with outdated technology or expensive, complex systems.
-          </p>
-          <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed">
-            We believe every coffee shop deserves the same powerful tools as the big brands.
-            Our mission is to level the playing field by providing an affordable, easy-to-use
-            platform that helps local shops build customer loyalty, streamline operations, and grow their business.
-          </p>
-        </section>
-
-        {/* Values Section */}
-        <section>
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-8 text-center">
-            What We Stand For
-          </h2>
-          <div className="grid md:grid-cols-3 gap-6">
-            <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-lg p-8 text-center">
-              <div className="flex justify-center mb-4">
-                <div className="bg-amber-100 dark:bg-amber-900/30 p-4 rounded-full">
-                  <Heart className="text-amber-700" size={32} />
-                </div>
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">Local First</h3>
-              <p className="text-gray-600 dark:text-gray-400">
-                We're passionate about supporting local businesses and helping communities
-                thrive by keeping coffee dollars local.
-              </p>
-            </div>
-
-            <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-lg p-8 text-center">
-              <div className="flex justify-center mb-4">
-                <div className="bg-amber-100 dark:bg-amber-900/30 p-4 rounded-full">
-                  <Sparkles className="text-amber-700" size={32} />
-                </div>
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">Simple &amp; Powerful</h3>
-              <p className="text-gray-600 dark:text-gray-400">
-                Technology should work for you, not against you. We build tools that are
-                intuitive yet powerful enough to scale.
-              </p>
-            </div>
-
-            <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-lg p-8 text-center">
-              <div className="flex justify-center mb-4">
-                <div className="bg-amber-100 dark:bg-amber-900/30 p-4 rounded-full">
-                  <Award className="text-amber-700" size={32} />
-                </div>
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">Customer Loyalty</h3>
-              <p className="text-gray-600 dark:text-gray-400">
-                Building lasting relationships between shops and customers through
-                rewards, convenience, and delightful experiences.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* How It Works */}
-        <section className="bg-white dark:bg-neutral-800 rounded-xl shadow-lg p-8 lg:p-12">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-8">
-            How LoyalCup Works
-          </h2>
-          <div className="grid md:grid-cols-2 gap-8">
-            <div>
-              <h3 className="text-xl font-bold text-amber-700 mb-3">For Customers</h3>
-              <ul className="space-y-3 text-gray-600 dark:text-gray-400">
-                {[
-                  'Discover local coffee shops in your area',
-                  'Browse their full menu and order ahead from the app',
-                  'Earn loyalty points with every purchase',
-                  'Redeem rewards for free drinks and treats',
-                ].map((item, i) => (
-                  <li key={i} className="flex items-start gap-3">
-                    <div className="bg-amber-100 dark:bg-amber-900/30 p-1 rounded-full mt-1">
-                      <Coffee size={16} className="text-amber-700" />
-                    </div>
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div>
-              <h3 className="text-xl font-bold text-amber-700 mb-3">For Shop Owners</h3>
-              <ul className="space-y-3 text-gray-600 dark:text-gray-400">
-                {[
-                  'Connect your Square POS — your entire menu imports automatically',
-                  'Customers order through the app, orders print on your Square terminal',
-                  'Built-in loyalty program keeps customers coming back',
-                  'Track orders, analytics, and customer insights in real time',
-                ].map((item, i) => (
-                  <li key={i} className="flex items-start gap-3">
-                    <div className="bg-amber-100 dark:bg-amber-900/30 p-1 rounded-full mt-1">
-                      <Coffee size={16} className="text-amber-700" />
-                    </div>
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        {/* Team Section */}
-        <section>
-          <div className="flex items-center justify-center gap-3 mb-8">
-            <Users className="text-amber-700" size={32} />
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Our Team</h2>
-          </div>
-          <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-lg p-8 lg:p-12 text-center">
-            <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed mb-6">
-              LoyalCup is built by a small but passionate team of coffee lovers,
-              developers, and entrepreneurs who believe in the power of local businesses.
-              We've worked closely with coffee shop owners to understand their real challenges
-              and build a platform that truly meets their needs.
-            </p>
-            <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed">
-              Supporting coffee shops nationwide, we're committed to continuous improvement
-              based on feedback from our growing community of shop owners and customers.
-            </p>
-          </div>
-        </section>
-
-        {/* CTA Section */}
-        <section className="bg-gradient-to-br from-amber-700 to-orange-600 rounded-xl shadow-xl p-12 text-center text-white">
-          <h2 className="text-3xl font-bold mb-4">Ready to Join LoyalCup?</h2>
-          <p className="text-xl mb-8 opacity-90">
-            Whether you're a coffee lover or a shop owner, we'd love to have you.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <a
-              href="/download"
-              className="bg-white text-amber-700 px-8 py-3 rounded-lg hover:bg-gray-100 transition font-bold"
-            >
-              Download the App
-            </a>
-            <a
-              href="/shop-application"
-              className="bg-neutral-900 text-white px-8 py-3 rounded-lg hover:bg-neutral-800 transition font-bold"
-            >
-              List Your Shop
-            </a>
-          </div>
-        </section>
-
-      </div>
+        <Link
+          to="/shop-application"
+          className="inline-flex items-center justify-center gap-3 rounded-full bg-[#f4762c] px-7 py-4 font-black text-white shadow-lg transition hover:bg-[#ff8642]"
+        >
+          Apply to join
+          <ArrowRight className="h-5 w-5" />
+        </Link>
+      </section>
     </div>
   );
 }

@@ -23,7 +23,7 @@ export default function ShopOwnerLayout() {
   if (location.pathname === '/shop-owner/subscribe') {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-neutral-950">
-        <main className="p-6 max-w-5xl mx-auto">
+        <main className="mx-auto max-w-5xl p-6">
           <Outlet />
         </main>
       </div>
@@ -74,7 +74,7 @@ export default function ShopOwnerLayout() {
       <div className="min-h-screen bg-gray-50 dark:bg-neutral-950 flex items-center justify-center px-4">
         <div className="max-w-lg w-full bg-white dark:bg-neutral-900 rounded-2xl shadow-xl border border-red-200 dark:border-red-900 p-10 text-center">
           <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
-            <span className="text-4xl">🚫</span>
+            <AlertTriangle className="h-10 w-10 text-red-600" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">Account Suspended</h1>
           <p className="text-gray-500 dark:text-gray-400 mb-6">
@@ -118,9 +118,9 @@ export default function ShopOwnerLayout() {
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden">
+    <div className="flex h-screen w-full overflow-hidden bg-[#f6f4f0] dark:bg-neutral-950">
       <ShopOwnerSidebar />
-      <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-[#181818]">
+      <div className="flex-1 overflow-y-auto bg-[#f6f4f0] dark:bg-neutral-950">
         {isPastDue && (
           <PastDueBanner onManage={() => navigate('/shop-owner/subscribe')} />
         )}

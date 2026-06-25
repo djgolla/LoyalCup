@@ -1,47 +1,53 @@
 import { Outlet, Link } from "react-router-dom";
 import Header from "../components/navigation/Header";
+import { Coffee } from "lucide-react";
 
 export default function MainLayout() {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-[#181818]">
+    <div className="min-h-screen bg-[#f6f4f0] dark:bg-neutral-950">
       <Header />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main>
         <Outlet />
       </main>
-      <footer className="bg-white dark:bg-[#1b1b1b] border-t border-gray-200 dark:border-neutral-800 mt-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <footer className="border-t border-slate-200 bg-[#080d19] text-white dark:border-neutral-800">
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 gap-10 md:grid-cols-4">
             <div>
-              <h3 className="text-lg font-semibold text-amber-700 mb-3">LoyalCup</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Your favorite local coffee shops, all in one place.
+              <Link to="/" className="mb-4 flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-orange-600">
+                  <Coffee className="h-5 w-5" />
+                </span>
+                <span className="text-xl font-black">LoyalCup</span>
+              </Link>
+              <p className="max-w-xs text-sm leading-6 text-slate-300">
+                Mobile ordering, rewards, and local discovery for coffee shops that deserve a polished app.
               </p>
             </div>
             <div>
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-3">For Customers</h4>
-              <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                <li><Link to="/download" className="hover:text-amber-700 transition">Download App</Link></li>
-                <li><Link to="/about"    className="hover:text-amber-700 transition">About Us</Link></li>
-                <li><Link to="/contact"  className="hover:text-amber-700 transition">Contact</Link></li>
+              <h4 className="mb-3 font-black text-white">For Customers</h4>
+              <ul className="space-y-2 text-sm text-slate-300">
+                <li><Link to="/download" className="transition hover:text-orange-300">Download App</Link></li>
+                <li><Link to="/about" className="transition hover:text-orange-300">About Us</Link></li>
+                <li><Link to="/contact" className="transition hover:text-orange-300">Contact</Link></li>
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-3">For Shop Owners</h4>
-              <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                <li><Link to="/pricing"          className="hover:text-amber-700 transition">Pricing</Link></li>
-                <li><Link to="/shop-application" className="hover:text-amber-700 transition">Apply to Join</Link></li>
-                <li><Link to="/login"            className="hover:text-amber-700 transition">Shop Login</Link></li>
+              <h4 className="mb-3 font-black text-white">For Shop Owners</h4>
+              <ul className="space-y-2 text-sm text-slate-300">
+                <li><Link to="/pricing" className="transition hover:text-orange-300">Pricing</Link></li>
+                <li><Link to="/shop-application" className="transition hover:text-orange-300">Apply to Join</Link></li>
+                <li><Link to="/login" className="transition hover:text-orange-300">Shop Login</Link></li>
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-3">Legal</h4>
-              <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                <li><Link to="/privacy" className="hover:text-amber-700 transition">Privacy Policy</Link></li>
-                <li><Link to="/terms"   className="hover:text-amber-700 transition">Terms of Service</Link></li>
+              <h4 className="mb-3 font-black text-white">Legal</h4>
+              <ul className="space-y-2 text-sm text-slate-300">
+                <li><Link to="/privacy" className="transition hover:text-orange-300">Privacy Policy</Link></li>
+                <li><Link to="/terms" className="transition hover:text-orange-300">Terms of Service</Link></li>
               </ul>
             </div>
           </div>
-          <div className="mt-8 pt-8 border-t border-gray-200 dark:border-neutral-800 text-center text-sm text-gray-600 dark:text-gray-400">
+          <div className="mt-10 border-t border-white/10 pt-8 text-center text-sm text-slate-400">
             © {new Date().getFullYear()} LoyalCup. All rights reserved.
           </div>
         </div>

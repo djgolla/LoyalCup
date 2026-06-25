@@ -1,5 +1,6 @@
-import { Mail, Phone, Send } from 'lucide-react';
+import { Mail, Phone, Send, Store } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '../../context/AuthContext';
 import { API_ORIGIN } from '../../api/client';
@@ -15,7 +16,7 @@ export default function Contact() {
     name: '',
     email: '',
     subject: '',
-    message: ''
+    message: '',
   });
   const [submitting, setSubmitting] = useState(false);
 
@@ -23,14 +24,14 @@ export default function Contact() {
     e.preventDefault();
     setSubmitting(true);
     console.log('[Contact] Submitting:', { API_URL, formData });
-    
+
     try {
       const response = await fetch(`${API_URL}/api/v1/contact/send`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(formData),
       });
 
       console.log('[Contact] Response status:', response.status);
@@ -41,11 +42,11 @@ export default function Contact() {
         throw new Error(`Failed to send email: ${response.status} - ${responseBody}`);
       }
 
-      toast.success("Message sent! We'll get back to you within 1 business day.");
+      toast.success("Message sent. We'll get back to you within 1 business day.");
       setFormData({ name: '', email: '', subject: '', message: '' });
     } catch (err) {
       console.error('[Contact] submit error:', err);
-      toast.error("Couldn't send — email us directly at support@loyalcupapp.com");
+      toast.error("Couldn't send. Email us directly at support@loyalcupapp.com");
     } finally {
       setSubmitting(false);
     }
@@ -55,112 +56,111 @@ export default function Contact() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const inputClass = 'w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100';
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-neutral-900 py-12">
-      <div className="max-w-6xl mx-auto px-4">
-        {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl lg:text-5xl font-bold text-gray-900 dark:text-white mb-4">
-            Contact Us
-          </h1>
-          <p className="text-lg text-gray-600 dark:text-gray-400">
-            Have questions? We'd love to hear from you.
-          </p>
+    <div className="bg-[#f6f4f0] text-slate-950">
+      <section className="bg-[#080d19] text-white">
+        <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
+          <div className="max-w-3xl">
+            <div className="mb-7 inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-bold">
+              <Mail className="h-4 w-4 text-orange-400" />
+              Contact LoyalCup
+            </div>
+            <h1 className="text-5xl font-black leading-[1.04] sm:text-6xl">Questions, launch help, or shop onboarding.</h1>
+            <p className="mt-6 text-xl leading-8 text-slate-300">
+              Send a note and we will help you get pointed in the right direction.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto grid max-w-7xl grid-cols-1 gap-8 px-4 py-16 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:px-8">
+        <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <h2 className="text-2xl font-black">Send us a message</h2>
+          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <div>
+              <label className="mb-2 block text-sm font-black text-slate-700">Name</label>
+              <input type="text" name="name" value={formData.name} onChange={handleChange} className={inputClass} required />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-black text-slate-700">Email</label>
+              <input type="email" name="email" value={formData.email} onChange={handleChange} className={inputClass} required />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-black text-slate-700">Subject</label>
+              <input type="text" name="subject" value={formData.subject} onChange={handleChange} className={inputClass} required />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-black text-slate-700">Message</label>
+              <textarea name="message" value={formData.message} onChange={handleChange} rows="6" className={`${inputClass} resize-none`} required />
+            </div>
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-[#f4762c] px-6 py-4 font-black text-white shadow-lg transition hover:bg-[#ff8642] disabled:opacity-50"
+            >
+              <Send size={20} />
+              {submitting ? 'Sending...' : 'Send message'}
+            </button>
+          </form>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-8">
-          {/* Contact Form */}
-          <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-lg p-8">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-              Send us a message
-            </h2>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Name</label>
-                <input type="text" name="name" value={formData.name} onChange={handleChange}
-                  className="w-full px-4 py-2 bg-gray-100 dark:bg-neutral-700 rounded-lg outline-none focus:ring-2 focus:ring-amber-700 text-gray-900 dark:text-white" required />
+        <div className="space-y-5">
+          <div className="rounded-[2rem] bg-[#101827] p-8 text-white shadow-xl">
+            <h2 className="text-2xl font-black">Get in touch</h2>
+            <div className="mt-7 space-y-6">
+              <div className="flex items-start gap-4">
+                <div className="rounded-2xl bg-white/10 p-3 text-orange-400">
+                  <Mail size={24} />
+                </div>
+                <div>
+                  <h3 className="font-black">Email</h3>
+                  <a href="mailto:support@loyalcupapp.com" className="text-slate-300 transition hover:text-orange-300">
+                    support@loyalcupapp.com
+                  </a>
+                  <p className="mt-1 text-sm text-slate-400">We respond within 1 business day.</p>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Email</label>
-                <input type="email" name="email" value={formData.email} onChange={handleChange}
-                  className="w-full px-4 py-2 bg-gray-100 dark:bg-neutral-700 rounded-lg outline-none focus:ring-2 focus:ring-amber-700 text-gray-900 dark:text-white" required />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Subject</label>
-                <input type="text" name="subject" value={formData.subject} onChange={handleChange}
-                  className="w-full px-4 py-2 bg-gray-100 dark:bg-neutral-700 rounded-lg outline-none focus:ring-2 focus:ring-amber-700 text-gray-900 dark:text-white" required />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Message</label>
-                <textarea name="message" value={formData.message} onChange={handleChange} rows="6"
-                  className="w-full px-4 py-2 bg-gray-100 dark:bg-neutral-700 rounded-lg outline-none focus:ring-2 focus:ring-amber-700 text-gray-900 dark:text-white resize-none" required />
-              </div>
-
-              <button type="submit" disabled={submitting}
-                className="w-full bg-amber-700 text-white py-3 rounded-lg hover:bg-amber-800 transition font-medium flex items-center justify-center gap-2 disabled:opacity-50">
-                <Send size={20} />
-                {submitting ? 'Sending...' : 'Send Message'}
-              </button>
-            </form>
-          </div>
-
-          {/* Contact Info */}
-          <div className="space-y-6">
-            <div className="bg-white dark:bg-neutral-800 rounded-xl shadow-lg p-8">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Get in touch</h2>
-
-              <div className="space-y-6">
+              {isShopOwner && (
                 <div className="flex items-start gap-4">
-                  <div className="bg-amber-100 dark:bg-amber-900/30 p-3 rounded-lg">
-                    <Mail className="text-amber-700" size={24} />
+                  <div className="rounded-2xl bg-white/10 p-3 text-orange-400">
+                    <Phone size={24} />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Email</h3>
-                    <a href="mailto:support@loyalcupapp.com"
-                      className="text-gray-600 dark:text-gray-400 hover:text-amber-700 transition">
-                      support@loyalcupapp.com
+                    <h3 className="font-black">Phone for shop owners</h3>
+                    <a href="tel:+13098246920" className="text-slate-300 transition hover:text-orange-300">
+                      (309) 824-6920
                     </a>
-                    <p className="text-sm text-gray-500 dark:text-gray-500 mt-0.5">We respond within 1 business day</p>
+                    <p className="mt-1 text-sm text-slate-400">Mon-Fri, 9am-6pm CST.</p>
                   </div>
                 </div>
-
-                {isShopOwner && (
-                  <div className="flex items-start gap-4">
-                    <div className="bg-amber-100 dark:bg-amber-900/30 p-3 rounded-lg">
-                      <Phone className="text-amber-700" size={24} />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
-                        Phone <span className="text-xs text-amber-600 font-normal">(shop owners)</span>
-                      </h3>
-                      <a href="tel:+13098246920"
-                        className="text-gray-600 dark:text-gray-400 hover:text-amber-700 transition">
-                        (309) 824-6920
-                      </a>
-                      <p className="text-sm text-gray-500 dark:text-gray-500 mt-0.5">Mon–Fri, 9am–6pm CST</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-neutral-800 dark:to-neutral-700 rounded-xl shadow-lg p-8">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">Own a coffee shop?</h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
-                Interested in joining LoyalCup? We'd love to have your shop on the platform.
-              </p>
-              <a href="/shop-application"
-                className="inline-block bg-amber-700 text-white px-6 py-2 rounded-lg hover:bg-amber-800 transition font-medium">
-                Get Started
-              </a>
+              )}
             </div>
           </div>
+
+          <div className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
+            <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+              <Store className="h-6 w-6" />
+            </div>
+            <h3 className="text-2xl font-black">Own a coffee shop?</h3>
+            <p className="mt-3 leading-7 text-slate-600">
+              Apply to join LoyalCup and launch with ordering, loyalty, Square connection, and location-based billing.
+            </p>
+            <Link
+              to="/shop-application"
+              className="mt-6 inline-flex rounded-full bg-[#101827] px-6 py-3 font-black text-white transition hover:bg-[#182238]"
+            >
+              Start application
+            </Link>
+          </div>
         </div>
-      </div>
+      </section>
     </div>
   );
 }

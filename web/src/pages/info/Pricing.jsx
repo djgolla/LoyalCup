@@ -1,439 +1,229 @@
-import { useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, useInView, useAnimation } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
-  Check, Coffee, Smartphone, BarChart3, Award,
-  Menu, RefreshCw, ShoppingBag, Users, Headphones,
-  ArrowRight, Sparkles, Tag, Shield, Zap, MapPin
+  ArrowRight,
+  Award,
+  BarChart3,
+  Check,
+  Headphones,
+  MapPin,
+  Menu,
+  RefreshCw,
+  Shield,
+  ShoppingBag,
+  Smartphone,
+  Store,
+  Tag,
+  Users,
 } from 'lucide-react';
 
 const BASE_PRICE = 150;
 const ADDITIONAL_LOCATION_PRICE = 50;
 
-const FloatingAccent = ({ delay = 0, style = {} }) => (
-  <motion.div
-    initial={{ y: 0 }}
-    animate={{ y: [-20, 20, -20] }}
-    transition={{ duration: 4, delay, repeat: Infinity, ease: 'easeInOut' }}
-    className="absolute h-24 w-24 rounded-full bg-amber-300/20 blur-2xl pointer-events-none"
-    style={style}
-  />
-);
+const features = [
+  { icon: Smartphone, title: 'Customer app listing', desc: 'Your shop appears in LoyalCup for nearby customers to discover, browse, order, and earn rewards.' },
+  { icon: Menu, title: 'Square menu import', desc: 'Items, categories, modifier groups, and prices sync from the Square menu you already maintain.' },
+  { icon: ShoppingBag, title: 'Mobile ordering', desc: 'Customer orders are paid through Square and sent into your existing Square workflow.' },
+  { icon: Award, title: 'Built-in loyalty', desc: 'Points and rewards are managed for you, so customers get a reason to come back.' },
+  { icon: RefreshCw, title: 'POS sync', desc: 'Keep Square as the source of truth while LoyalCup powers the customer-facing app experience.' },
+  { icon: BarChart3, title: 'Analytics dashboard', desc: 'Track orders, revenue, popular items, customers, and location performance.' },
+  { icon: Users, title: 'Customer insights', desc: 'Understand regulars, order history, and activity across the shops you operate.' },
+  { icon: Headphones, title: 'Priority support', desc: 'Direct help getting connected, launched, and cleaned up when something needs attention.' },
+];
 
-const FeatureRow = ({ icon: Icon, title, desc, delay }) => {
-  const ref = useRef(null);
-  const isInView = useInView(ref, { once: true });
-  const controls = useAnimation();
-  useEffect(() => { if (isInView) controls.start('visible'); }, [isInView, controls]);
+const faqs = [
+  ['Is there a contract or commitment?', 'No. LoyalCup is month-to-month with no setup fee and no long-term contract.'],
+  ['Do I need Square to use LoyalCup?', 'Yes. Square POS is required because customer orders are created and paid through Square. LoyalCup subscription billing is handled separately through Stripe.'],
+  ['How does customer payment processing work?', `Customer orders are processed by Square using your Square account. LoyalCup's $${BASE_PRICE}/mo platform fee is separate and includes your first location.`],
+  ['What if I have more than one location?', `Your first location is included. Additional locations are $${ADDITIONAL_LOCATION_PRICE}/mo each, and each location can keep its own menu, Square location, orders, and dashboard data.`],
+  ['Can I use a promo code?', 'Yes. If you have a promo code, enter it during Stripe checkout and the discount will apply there.'],
+  ['What happens if prices change later?', 'Your rate is locked in from the day you subscribe. If public pricing changes later, your existing account keeps its current rate.'],
+];
 
+function Feature({ icon: Icon, title, desc }) {
   return (
-    <motion.div
-      ref={ref}
-      initial="hidden"
-      animate={controls}
-      variants={{
-        hidden: { opacity: 0, x: -20 },
-        visible: { opacity: 1, x: 0, transition: { duration: 0.5, delay } },
-      }}
-      className="flex items-start gap-4 p-4 rounded-2xl hover:bg-amber-50 dark:hover:bg-amber-900/10 transition"
-    >
-      <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center shrink-0 shadow-md">
-        <Icon className="w-5 h-5 text-white" />
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+        <Icon className="h-5 w-5" />
       </div>
-      <div>
-        <p className="font-bold text-gray-900 dark:text-white">{title}</p>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{desc}</p>
-      </div>
-    </motion.div>
+      <h3 className="font-black text-slate-950">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{desc}</p>
+    </div>
   );
-};
-
-const FAQ = ({ q, a, delay }) => {
-  const ref = useRef(null);
-  const isInView = useInView(ref, { once: true });
-  return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 20 }}
-      animate={isInView ? { opacity: 1, y: 0 } : {}}
-      transition={{ duration: 0.5, delay }}
-      className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-gray-100 dark:border-neutral-800 shadow-sm"
-    >
-      <h3 className="font-bold text-gray-900 dark:text-white mb-2 text-lg">{q}</h3>
-      <p className="text-gray-600 dark:text-gray-400 leading-relaxed">{a}</p>
-    </motion.div>
-  );
-};
+}
 
 export default function Pricing() {
   const navigate = useNavigate();
 
-  const features = [
-    { icon: Smartphone,  title: 'Customer Mobile App Listing',    desc: 'Your shop is listed on iOS & Android — customers in your area can discover you, browse your full menu, and order ahead.' },
-    { icon: Menu,        title: 'Full Menu Import & Management',   desc: 'Your entire Square menu — items, categories, modifiers, and pricing — pulls in automatically. Keep it updated in real time.' },
-    { icon: ShoppingBag, title: 'Mobile Ordering via Square',      desc: 'All customer orders are placed through your Square POS. Orders print on your terminal just like any other Square order.' },
-    { icon: Award,       title: 'Built-in Loyalty Program',        desc: 'Automatic points, rewards, and punch cards to keep customers coming back — fully managed for you.' },
-    { icon: RefreshCw,   title: 'Square POS Sync',                 desc: 'Two-way sync with your existing Square setup — no double entry, no extra hardware.' },
-    { icon: BarChart3,   title: 'Analytics Dashboard',             desc: 'Track orders, revenue, popular items, and customer trends in real time.' },
-    { icon: Users,       title: 'Customer Insights',               desc: 'See who your regulars are, their order history, and lifetime spend.' },
-    { icon: Headphones,  title: 'Priority Support',                desc: 'Direct access to our team — real people, fast responses, no bots.' },
-    { icon: Shield,      title: 'Secure Payments',                 desc: 'Customer orders are processed securely through Square. Your monthly subscription is billed via Stripe. You never touch card data.' },
-    { icon: Zap,         title: 'Instant Setup',                   desc: 'Go live in under 30 minutes — no dev skills required.' },
-  ];
-
-  const faqs = [
-    {
-      q: 'Is there a contract or commitment?',
-      a: 'No contracts, no setup fees. Month-to-month — cancel anytime from your dashboard. We keep you because the product is worth it, not because you\'re locked in.',
-    },
-    {
-      q: 'Do I need Square to use LoyalCup?',
-      a: 'Yes — Square POS is required. All customer orders are placed through Square, so orders print right on your existing terminal. Your monthly LoyalCup subscription is billed separately via Stripe.',
-    },
-    {
-      q: 'How does payment processing work for customer orders?',
-      a: `All customer orders are processed through Square — the same system you already use. Square's standard processing fees apply to each transaction. LoyalCup's $${BASE_PRICE}/mo platform fee is separate and covers the first location.`,
-    },
-    {
-      q: 'What if I have more than one location?',
-      a: `Your first location is included in the $${BASE_PRICE}/mo base plan. Additional locations are $${ADDITIONAL_LOCATION_PRICE}/mo each, so every location can have its own menu, Square connection, ordering, and dashboard data.`,
-    },
-    {
-      q: 'What happens to my price if you raise it later?',
-      a: 'Your rate is locked in from the day you join. If we raise prices for new shops, you keep your current rate forever. Loyalty works both ways.',
-    },
-    {
-      q: 'How does the promo code work?',
-      a: 'If you have a promo code, enter it at checkout when you subscribe. Discounts are applied immediately and locked in for the duration specified in the code.',
-    },
-    {
-      q: 'Does LoyalCup pull in my entire Square menu?',
-      a: 'Yes — your complete Square menu imports automatically. Every item, category, modifier group, and price comes in as-is. You can also manage your menu directly in the LoyalCup dashboard.',
-    },
-  ];
-
   return (
-    <div className="min-h-screen overflow-hidden">
-
-      {/* ── Hero ── */}
-      <div className="relative bg-gradient-to-br from-amber-50 via-white to-orange-50 dark:from-neutral-950 dark:via-neutral-900 dark:to-neutral-950 py-28 overflow-hidden">
-        <FloatingAccent delay={0} style={{ top: '10%',  left:  '5%'  }} />
-        <FloatingAccent delay={1} style={{ top: '20%',  right: '8%'  }} />
-        <FloatingAccent delay={2} style={{ bottom: '15%', left: '15%' }} />
-
-        <div className="max-w-5xl mx-auto px-4 text-center relative z-10">
+    <div className="bg-[#f6f4f0] text-slate-950">
+      <section className="relative overflow-hidden bg-[#080d19]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_82%_16%,rgba(244,118,44,0.30),transparent_30%),radial-gradient(circle_at_16%_84%,rgba(43,92,184,0.28),transparent_34%)]" />
+        <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[1fr_0.9fr] lg:px-8 lg:py-24">
           <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.6 }}
-            className="inline-flex items-center gap-2 bg-white dark:bg-neutral-800 px-6 py-3 rounded-full shadow-xl border border-amber-200 dark:border-amber-900 mb-8"
-          >
-            <motion.div animate={{ rotate: 360 }} transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}>
-              <Coffee className="w-5 h-5 text-amber-700" />
-            </motion.div>
-            <span className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wide">
-              Simple, Transparent Pricing
-            </span>
-            <Sparkles className="w-4 h-4 text-amber-600" />
-          </motion.div>
-
-          <motion.h1
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-            className="text-5xl lg:text-7xl font-black text-gray-900 dark:text-white mb-6 leading-tight"
+            transition={{ duration: 0.5 }}
           >
-            Built for local shops.{' '}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700">
-              Priced clearly.
-            </span>
-          </motion.h1>
-
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.35 }}
-            className="text-2xl text-gray-600 dark:text-gray-400 mb-12 max-w-3xl mx-auto font-light"
-          >
-            One monthly platform fee for your first location. Add more locations only when you need them.
-            No setup fee, no long-term contract, no surprise feature tiers.
-          </motion.p>
-
-          {/* ── Pricing Card ── */}
-          <motion.div
-            initial={{ opacity: 0, y: 40, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.8, delay: 0.5 }}
-            className="relative max-w-lg mx-auto"
-          >
-            {/* Glow */}
-            <div className="absolute inset-0 bg-gradient-to-br from-amber-400/30 to-orange-500/30 rounded-3xl blur-2xl" />
-
-            <div className="relative bg-white dark:bg-neutral-900 rounded-3xl p-10 shadow-2xl border-2 border-amber-200 dark:border-amber-800">
-              {/* Badge */}
-              <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                <span className="bg-gradient-to-r from-amber-600 to-orange-600 text-white text-sm font-bold px-6 py-2 rounded-full shadow-lg whitespace-nowrap">
-                  Your rate is locked in forever
-                </span>
-              </div>
-
-              <div className="text-center mb-8 mt-2">
-                <div className="flex items-end justify-center gap-2 mb-2">
-                  <span className="text-7xl font-black text-gray-900 dark:text-white">${BASE_PRICE}</span>
-                  <span className="text-2xl text-gray-500 dark:text-gray-400 mb-3">/mo</span>
-                </div>
-                <p className="text-gray-500 dark:text-gray-400">includes your first location · cancel anytime</p>
-              </div>
-
-              <div className="mb-6 rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4 text-left">
-                <div className="flex items-start gap-3">
-                  <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-amber-700 dark:text-amber-400" />
-                  <div>
-                    <p className="font-bold text-amber-900 dark:text-amber-300">Multi-location shops</p>
-                    <p className="mt-1 text-sm text-amber-800 dark:text-amber-400">
-                      Additional locations are ${ADDITIONAL_LOCATION_PRICE}/mo each. Each location keeps its own menu, Square setup, and orders.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Quick feature list */}
-              <ul className="space-y-3 mb-8">
-                {[
-                  'Full menu import from Square — automatic',
-                  'Customer mobile app listing',
-                  'Mobile ordering through Square POS',
-                  'Built-in loyalty program',
-                  'Analytics dashboard',
-                  'Priority support',
-                ].map((item, i) => (
-                  <motion.li
-                    key={i}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.7 + i * 0.07 }}
-                    className="flex items-center gap-3 text-gray-700 dark:text-gray-300"
-                  >
-                    <div className="w-5 h-5 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center shrink-0">
-                      <Check className="w-3 h-3 text-green-600 dark:text-green-400" />
-                    </div>
-                    {item}
-                  </motion.li>
-                ))}
-              </ul>
-
-              {/* Promo code hint */}
-              <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-800 mb-6 text-sm text-amber-700 dark:text-amber-400">
-                <Tag className="w-4 h-4 shrink-0" />
-                <span>Have a promo code? Enter it at checkout to lock in a discounted rate.</span>
-              </div>
-
-              <motion.button
-                whileHover={{ scale: 1.03, boxShadow: '0 20px 60px rgba(245,158,11,0.35)' }}
-                whileTap={{ scale: 0.97 }}
+            <div className="mb-7 inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-bold text-white backdrop-blur">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-orange-600">
+                <Shield className="h-4 w-4" />
+              </span>
+              Simple pricing for serious shops
+            </div>
+            <h1 className="max-w-4xl text-5xl font-black leading-[1.04] text-white sm:text-6xl">
+              $150/month for your first location. $50/month for each additional location.
+            </h1>
+            <p className="mt-6 max-w-2xl text-xl leading-8 text-slate-300">
+              One platform plan includes the customer app, owner dashboard, Square ordering flow, loyalty, analytics, and support.
+            </p>
+            <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
                 onClick={() => navigate('/shop-application')}
-                className="w-full bg-gradient-to-r from-amber-600 to-orange-600 text-white py-4 rounded-2xl font-bold text-lg shadow-xl flex items-center justify-center gap-2 group"
+                className="inline-flex items-center justify-center gap-3 rounded-full bg-[#f4762c] px-7 py-4 font-black text-white shadow-xl transition hover:bg-[#ff8642]"
               >
-                Get Started — ${BASE_PRICE}/month
-                <motion.div animate={{ x: [0, 4, 0] }} transition={{ duration: 1.5, repeat: Infinity }}>
-                  <ArrowRight className="w-5 h-5" />
-                </motion.div>
-              </motion.button>
-
-              <p className="text-center text-sm text-gray-400 dark:text-gray-500 mt-4">
-                Card required at signup · Activates instantly · Cancel anytime
-              </p>
+                Start application
+                <ArrowRight className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/contact')}
+                className="inline-flex items-center justify-center rounded-full border border-white/15 bg-white px-7 py-4 font-black text-slate-950 transition hover:bg-slate-100"
+              >
+                Talk to us first
+              </button>
             </div>
           </motion.div>
-        </div>
 
-        <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-white dark:from-neutral-900 to-transparent" />
-      </div>
-
-      {/* ── Everything Included ── */}
-      <div className="py-32 bg-white dark:bg-neutral-900">
-        <div className="max-w-6xl mx-auto px-4">
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
+            initial={{ opacity: 0, y: 22 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, delay: 0.1 }}
+            className="rounded-[2rem] border border-white/10 bg-white p-7 shadow-2xl"
           >
-            <div className="inline-block mb-6">
-              <div className="bg-amber-100 dark:bg-amber-900/20 px-6 py-3 rounded-full">
-                <span className="text-amber-700 dark:text-amber-400 font-bold text-sm uppercase tracking-wider">
-                  What's Included
-                </span>
+            <div className="rounded-3xl bg-[#f8f6f2] p-6">
+              <p className="text-sm font-black uppercase tracking-[0.16em] text-orange-600">Platform plan</p>
+              <div className="mt-4 flex items-end gap-2">
+                <span className="text-7xl font-black">${BASE_PRICE}</span>
+                <span className="pb-3 text-xl font-bold text-slate-500">/mo</span>
+              </div>
+              <p className="mt-2 font-semibold text-slate-600">Includes your first active location.</p>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              <div className="flex items-center justify-between rounded-2xl border border-slate-200 p-4">
+                <span className="font-bold text-slate-700">First location</span>
+                <span className="font-black">${BASE_PRICE}/mo</span>
+              </div>
+              <div className="flex items-center justify-between rounded-2xl border border-slate-200 p-4">
+                <span className="font-bold text-slate-700">Additional locations</span>
+                <span className="font-black">${ADDITIONAL_LOCATION_PRICE}/mo each</span>
+              </div>
+              <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4">
+                <div className="flex items-start gap-3">
+                  <Tag className="mt-0.5 h-5 w-5 text-orange-600" />
+                  <p className="text-sm font-semibold leading-6 text-orange-900">
+                    Have a promo code? Enter it during Stripe checkout and your discount applies there.
+                  </p>
+                </div>
               </div>
             </div>
-            <h2 className="text-5xl lg:text-6xl font-black text-gray-900 dark:text-white mb-4">
-              Everything you need to run your shop
-            </h2>
-            <p className="text-xl text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">
-                Every core feature, every update, and every improvement is included with your active locations.
-            </p>
-          </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {features.map((f, i) => (
-              <FeatureRow key={i} {...f} delay={i * 0.05} />
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Square callout ── */}
-      <div className="py-20 bg-gray-50 dark:bg-neutral-800">
-        <div className="max-w-4xl mx-auto px-4 text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-          >
-            <div className="inline-block mb-6">
-              <div className="bg-amber-100 dark:bg-amber-900/20 px-6 py-3 rounded-full">
-                <span className="text-amber-700 dark:text-amber-400 font-bold text-sm uppercase tracking-wider">
-                  Powered by Square
-                </span>
-              </div>
-            </div>
-            <h2 className="text-4xl font-black text-gray-900 dark:text-white mb-4">
-              Orders go straight to your Square terminal
-            </h2>
-            <p className="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-              Every customer order placed through LoyalCup fires directly through Square POS — printed on your terminal just like any other order. No new hardware, no new workflow. Your entire Square menu pulls in automatically so you're live fast.
-            </p>
-          </motion.div>
-        </div>
-      </div>
-
-      {/* ── Price Lock Banner ── */}
-      <div className="py-20 bg-gradient-to-br from-amber-600 via-orange-600 to-amber-700 text-white relative overflow-hidden">
-        <motion.div
-          className="absolute inset-0"
-          animate={{ backgroundPosition: ['0% 0%', '100% 100%'] }}
-          transition={{ duration: 20, repeat: Infinity, repeatType: 'reverse' }}
-          style={{
-            backgroundImage: 'radial-gradient(circle at 20% 50%, rgba(255,255,255,0.08) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(255,255,255,0.08) 0%, transparent 50%)',
-            backgroundSize: '100% 100%',
-          }}
-        />
-        <div className="max-w-4xl mx-auto px-4 text-center relative z-10">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-          >
-            <Shield className="w-16 h-16 mx-auto mb-6 text-white" />
-            <h2 className="text-4xl lg:text-5xl font-black mb-6">
-              Your rate is locked in. Forever.
-            </h2>
-            <p className="text-xl opacity-90 max-w-2xl mx-auto mb-4">
-              When you join LoyalCup, the price you sign up at is the price you pay — always.
-              Even if we raise our rates for new shops, you're protected.
-            </p>
-            <p className="text-lg opacity-75">
-              Early shops get the best deal. The longer you wait, the more you might pay.
-            </p>
-          </motion.div>
-        </div>
-      </div>
-
-      {/* ── FAQ ── */}
-      <div className="py-32 bg-gray-50 dark:bg-neutral-800">
-        <div className="max-w-4xl mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <div className="inline-block mb-6">
-              <div className="bg-amber-100 dark:bg-amber-900/20 px-6 py-3 rounded-full">
-                <span className="text-amber-700 dark:text-amber-400 font-bold text-sm uppercase tracking-wider">
-                  FAQ
-                </span>
-              </div>
-            </div>
-            <h2 className="text-5xl font-black text-gray-900 dark:text-white">
-              Questions? Answered.
-            </h2>
-          </motion.div>
-
-          <div className="space-y-4">
-            {faqs.map((faq, i) => (
-              <FAQ key={i} {...faq} delay={i * 0.07} />
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Final CTA ── */}
-      <div className="py-32 bg-white dark:bg-neutral-900">
-        <div className="max-w-4xl mx-auto px-4 text-center">
-          <motion.div
-            initial={{ scale: 0 }}
-            whileInView={{ scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ type: 'spring', duration: 0.8 }}
-          >
-            <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 2, repeat: Infinity }}>
-              <Coffee className="w-20 h-20 text-amber-600 mx-auto mb-8" />
-            </motion.div>
-          </motion.div>
-
-          <motion.h2
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-5xl lg:text-6xl font-black text-gray-900 dark:text-white mb-6"
-          >
-            Ready to grow your shop?
-          </motion.h2>
-
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.2 }}
-            className="text-xl text-gray-500 dark:text-gray-400 mb-10 max-w-2xl mx-auto"
-          >
-            Join LoyalCup today and lock in your rate at ${BASE_PRICE}/month forever.
-            Setup takes under 30 minutes.
-          </motion.p>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.3 }}
-            className="flex flex-col sm:flex-row gap-4 justify-center"
-          >
-            <motion.button
-              whileHover={{ scale: 1.05, boxShadow: '0 20px 60px rgba(245,158,11,0.4)' }}
-              whileTap={{ scale: 0.95 }}
+            <button
+              type="button"
               onClick={() => navigate('/shop-application')}
-              className="px-10 py-5 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-full text-xl font-bold shadow-2xl flex items-center gap-3 justify-center"
+              className="mt-6 flex w-full items-center justify-center gap-3 rounded-full bg-[#101827] px-6 py-4 font-black text-white transition hover:bg-[#182238]"
             >
-              Get Started
-              <ArrowRight className="w-5 h-5" />
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => navigate('/contact')}
-              className="px-10 py-5 bg-white dark:bg-neutral-800 text-amber-700 dark:text-amber-400 border-2 border-amber-600 rounded-full text-xl font-bold shadow-xl"
-            >
-              Talk to Us First
-            </motion.button>
+              Get started
+              <ArrowRight className="h-5 w-5" />
+            </button>
           </motion.div>
+        </div>
+      </section>
 
-          <p className="text-sm text-gray-400 dark:text-gray-500 mt-6">
-            ${BASE_PRICE}/mo base · +${ADDITIONAL_LOCATION_PRICE}/mo per additional location · Cancel anytime
+      <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
+        <div className="mb-10 max-w-3xl">
+          <p className="text-sm font-black uppercase tracking-[0.18em] text-orange-600">Everything included</p>
+          <h2 className="mt-4 text-4xl font-black leading-tight sm:text-5xl">
+            No feature tiers. No “call for pricing” nonsense.
+          </h2>
+          <p className="mt-5 text-lg leading-8 text-slate-600">
+            LoyalCup is built for local coffee shops that need a professional app experience without enterprise software drama.
           </p>
         </div>
-      </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {features.map((feature) => (
+            <Feature key={feature.title} {...feature} />
+          ))}
+        </div>
+      </section>
 
+      <section className="bg-white py-20">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-10 px-4 sm:px-6 lg:grid-cols-[0.85fr_1.15fr] lg:px-8">
+          <div>
+            <p className="text-sm font-black uppercase tracking-[0.18em] text-orange-600">Multi-location ready</p>
+            <h2 className="mt-4 text-4xl font-black leading-tight sm:text-5xl">
+              Add locations when the business already has them.
+            </h2>
+            <p className="mt-5 text-lg leading-8 text-slate-600">
+              Multi-location owners can apply with more than one shop, subscribe based on active location count, then connect each shop to the correct Square location.
+            </p>
+          </div>
+          <div className="grid gap-4">
+            {[
+              { icon: Store, title: 'One account, multiple shops', body: 'Owners can manage more than one location without creating separate business accounts.' },
+              { icon: MapPin, title: 'Location-level setup', body: 'Each shop can keep distinct address, phone, menu, Square location, and operational settings.' },
+              { icon: Shield, title: 'Billing follows active locations', body: `The base subscription covers one location; extra active locations add $${ADDITIONAL_LOCATION_PRICE}/mo each.` },
+            ].map(({ icon: Icon, title, body }) => (
+              <div key={title} className="flex gap-4 rounded-2xl border border-slate-200 bg-[#f8f6f2] p-5">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#101827] text-orange-400">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-black">{title}</h3>
+                  <p className="mt-1 leading-6 text-slate-600">{body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-5xl px-4 py-20 sm:px-6 lg:px-8">
+        <div className="text-center">
+          <p className="text-sm font-black uppercase tracking-[0.18em] text-orange-600">FAQ</p>
+          <h2 className="mt-4 text-4xl font-black">Questions owners ask first.</h2>
+        </div>
+        <div className="mt-10 grid gap-4">
+          {faqs.map(([q, a]) => (
+            <div key={q} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h3 className="text-lg font-black">{q}</h3>
+              <p className="mt-2 leading-7 text-slate-600">{a}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="bg-[#101827] py-20 text-white">
+        <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-8 px-4 sm:px-6 md:flex-row md:items-center lg:px-8">
+          <div>
+            <p className="text-sm font-black uppercase tracking-[0.18em] text-orange-400">Launch cleanly</p>
+            <h2 className="mt-3 text-4xl font-black">Ready to put your shop in the app?</h2>
+            <p className="mt-3 max-w-2xl text-lg leading-8 text-slate-300">
+              Apply, subscribe, connect Square, and start taking mobile orders with a rate you understand.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/shop-application')}
+            className="inline-flex items-center justify-center gap-3 rounded-full bg-[#f4762c] px-7 py-4 font-black text-white shadow-lg transition hover:bg-[#ff8642]"
+          >
+            Apply now
+            <ArrowRight className="h-5 w-5" />
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

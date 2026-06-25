@@ -1,144 +1,133 @@
 import { motion } from "framer-motion";
-import { Smartphone, Apple, Star, Coffee, Gift, Zap } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Apple, ArrowRight, Coffee, Gift, MapPin, Play, ShoppingBag, Smartphone } from "lucide-react";
 
 const APP_STORE_URL = "https://apps.apple.com/app/loyalcup";
 const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.loyalcup";
 
+const appScreens = [
+  { src: "/app-screens/welcome.jpg", alt: "LoyalCup welcome screen" },
+  { src: "/app-screens/discover.jpg", alt: "LoyalCup coffee shop discovery screen" },
+  { src: "/app-screens/shop.jpg", alt: "LoyalCup shop menu screen" },
+];
+
+function StoreButton({ href, icon: Icon, eyebrow, label }) {
+  return (
+    <motion.a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      whileHover={{ y: -2 }}
+      whileTap={{ scale: 0.98 }}
+      className="flex items-center gap-3 rounded-2xl bg-[#101827] px-6 py-4 text-white shadow-xl transition hover:bg-[#182238]"
+    >
+      <Icon className="h-8 w-8" />
+      <span className="text-left">
+        <span className="block text-xs font-semibold text-slate-300">{eyebrow}</span>
+        <span className="block text-lg font-black leading-tight">{label}</span>
+      </span>
+    </motion.a>
+  );
+}
+
 export default function Download() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-amber-50 to-white dark:from-neutral-900 dark:to-neutral-800">
-      {/* Hero */}
-      <div className="max-w-4xl mx-auto px-4 py-24 text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-        >
-          <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-amber-500 to-orange-600 rounded-3xl shadow-2xl mb-8">
-            <Coffee className="w-12 h-12 text-white" />
-          </div>
+    <div className="bg-[#f6f4f0] text-slate-950">
+      <section className="relative overflow-hidden bg-[#080d19]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(244,118,44,0.28),transparent_30%),radial-gradient(circle_at_82%_76%,rgba(43,92,184,0.32),transparent_34%)]" />
+        <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[0.95fr_1.05fr] lg:px-8 lg:py-24">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <div className="mb-7 inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/10 px-4 py-2 text-sm font-bold text-white backdrop-blur">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-orange-600">
+                <Smartphone className="h-4 w-4" />
+              </span>
+              LoyalCup for iOS and Android
+            </div>
+            <h1 className="max-w-3xl text-5xl font-black leading-[1.04] text-white sm:text-6xl">
+              Order ahead, earn rewards, and find better coffee nearby.
+            </h1>
+            <p className="mt-6 max-w-2xl text-xl leading-8 text-slate-300">
+              LoyalCup brings local coffee shops into one clean app: discover shops, customize drinks, skip the line, and keep your rewards in one place.
+            </p>
+            <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+              <StoreButton href={APP_STORE_URL} icon={Apple} eyebrow="Download on the" label="App Store" />
+              <StoreButton href={PLAY_STORE_URL} icon={Play} eyebrow="Get it on" label="Google Play" />
+            </div>
+          </motion.div>
 
-          <h1 className="text-5xl lg:text-6xl font-black text-gray-900 dark:text-white mb-6">
-            Get the{" "}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-600 to-orange-600">
-              LoyalCup
-            </span>{" "}
-            App
-          </h1>
-
-          <p className="text-xl text-gray-600 dark:text-gray-400 mb-12 max-w-2xl mx-auto">
-            Order ahead, earn loyalty points, and support your favorite local coffee shops — all from your phone.
-          </p>
-
-          {/* Download Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-            <motion.a
-              href={APP_STORE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="flex items-center gap-3 px-8 py-4 bg-black text-white rounded-2xl shadow-xl hover:bg-neutral-800 transition"
-            >
-              <Apple className="w-8 h-8" />
-              <div className="text-left">
-                <div className="text-xs opacity-70">Download on the</div>
-                <div className="text-lg font-bold leading-tight">App Store</div>
-              </div>
-            </motion.a>
-
-            <motion.a
-              href={PLAY_STORE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="flex items-center gap-3 px-8 py-4 bg-black text-white rounded-2xl shadow-xl hover:bg-neutral-800 transition"
-            >
-              {/* Google Play logo SVG inline */}
-              <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M3.18 23.76c.33.19.7.24 1.06.14l11.34-11.36L12.4 9.36 3.18 23.76zm15.1-13.02L15.1 9l-3.1 3.1 3.1 3.1 3.24-1.84c.92-.52.92-1.86-.06-2.62zM2.26 1.14C2.1 1.42 2 1.74 2 2.1v19.8c0 .36.1.68.26.96L13.7 12 2.26 1.14zm9.52 9.52L3.24.54C2.88.44 2.52.5 2.2.7l11.22 11.22-1.64-1.26z"/>
-              </svg>
-              <div className="text-left">
-                <div className="text-xs opacity-70">Get it on</div>
-                <div className="text-lg font-bold leading-tight">Google Play</div>
-              </div>
-            </motion.a>
-          </div>
-
-          {/* Rating */}
-          <div className="flex items-center justify-center gap-2 text-amber-500 mb-4">
-            {[...Array(5)].map((_, i) => (
-              <Star key={i} className="w-5 h-5 fill-current" />
+          <div className="relative min-h-[620px]">
+            {appScreens.map((screen, index) => (
+              <motion.img
+                key={screen.src}
+                src={screen.src}
+                alt={screen.alt}
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.12 * index, duration: 0.55 }}
+                className={[
+                  "absolute h-[570px] w-[276px] rounded-[2rem] border border-white/15 object-cover p-2 shadow-2xl shadow-black/30",
+                  index === 0 ? "left-0 top-8 rotate-[-6deg] bg-white/10" : "",
+                  index === 1 ? "left-1/2 top-0 z-10 -translate-x-1/2 bg-white/10" : "",
+                  index === 2 ? "right-0 top-12 hidden rotate-[6deg] bg-white/10 sm:block" : "",
+                ].join(" ")}
+              />
             ))}
           </div>
-          <p className="text-gray-500 dark:text-gray-400 text-sm">
-            Supporting local coffee shops everywhere
-          </p>
-        </motion.div>
-      </div>
-
-      {/* Features */}
-      <div className="max-w-4xl mx-auto px-4 pb-24">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[
-            {
-              icon: Coffee,
-              title: "Order Ahead",
-              desc: "Browse full menus and order from your favorite local shops before you even leave home.",
-              color: "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400",
-            },
-            {
-              icon: Gift,
-              title: "Earn Rewards",
-              desc: "Get loyalty points with every purchase and redeem them for free drinks.",
-              color: "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400",
-            },
-            {
-              icon: Zap,
-              title: "Skip the Line",
-              desc: "Your order is ready when you arrive. No waiting, no fuss.",
-              color: "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400",
-            },
-          ].map((feature, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 + i * 0.1 }}
-              className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-gray-100 dark:border-neutral-800 shadow-sm text-center"
-            >
-              <div className={`inline-flex items-center justify-center w-14 h-14 rounded-2xl ${feature.color} mb-4`}>
-                <feature.icon className="w-7 h-7" />
-              </div>
-              <h3 className="font-bold text-gray-900 dark:text-white text-lg mb-2">
-                {feature.title}
-              </h3>
-              <p className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
-                {feature.desc}
-              </p>
-            </motion.div>
-          ))}
         </div>
-      </div>
+      </section>
 
-      {/* Shop owner CTA */}
-      <div className="border-t border-gray-100 dark:border-neutral-800 bg-white dark:bg-neutral-900">
-        <div className="max-w-2xl mx-auto px-4 py-12 text-center">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-            Own a coffee shop?
-          </h2>
-          <p className="text-gray-500 dark:text-gray-400 mb-6">
-            Join LoyalCup and reach more customers with built-in loyalty and easy ordering.
-          </p>
-          <a
-            href="/shop-application"
-            className="inline-block px-8 py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white font-semibold rounded-xl hover:from-amber-700 hover:to-orange-700 transition shadow-lg"
+      <section className="mx-auto grid max-w-7xl grid-cols-1 gap-5 px-4 py-20 sm:px-6 md:grid-cols-3 lg:px-8">
+        {[
+          {
+            icon: MapPin,
+            title: "Discover local shops",
+            body: "See nearby coffee shops, open status, shop details, and menus in one fast app.",
+          },
+          {
+            icon: ShoppingBag,
+            title: "Order ahead",
+            body: "Customize drinks, pay securely, and pick up when your order is ready.",
+          },
+          {
+            icon: Gift,
+            title: "Earn rewards",
+            body: "Collect points with every order and redeem rewards at participating shops.",
+          },
+        ].map(({ icon: Icon, title, body }) => (
+          <div key={title} className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
+            <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+              <Icon className="h-6 w-6" />
+            </div>
+            <h2 className="text-xl font-black">{title}</h2>
+            <p className="mt-2 leading-7 text-slate-600">{body}</p>
+          </div>
+        ))}
+      </section>
+
+      <section className="bg-white py-20">
+        <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-8 px-4 sm:px-6 md:flex-row md:items-center lg:px-8">
+          <div>
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#101827] text-orange-400">
+              <Coffee className="h-6 w-6" />
+            </div>
+            <h2 className="text-4xl font-black">Own a coffee shop?</h2>
+            <p className="mt-3 max-w-2xl text-lg leading-8 text-slate-600">
+              Put your shop inside the LoyalCup app with Square ordering, rewards, and multi-location support.
+            </p>
+          </div>
+          <Link
+            to="/shop-application"
+            className="inline-flex items-center justify-center gap-3 rounded-full bg-[#f4762c] px-7 py-4 font-black text-white shadow-lg transition hover:bg-[#ff8642]"
           >
-            Apply to Join LoyalCup
-          </a>
+            Apply to join
+            <ArrowRight className="h-5 w-5" />
+          </Link>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
