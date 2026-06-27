@@ -18,7 +18,9 @@ Notifications.setNotificationHandler({
  */
 export async function registerForPushNotifications() {
   if (!Device.isDevice) {
-    console.log('[Push] Skipping — not a physical device');
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.log('[Push] Skipping — not a physical device');
+    }
     return null;
   }
 
@@ -42,7 +44,9 @@ export async function registerForPushNotifications() {
   }
 
   if (finalStatus !== 'granted') {
-    console.log('[Push] Permission not granted');
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.log('[Push] Permission not granted');
+    }
     return null;
   }
 
@@ -51,14 +55,14 @@ export async function registerForPushNotifications() {
       projectId: '0fa283e2-bdab-464a-9a3c-86e60a67c5ba', // from app.json extra.eas.projectId
     });
     const token = tokenData.data;
-    console.log('[Push] Expo push token:', token);
 
     await apiClient.put('/api/v1/users/profile', { push_token: token });
-    console.log('[Push] Token saved to profile');
 
     return token;
   } catch (err) {
-    console.warn('[Push] Error getting token:', err);
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn('[Push] Error getting token:', err);
+    }
     return null;
   }
 }
@@ -70,6 +74,8 @@ export async function clearPushToken() {
   try {
     await apiClient.put('/api/v1/users/profile', { push_token: null });
   } catch (err) {
-    console.warn('[Push] Failed to clear token:', err);
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn('[Push] Failed to clear token:', err);
+    }
   }
 }

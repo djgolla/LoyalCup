@@ -84,7 +84,9 @@ function RootLayoutNav() {
 
       notificationListener.current =
         Notifications.addNotificationReceivedListener((notification) => {
-          console.log('[Push] Received:', notification);
+          if (typeof __DEV__ !== 'undefined' && __DEV__) {
+            console.log('[Push] Received:', notification);
+          }
         });
 
       responseListener.current =

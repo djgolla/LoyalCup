@@ -19,8 +19,10 @@ SECURITY:
   charge, order_items insert, loyalty redemption, and loyalty awarding.
 """
 import logging
+import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any
+from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field, validator
@@ -32,6 +34,7 @@ from app.services.loyalty_service import (
     compute_redemption,
     award_points_for_order,
     redeem_points_for_order,
+    refund_redeemed_points_for_order,
 )
 from app.utils.security import require_auth
 from app.database import get_supabase
@@ -95,6 +98,16 @@ class QuotePaymentRequest(BaseModel):
 
 class CreatePaymentRequest(QuotePaymentRequest):
     payment_nonce: str
+    checkout_attempt_id: Optional[str] = None
+
+    @validator("checkout_attempt_id")
+    def _checkout_attempt_id(cls, v):
+        if not v:
+            return v
+        try:
+            return str(UUID(str(v)))
+        except Exception:
+            raise ValueError("checkout_attempt_id must be a UUID")
 
 
 def _now_utc() -> datetime:
@@ -292,6 +305,101 @@ def _loyalty_discount_for_request(
     return int(preview["discount_cents"] or 0)
 
 
+def _existing_checkout_response(order: Dict[str, Any]) -> Dict[str, Any]:
+    metadata = order.get("metadata") or {}
+    status = order.get("status")
+
+    if status == "confirmed":
+        return {
+            "success": True,
+            "duplicate": True,
+            "order_id": order.get("id"),
+            "square_order_id": metadata.get("square_order_id"),
+            "charged": order.get("total") or 0,
+            "tax": order.get("tax") or 0,
+            "currency": metadata.get("currency") or "USD",
+            "status": "confirmed",
+            "ready_at": order.get("ready_at") or metadata.get("ready_at"),
+            "points_earned": order.get("loyalty_points_earned") or metadata.get("loyalty_points_earned") or 0,
+            "points_pending": metadata.get("loyalty_points_pending") or 0,
+            "points_available_at": metadata.get("loyalty_points_available_at"),
+            "prep_minutes": metadata.get("prep_minutes") or 10,
+            "message": "Order already placed. Taking you back to the existing order.",
+        }
+
+    if status == "payment_pending":
+        raise HTTPException(
+            status_code=409,
+            detail="This payment is already being processed. Please wait a moment.",
+        )
+
+    raise HTTPException(
+        status_code=409,
+        detail="This checkout attempt can no longer be reused. Please try again.",
+    )
+
+
+def _find_checkout_attempt(sc, *, order_id: str, customer_id: str, shop_id: str) -> Optional[Dict[str, Any]]:
+    resp = (
+        sc.table("orders")
+        .select("*")
+        .eq("id", order_id)
+        .eq("customer_id", customer_id)
+        .eq("shop_id", shop_id)
+        .limit(1)
+        .execute()
+    )
+    return resp.data[0] if resp.data else None
+
+
+async def _update_order_with_retries(sc, order_id: str, payload: Dict[str, Any], *, attempts: int = 3) -> Dict[str, Any]:
+    last_error = None
+    for attempt in range(attempts):
+        try:
+            resp = (
+                sc.table("orders")
+                .update(payload)
+                .eq("id", order_id)
+                .execute()
+            )
+            if resp.data:
+                return resp.data[0]
+            last_error = RuntimeError("Order update returned no data")
+        except Exception as e:
+            last_error = e
+
+        if attempt < attempts - 1:
+            await asyncio.sleep(0.25 * (attempt + 1))
+
+    raise RuntimeError(f"Could not update order {order_id}: {last_error}")
+
+
+async def _insert_order_items_with_retries(sc, order_id: str, items_data: List[dict], *, attempts: int = 3) -> None:
+    payload = [
+        {
+            "order_id": order_id,
+            "menu_item_id": item["menu_item_id"],
+            "quantity": item.get("quantity", 1),
+            "unit_price": item["unit_price"],
+            "total_price": item["unit_price"] * item.get("quantity", 1),
+            "customizations": item.get("customizations", []),
+        }
+        for item in items_data
+    ]
+
+    last_error = None
+    for attempt in range(attempts):
+        try:
+            sc.table("order_items").insert(payload).execute()
+            return
+        except Exception as e:
+            last_error = e
+            if attempt < attempts - 1:
+                await asyncio.sleep(0.25 * (attempt + 1))
+
+    raise RuntimeError(f"Could not insert order items for {order_id}: {last_error}")
+
+
 @router.post("/quote")
 async def quote_payment(
     request: QuotePaymentRequest,
@@ -406,6 +514,17 @@ async def create_payment(
         points_to_redeem=request.loyalty_points_to_redeem,
     )
 
+    requested_order_id = request.checkout_attempt_id
+    if requested_order_id:
+        existing_order = _find_checkout_attempt(
+            sc,
+            order_id=requested_order_id,
+            customer_id=customer_id,
+            shop_id=request.shop_id,
+        )
+        if existing_order:
+            return _existing_checkout_response(existing_order)
+
     try:
         pending_payload = {
             "customer_id": customer_id,
@@ -423,8 +542,12 @@ async def create_payment(
                 "prep_minutes": prep_minutes,
                 "ready_at": ready_at_iso,
                 "server_priced": True,
+                "checkout_attempt_id": requested_order_id,
             },
         }
+
+        if requested_order_id:
+            pending_payload["id"] = requested_order_id
 
         pending_resp = (
             sc.table("orders")
@@ -439,8 +562,52 @@ async def create_payment(
         order_id = order["id"]
 
     except Exception as e:
+        if requested_order_id:
+            try:
+                existing_order = _find_checkout_attempt(
+                    sc,
+                    order_id=requested_order_id,
+                    customer_id=customer_id,
+                    shop_id=request.shop_id,
+                )
+                if existing_order:
+                    return _existing_checkout_response(existing_order)
+            except HTTPException:
+                raise
+            except Exception as lookup_err:
+                logger.error(
+                    f"[Payment] checkout idempotency lookup failed "
+                    f"order={requested_order_id}: {lookup_err}"
+                )
+
         logger.exception(f"[Payment] Failed to create pending order before charge: {e}")
         raise HTTPException(status_code=500, detail="Could not create order. Card was not charged.")
+
+    redeemed_before_charge = False
+    if request.loyalty_points_to_redeem > 0:
+        try:
+            await redeem_points_for_order(
+                db=db,
+                order_id=order_id,
+                customer_id=customer_id,
+                shop_id=request.shop_id,
+                points_to_redeem=request.loyalty_points_to_redeem,
+            )
+            redeemed_before_charge = True
+        except Exception as e:
+            try:
+                sc.table("orders").update({
+                    "status": "payment_failed",
+                    "metadata": {
+                        **(order.get("metadata") or {}),
+                        "failure_reason": f"loyalty_redemption_failed: {str(e)}",
+                    },
+                }).eq("id", order_id).execute()
+            except Exception as mark_err:
+                logger.error(f"[Payment] Could not mark redemption failure order={order_id}: {mark_err}")
+
+            logger.warning(f"[Payment] Point deduction failed before charge order={order_id}: {e}")
+            raise HTTPException(status_code=400, detail=str(e))
 
     try:
         payment_result = await process_payment(
@@ -453,6 +620,17 @@ async def create_payment(
             customer_note=request.customer_note,
         )
     except Exception as e:
+        if redeemed_before_charge:
+            try:
+                await refund_redeemed_points_for_order(
+                    db=db,
+                    order_id=order_id,
+                    customer_id=customer_id,
+                    shop_id=request.shop_id,
+                )
+            except Exception as refund_err:
+                logger.error(f"[Payment] Could not refund points after charge failure order={order_id}: {refund_err}")
+
         try:
             sc.table("orders").update({
                 "status": "payment_failed",
@@ -484,61 +662,67 @@ async def create_payment(
         "prep_minutes": prep_minutes,
         "ready_at": ready_at_iso,
         "server_priced": True,
+        "checkout_attempt_id": requested_order_id,
     }
 
     if loyalty_discount_cents > 0:
         order_metadata["discount_amount"] = loyalty_discount_cents / 100
 
     try:
-        confirmed_resp = (
-            sc.table("orders")
-            .update({
+        order = await _update_order_with_retries(
+            sc,
+            order_id,
+            {
                 "status": "confirmed",
                 "subtotal": subtotal_dollars,
                 "tax": tax_dollars,
                 "total": charged_dollars,
                 "ready_at": ready_at_iso,
                 "metadata": order_metadata,
-            })
-            .eq("id", order_id)
-            .execute()
+            },
         )
-
-        if confirmed_resp.data:
-            order = confirmed_resp.data[0]
-
     except Exception as e:
         logger.error(
             f"[Payment] CHARGE SUCCEEDED but order confirm update failed! "
             f"order={order_id} square_payment={square_payment_id} error={e}"
         )
+        return {
+            "success": True,
+            "order_id": order_id,
+            "square_order_id": square_order_id,
+            "charged": charged_dollars,
+            "tax": tax_dollars,
+            "currency": currency,
+            "status": "processing",
+            "ready_at": ready_at_iso,
+            "points_earned": 0,
+            "points_pending": 0,
+            "points_available_at": None,
+            "prep_minutes": prep_minutes,
+            "message": (
+                "Payment went through and the order was sent to Square. "
+                "LoyalCup is still finalizing the order details."
+            ),
+        }
 
     try:
-        sc.table("order_items").insert([
-            {
-                "order_id": order_id,
-                "menu_item_id": item["menu_item_id"],
-                "quantity": item.get("quantity", 1),
-                "unit_price": item["unit_price"],
-                "total_price": item["unit_price"] * item.get("quantity", 1),
-                "customizations": item.get("customizations", []),
-            }
-            for item in items_data
-        ]).execute()
+        await _insert_order_items_with_retries(sc, order_id, items_data)
     except Exception as e:
         logger.error(f"[Payment] order_items insert failed order={order_id}: {e}")
-
-    if request.loyalty_points_to_redeem > 0:
         try:
-            await redeem_points_for_order(
-                db=db,
-                order_id=order_id,
-                customer_id=customer_id,
-                shop_id=request.shop_id,
-                points_to_redeem=request.loyalty_points_to_redeem,
+            order_metadata = {
+                **order_metadata,
+                "order_items_insert_failed": True,
+                "order_items_insert_error": str(e),
+            }
+            await _update_order_with_retries(
+                sc,
+                order_id,
+                {"metadata": order_metadata},
+                attempts=2,
             )
-        except Exception as e:
-            logger.error(f"[Payment] Point deduction failed order={order_id}: {e}")
+        except Exception as mark_err:
+            logger.error(f"[Payment] Could not mark order_items failure order={order_id}: {mark_err}")
 
     points_awarded = 0
     points_pending = 0

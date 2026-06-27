@@ -9,9 +9,19 @@ from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from app.config import settings
 
-# Create limiter instance
+
+def client_ip_key(request: Request) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        return forwarded_for.split(",", 1)[0].strip()
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip:
+        return real_ip.strip()
+    return get_remote_address(request)
+
+
 limiter = Limiter(
-    key_func=get_remote_address,
+    key_func=client_ip_key,
     default_limits=[f"{settings.rate_limit_requests}/{settings.rate_limit_window} seconds"]
 )
 

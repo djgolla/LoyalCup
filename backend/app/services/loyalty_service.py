@@ -17,6 +17,7 @@ Tables:
   - points_transactions
 """
 import logging
+import time
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Optional, Tuple
 
@@ -153,6 +154,36 @@ def _balance_row(db, customer_id: str, shop_id: str) -> Tuple[str, Optional[Dict
     return table, (resp.data[0] if resp.data else None)
 
 
+def _balance_ints(row: Optional[Dict[str, Any]]) -> Dict[str, int]:
+    row = row or {}
+    return {
+        "current_balance": int(row.get("current_balance") or 0),
+        "pending_balance": int(row.get("pending_balance") or 0),
+        "total_earned": int(row.get("total_earned") or 0),
+        "total_spent": int(row.get("total_spent") or 0),
+    }
+
+
+def _cas_update_balance(
+    db,
+    table: str,
+    customer_id: str,
+    shop_id: str,
+    previous: Dict[str, int],
+    updates: Dict[str, Any],
+):
+    query = (
+        db.get_service_client()
+        .table(table)
+        .update(updates)
+        .eq("customer_id", customer_id)
+        .eq("shop_id", shop_id)
+    )
+    for field, value in previous.items():
+        query = query.eq(field, value)
+    return query.execute()
+
+
 def release_available_points(
     db,
     customer_id: Optional[str] = None,
@@ -206,34 +237,58 @@ def release_available_points(
 
         cid = txn["customer_id"]
         sid = txn["shop_id"]
-        table, row = _balance_row(db, cid, sid)
+        new_balance = amount
 
-        if not row:
-            ins = (
-                sc.table(table)
-                .insert({
-                    "customer_id": cid,
-                    "shop_id": sid,
-                    "total_earned": amount,
-                    "total_spent": 0,
-                    "current_balance": amount,
-                    "pending_balance": 0,
-                })
-                .execute()
+        for attempt in range(_MAX_RETRIES):
+            table, row = _balance_row(db, cid, sid)
+
+            if not row:
+                try:
+                    ins = (
+                        sc.table(table)
+                        .insert({
+                            "customer_id": cid,
+                            "shop_id": sid,
+                            "total_earned": amount,
+                            "total_spent": 0,
+                            "current_balance": amount,
+                            "pending_balance": 0,
+                        })
+                        .execute()
+                    )
+                    new_balance = int((ins.data or [{}])[0].get("current_balance") or amount)
+                    break
+                except Exception:
+                    time.sleep(0.05 * (attempt + 1))
+                    continue
+
+            previous = _balance_ints(row)
+            new_balance = previous["current_balance"] + amount
+            new_pending = max(0, previous["pending_balance"] - amount)
+            result = _cas_update_balance(
+                db,
+                table,
+                cid,
+                sid,
+                previous,
+                {
+                    "current_balance": new_balance,
+                    "pending_balance": new_pending,
+                    "updated_at": now,
+                },
             )
-            new_balance = int((ins.data or [{}])[0].get("current_balance") or amount)
+            if result.data:
+                break
+            time.sleep(0.05 * (attempt + 1))
         else:
-            current = int(row.get("current_balance") or 0)
-            pending = int(row.get("pending_balance") or 0)
-
-            new_balance = current + amount
-            new_pending = max(0, pending - amount)
-
-            sc.table(table).update({
-                "current_balance": new_balance,
-                "pending_balance": new_pending,
-                "updated_at": now,
-            }).eq("customer_id", cid).eq("shop_id", sid).execute()
+            sc.table("points_transactions").update({
+                "status": "pending",
+                "metadata": {
+                    **(txn.get("metadata") or {}),
+                    "release_conflict_at": now,
+                },
+            }).eq("id", txn_id).execute()
+            continue
 
         sc.table("points_transactions").update({
             "status": "available",
@@ -329,38 +384,53 @@ async def award_points_for_order(
                 "already_awarded": True,
             }
 
-        table, existing = _balance_row(db, customer_id, shop_id)
+        balance_after = 0
+        for attempt in range(_MAX_RETRIES):
+            table, existing = _balance_row(db, customer_id, shop_id)
 
-        if existing:
-            current_balance = int(existing.get("current_balance") or 0)
-            pending_balance = int(existing.get("pending_balance") or 0)
-            total_earned = int(existing.get("total_earned") or 0)
+            if existing:
+                previous = _balance_ints(existing)
+                balance_after = previous["current_balance"]
+                result = _cas_update_balance(
+                    db,
+                    table,
+                    customer_id,
+                    shop_id,
+                    previous,
+                    {
+                        "pending_balance": previous["pending_balance"] + points,
+                        "total_earned": previous["total_earned"] + points,
+                        "updated_at": now,
+                    },
+                )
+                if result.data:
+                    break
+            else:
+                try:
+                    ins = (
+                        sc.table(table)
+                        .insert({
+                            "customer_id": customer_id,
+                            "shop_id": shop_id,
+                            "total_earned": points,
+                            "total_spent": 0,
+                            "current_balance": 0,
+                            "pending_balance": points,
+                        })
+                        .execute()
+                    )
+                    if ins.data:
+                        break
+                except Exception:
+                    pass
 
-            sc.table(table).update({
-                "pending_balance": pending_balance + points,
-                "total_earned": total_earned + points,
-                "updated_at": now,
-            }).eq("customer_id", customer_id).eq("shop_id", shop_id).execute()
-
-            balance_after = current_balance
+            if attempt < _MAX_RETRIES - 1:
+                time.sleep(0.05 * (attempt + 1))
         else:
-            ins = (
-                sc.table(table)
-                .insert({
-                    "customer_id": customer_id,
-                    "shop_id": shop_id,
-                    "total_earned": points,
-                    "total_spent": 0,
-                    "current_balance": 0,
-                    "pending_balance": points,
-                })
-                .execute()
+            raise RuntimeError(
+                f"Could not award loyalty points after {_MAX_RETRIES} attempts "
+                f"(concurrent conflict) customer={customer_id} shop={shop_id}"
             )
-
-            if not ins.data:
-                raise RuntimeError("Loyalty balance insert returned no data")
-
-            balance_after = 0
 
         sc.table("points_transactions").insert({
             "customer_id": customer_id,
@@ -488,4 +558,114 @@ async def redeem_points_for_order(
         "discount_cents": discount_cents,
         "new_balance": new_balance,
         "points_type": "shop",
+    }
+
+
+async def refund_redeemed_points_for_order(
+    *,
+    db,
+    order_id: str,
+    customer_id: str,
+    shop_id: str,
+) -> Dict[str, Any]:
+    """
+    Return points that were reserved/redeemed for an order that did not charge.
+    This is intentionally idempotent for payment retry/failure paths.
+    """
+    sc = db.get_service_client()
+
+    redeemed_resp = (
+        sc.table("points_transactions")
+        .select("*")
+        .eq("order_id", order_id)
+        .eq("customer_id", customer_id)
+        .eq("shop_id", shop_id)
+        .eq("type", "redeemed")
+        .eq("points_type", "shop")
+        .limit(1)
+        .execute()
+    )
+    if not redeemed_resp.data:
+        return {"success": True, "points": 0, "already_refunded": False}
+
+    redeemed = redeemed_resp.data[0]
+    redeemed_metadata = redeemed.get("metadata") or {}
+    if redeemed_metadata.get("refunded_at"):
+        return {"success": True, "points": 0, "already_refunded": True}
+
+    points = abs(int(redeemed.get("amount") or 0))
+    if points <= 0:
+        return {"success": True, "points": 0, "already_refunded": False}
+
+    now = _now_iso()
+    new_balance = points
+
+    for attempt in range(_MAX_RETRIES):
+        table, row = _balance_row(db, customer_id, shop_id)
+
+        if row:
+            previous = _balance_ints(row)
+            new_balance = previous["current_balance"] + points
+            new_spent = max(0, previous["total_spent"] - points)
+            result = _cas_update_balance(
+                db,
+                table,
+                customer_id,
+                shop_id,
+                previous,
+                {
+                    "current_balance": new_balance,
+                    "total_spent": new_spent,
+                    "updated_at": now,
+                },
+            )
+            if result.data:
+                break
+        else:
+            try:
+                ins = (
+                    sc.table(table)
+                    .insert({
+                        "customer_id": customer_id,
+                        "shop_id": shop_id,
+                        "total_earned": 0,
+                        "total_spent": 0,
+                        "current_balance": points,
+                        "pending_balance": 0,
+                    })
+                    .execute()
+                )
+                if ins.data:
+                    break
+            except Exception:
+                pass
+
+        if attempt < _MAX_RETRIES - 1:
+            time.sleep(0.05 * (attempt + 1))
+    else:
+        raise RuntimeError(
+            f"Could not refund loyalty points after {_MAX_RETRIES} attempts "
+            f"(concurrent conflict) customer={customer_id} shop={shop_id}"
+        )
+
+    sc.table("points_transactions").update({
+        "metadata": {
+            **redeemed_metadata,
+            "refunded_at": now,
+            "refund_reason": "payment_failed",
+            "balance_after_refund": new_balance,
+        },
+    }).eq("id", redeemed["id"]).execute()
+
+    logger.info(
+        f"[Loyalty] refunded redemption customer={customer_id} shop={shop_id} "
+        f"order={order_id} pts=+{points}"
+    )
+
+    return {
+        "success": True,
+        "points": points,
+        "new_balance": new_balance,
+        "points_type": "shop",
+        "already_refunded": False,
     }

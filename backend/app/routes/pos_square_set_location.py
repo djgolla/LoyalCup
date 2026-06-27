@@ -12,9 +12,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from app.database import get_supabase
 from app.utils.security import require_auth, get_user_role
+from app.integrations.square.adapter import SquareAdapter
+from app.integrations.square.token_manager import with_square_retry, SquareReauthRequired
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+_square = SquareAdapter()
 
 
 class SetLocationRequest(BaseModel):
@@ -68,6 +71,29 @@ async def set_square_location(
         )
 
     conn = conn_check.data[0]
+
+    try:
+        locations = await with_square_retry(
+            db,
+            body.shop_id,
+            lambda access_token: _square.list_locations(access_token),
+        )
+    except SquareReauthRequired:
+        raise HTTPException(
+            status_code=401,
+            detail="Square connection expired. Please reconnect Square to continue.",
+        )
+    except Exception as e:
+        logger.error(f"[Set Location] Could not validate Square locations shop={body.shop_id}: {e}")
+        raise HTTPException(status_code=502, detail="Could not validate Square location")
+
+    valid_location_ids = {loc.id for loc in locations}
+    if body.location_id not in valid_location_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="That Square location does not belong to this connected Square account.",
+        )
+
     duplicate_query = (
         svc.table("pos_connections")
         .select("shop_id, merchant_id")

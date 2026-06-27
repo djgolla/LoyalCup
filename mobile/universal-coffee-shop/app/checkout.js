@@ -6,7 +6,7 @@
  * - Pay button uses the same quote
  * - Card modal uses the same quote
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert,
   ActivityIndicator, Modal, Platform, KeyboardAvoidingView,
@@ -23,6 +23,18 @@ import { getBalanceForShop, previewRedeem } from '../services/loyaltyService';
 const SQUARE_APP_ID = process.env.EXPO_PUBLIC_SQUARE_APP_ID || '';
 
 const money = (n) => `$${(Number(n) || 0).toFixed(2)}`;
+
+const createUuid = () => {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
 
 const getSquareHTML = (appId, locationId) => {
   const env = process.env.EXPO_PUBLIC_SQUARE_ENV || 'sandbox';
@@ -99,6 +111,7 @@ export default function CheckoutScreen() {
   const [quote, setQuote] = useState(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState(null);
+  const checkoutAttemptIdRef = useRef(null);
 
   const itemsByShop = cart.reduce((acc, item) => {
     const sid = item.shopId;
@@ -110,6 +123,13 @@ export default function CheckoutScreen() {
   const subtotal = cart.reduce((s, i) => s + (parseFloat(i.price) || 0) * (i.quantity || 1), 0);
   const subtotalCents = Math.round(subtotal * 100);
   const activeShopId = cart.length > 0 ? Object.keys(itemsByShop)[0] : null;
+
+  const getCheckoutAttemptId = () => {
+    if (!checkoutAttemptIdRef.current) {
+      checkoutAttemptIdRef.current = createUuid();
+    }
+    return checkoutAttemptIdRef.current;
+  };
 
   const buildOrderItems = () => {
     if (!activeShopId) return [];
@@ -129,7 +149,7 @@ export default function CheckoutScreen() {
     if (!activeShopId || subtotalCents <= 0) {
       setQuote(null);
       setQuoteError(null);
-      return;
+      return null;
     }
 
     try {
@@ -148,10 +168,12 @@ export default function CheckoutScreen() {
       }, token);
 
       setQuote(q);
+      return q;
     } catch (e) {
       console.warn('[Checkout] quote failed:', e.message);
       setQuote(null);
       setQuoteError(e.message || 'Could not calculate total');
+      return null;
     } finally {
       setQuoteLoading(false);
     }
@@ -220,7 +242,7 @@ export default function CheckoutScreen() {
     })();
 
     return () => { cancelled = true; };
-  }, [activeShopId, subtotalCents, pointsToRedeem, cart.length]);
+  }, [activeShopId, subtotalCents, pointsToRedeem, cart]);
 
   const cfg = loyaltyBalance?.config;
   const balance = loyaltyBalance?.current_balance || 0;
@@ -263,14 +285,16 @@ export default function CheckoutScreen() {
       return;
     }
 
-    if (!quote) {
-      await loadQuote();
-      if (!quote) {
+    let activeQuote = quote;
+    if (!activeQuote) {
+      activeQuote = await loadQuote();
+      if (!activeQuote) {
         Alert.alert('Could Not Calculate Total', quoteError || 'Please try again.');
         return;
       }
     }
 
+    getCheckoutAttemptId();
     setShowPaymentSheet(true);
   };
 
@@ -312,10 +336,12 @@ export default function CheckoutScreen() {
         shop_id: shopId,
         items: buildOrderItems(),
         payment_nonce: nonce,
+        checkout_attempt_id: getCheckoutAttemptId(),
         loyalty_points_to_redeem: pointsToRedeem,
         customer_note: null,
       }, token);
 
+      checkoutAttemptIdRef.current = null;
       clearCart();
       setPointsToRedeem(0);
 
@@ -323,6 +349,7 @@ export default function CheckoutScreen() {
       const charged = result.charged ?? displayTotal;
       const earnedPts = result.points_earned || 0;
       const pendingPts = result.points_pending || earnedPts;
+      const isProcessing = result.status === 'processing';
 
       const pointsMsg = pointsToRedeem > 0
         ? `\n💰 Saved ${money(displayDiscount)} with points`
@@ -331,14 +358,22 @@ export default function CheckoutScreen() {
           : '\n⭐ Earned 0 loyalty pts';
 
       Alert.alert(
-        'Order Placed! 🎉',
-        `Order #${orderId?.slice(0, 8) || '—'}\nCharged: ${money(charged)}${pointsMsg}\n\nYour barista has been notified.`,
+        isProcessing ? 'Payment Received' : 'Order Placed! 🎉',
+        isProcessing
+          ? `Order #${orderId?.slice(0, 8) || '—'}\nCharged: ${money(charged)}\n\n${result.message || 'Your order is being finalized.'}`
+          : `Order #${orderId?.slice(0, 8) || '—'}\nCharged: ${money(charged)}${pointsMsg}\n\nYour barista has been notified.`,
         [
           { text: 'Track Order', onPress: () => router.push(`/order/${orderId}`) },
           { text: 'Done', onPress: () => router.push('/home') },
         ]
       );
     } catch (e) {
+      if (
+        e.status === 402 ||
+        (e.status === 409 && /can no longer be reused/i.test(e.message || ''))
+      ) {
+        checkoutAttemptIdRef.current = null;
+      }
       Alert.alert('Payment Failed', e.message || 'Your card was not charged. Please try again.');
     } finally {
       setLoading(false);

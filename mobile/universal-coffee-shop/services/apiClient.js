@@ -29,7 +29,9 @@ async function request(method, path, body, token) {
   const opts = { method, headers };
   if (body && method !== 'GET') opts.body = JSON.stringify(body);
 
-  console.log('[apiClient] request:', method, url);
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.log('[apiClient] request:', method, url);
+  }
 
   const res = await fetch(url, opts);
   const text = await res.text();
@@ -42,12 +44,14 @@ async function request(method, path, body, token) {
   }
 
   if (!res.ok) {
-    console.error('[apiClient] error:', {
-      method,
-      url,
-      status: res.status,
-      response: data,
-    });
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.error('[apiClient] error:', {
+        method,
+        url,
+        status: res.status,
+        response: data,
+      });
+    }
 
     const msg = data?.detail || data?.message || data?.error || `Request failed (${res.status})`;
     const err = new Error(msg);

@@ -283,6 +283,8 @@ class ShopService:
                 print(f"Compat error listing shops: {compat_error}")
                 try:
                     query = self._client().table("shops").select(LEGACY_SHOP_FIELDS)
+                    if active_only:
+                        query = query.eq("status", "active")
                     if city:
                         query = query.ilike("city", f"%{city}%")
                     if search:
@@ -331,6 +333,7 @@ class ShopService:
                         .table("shops")
                         .select(LEGACY_SHOP_FIELDS)
                         .eq("id", shop_id)
+                        .eq("status", "active")
                         .single()
                         .execute()
                     )
@@ -917,20 +920,23 @@ class ShopService:
     async def update_category(
         self, 
         category_id: str, 
-        data: Dict[str, Any]
+        data: Dict[str, Any],
+        shop_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Update menu category"""
         if not self.db:
             return data
         
         try:
-            response = (
+            query = (
                 self._client()
                 .table("categories")
                 .update(data)
                 .eq("id", category_id)
-                .execute()
             )
+            if shop_id:
+                query = query.eq("shop_id", shop_id)
+            response = query.execute()
             return response.data[0] if response.data else {}
         except Exception as e:
             print(f"Error updating category {category_id}: {e}")
@@ -940,41 +946,47 @@ class ShopService:
                     for key, value in data.items()
                     if key in {"name", "display_order", "description", "is_active"}
                 }
-                response = (
+                query = (
                     self._client()
                     .table("menu_categories")
                     .update(legacy_data)
                     .eq("id", category_id)
-                    .execute()
                 )
+                if shop_id:
+                    query = query.eq("shop_id", shop_id)
+                response = query.execute()
                 return self._normalize_category_row(response.data[0]) if response.data else {}
             except Exception:
                 raise e
     
-    async def delete_category(self, category_id: str) -> bool:
+    async def delete_category(self, category_id: str, shop_id: Optional[str] = None) -> bool:
         """Soft delete menu category"""
         if not self.db:
             return True
         
         try:
-            (
+            query = (
                 self._client()
                 .table("categories")
                 .update({"is_active": False})
                 .eq("id", category_id)
-                .execute()
             )
+            if shop_id:
+                query = query.eq("shop_id", shop_id)
+            query.execute()
             return True
         except Exception as e:
             print(f"Error deleting category {category_id}: {e}")
             try:
-                (
+                query = (
                     self._client()
                     .table("menu_categories")
                     .delete()
                     .eq("id", category_id)
-                    .execute()
                 )
+                if shop_id:
+                    query = query.eq("shop_id", shop_id)
+                query.execute()
                 return True
             except Exception as compat_error:
                 print(f"Compat error deleting category {category_id}: {compat_error}")
@@ -1154,16 +1166,27 @@ class ShopService:
         resp = self._client().table("modifier_groups").insert(payload).execute()
         return resp.data[0] if resp.data else {}
 
-    async def update_modifier_group(self, group_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_modifier_group(
+        self,
+        group_id: str,
+        data: Dict[str, Any],
+        shop_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         if not self.db:
             return data
-        resp = self._client().table("modifier_groups").update(data).eq("id", group_id).execute()
+        query = self._client().table("modifier_groups").update(data).eq("id", group_id)
+        if shop_id:
+            query = query.eq("shop_id", shop_id)
+        resp = query.execute()
         return resp.data[0] if resp.data else {}
 
-    async def delete_modifier_group(self, group_id: str) -> bool:
+    async def delete_modifier_group(self, group_id: str, shop_id: Optional[str] = None) -> bool:
         if not self.db:
             return True
-        self._client().table("modifier_groups").update({"is_active": False}).eq("id", group_id).execute()
+        query = self._client().table("modifier_groups").update({"is_active": False}).eq("id", group_id)
+        if shop_id:
+            query = query.eq("shop_id", shop_id)
+        query.execute()
         return True
 
     async def sync_modifier_options(
@@ -1175,11 +1198,24 @@ class ShopService:
         if not self.db:
             return options
 
+        group_resp = (
+            self._client()
+            .table("modifier_groups")
+            .select("id")
+            .eq("id", group_id)
+            .eq("shop_id", shop_id)
+            .limit(1)
+            .execute()
+        )
+        if not group_resp.data:
+            raise ValueError("Modifier group not found for this shop")
+
         existing = (
             self._client()
             .table("modifier_options")
             .select("id")
             .eq("modifier_group_id", group_id)
+            .eq("shop_id", shop_id)
             .execute()
         )
         existing_ids = {row["id"] for row in (existing.data or [])}
@@ -1189,7 +1225,15 @@ class ShopService:
             if option.get("id") and not str(option.get("id")).startswith("new-")
         }
         for option_id in existing_ids - draft_ids:
-            self._client().table("modifier_options").update({"is_active": False}).eq("id", option_id).execute()
+            (
+                self._client()
+                .table("modifier_options")
+                .update({"is_active": False})
+                .eq("id", option_id)
+                .eq("shop_id", shop_id)
+                .eq("modifier_group_id", group_id)
+                .execute()
+            )
 
         saved = []
         for option in options:
@@ -1200,7 +1244,15 @@ class ShopService:
             }
             option_id = option.get("id")
             if option_id and not str(option_id).startswith("new-"):
-                resp = self._client().table("modifier_options").update(payload).eq("id", option_id).execute()
+                resp = (
+                    self._client()
+                    .table("modifier_options")
+                    .update(payload)
+                    .eq("id", option_id)
+                    .eq("shop_id", shop_id)
+                    .eq("modifier_group_id", group_id)
+                    .execute()
+                )
             else:
                 resp = self._client().table("modifier_options").insert({
                     **payload,
@@ -1310,20 +1362,23 @@ class ShopService:
     async def update_menu_item(
         self, 
         item_id: str, 
-        item_data: Dict[str, Any]
+        item_data: Dict[str, Any],
+        shop_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Update menu item"""
         if not self.db:
             return item_data
         
         try:
-            response = (
+            query = (
                 self._client()
                 .table("menu_items")
                 .update(item_data)
                 .eq("id", item_id)
-                .execute()
             )
+            if shop_id:
+                query = query.eq("shop_id", shop_id)
+            response = query.execute()
             return response.data[0] if response.data else {}
         except Exception as e:
             print(f"Error updating menu item {item_id}: {e}")
@@ -1341,41 +1396,47 @@ class ShopService:
                         "display_order",
                     }
                 }
-                response = (
+                query = (
                     self._client()
                     .table("menu_items")
                     .update(legacy_data)
                     .eq("id", item_id)
-                    .execute()
                 )
+                if shop_id:
+                    query = query.eq("shop_id", shop_id)
+                response = query.execute()
                 return self._normalize_menu_item_row(response.data[0]) if response.data else {}
             except Exception:
                 raise e
     
-    async def delete_menu_item(self, item_id: str) -> bool:
+    async def delete_menu_item(self, item_id: str, shop_id: Optional[str] = None) -> bool:
         """Soft delete menu item"""
         if not self.db:
             return True
         
         try:
-            (
+            query = (
                 self._client()
                 .table("menu_items")
                 .update({"is_active": False, "is_available": False})
                 .eq("id", item_id)
-                .execute()
             )
+            if shop_id:
+                query = query.eq("shop_id", shop_id)
+            query.execute()
             return True
         except Exception as e:
             print(f"Error deleting menu item {item_id}: {e}")
             try:
-                (
+                query = (
                     self._client()
                     .table("menu_items")
                     .update({"is_available": False})
                     .eq("id", item_id)
-                    .execute()
                 )
+                if shop_id:
+                    query = query.eq("shop_id", shop_id)
+                query.execute()
                 return True
             except Exception as compat_error:
                 print(f"Compat error deleting menu item {item_id}: {compat_error}")
@@ -1384,20 +1445,23 @@ class ShopService:
     async def toggle_item_availability(
         self, 
         item_id: str, 
-        is_available: bool
+        is_available: bool,
+        shop_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Toggle menu item availability"""
         if not self.db:
             return {"id": item_id, "is_available": is_available}
         
         try:
-            response = (
+            query = (
                 self._client()
                 .table("menu_items")
                 .update({"is_available": is_available})
                 .eq("id", item_id)
-                .execute()
             )
+            if shop_id:
+                query = query.eq("shop_id", shop_id)
+            response = query.execute()
             return response.data[0] if response.data else {}
         except Exception as e:
             print(f"Error toggling availability for item {item_id}: {e}")
@@ -1503,38 +1567,43 @@ class ShopService:
     async def update_customization_template(
         self, 
         template_id: str, 
-        template_data: Dict[str, Any]
+        template_data: Dict[str, Any],
+        shop_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Update customization template"""
         if not self.db:
             return template_data
         
         try:
-            response = (
+            query = (
                 self._client()
                 .table("customization_templates")
                 .update(template_data)
                 .eq("id", template_id)
-                .execute()
             )
+            if shop_id:
+                query = query.eq("shop_id", shop_id)
+            response = query.execute()
             return response.data[0] if response.data else {}
         except Exception as e:
             print(f"Error updating customization template {template_id}: {e}")
             raise
     
-    async def delete_customization_template(self, template_id: str) -> bool:
+    async def delete_customization_template(self, template_id: str, shop_id: Optional[str] = None) -> bool:
         """Delete customization template"""
         if not self.db:
             return True
         
         try:
-            (
+            query = (
                 self._client()
                 .table("customization_templates")
                 .delete()
                 .eq("id", template_id)
-                .execute()
             )
+            if shop_id:
+                query = query.eq("shop_id", shop_id)
+            query.execute()
             return True
         except Exception as e:
             print(f"Error deleting customization template {template_id}: {e}")

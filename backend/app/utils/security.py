@@ -76,6 +76,30 @@ def get_user_role(user_id: str) -> str:
     return profile.get("role", "customer")
 
 
+def ensure_active_user(user_id: str) -> None:
+    """Reject missing or suspended profiles for any authenticated API route."""
+    db = get_supabase()
+    resp = (
+        db.get_service_client()
+        .table("profiles")
+        .select("status")
+        .eq("id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if not resp.data:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No profile found for this user",
+        )
+
+    if resp.data[0].get("status") == "suspended":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account suspended",
+        )
+
+
 def require_auth():
     """Dependency: requires a valid token with a user id (sub)."""
     def dependency(token_payload: dict = Depends(verify_token)) -> dict:
@@ -85,6 +109,7 @@ def require_auth():
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token: missing user ID",
             )
+        ensure_active_user(user_id)
         return token_payload
     return dependency
 

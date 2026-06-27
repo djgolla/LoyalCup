@@ -6,6 +6,8 @@ from typing import Optional, Dict
 from supabase import create_client, Client
 import os
 from dotenv import load_dotenv
+from jose import JWTError, jwt
+from app.config import settings
 
 load_dotenv()
 
@@ -179,9 +181,27 @@ class AuthService:
         """
         Reset password using reset token.
         """
+        if len(new_password or "") < 6:
+            raise ValueError("Password must be at least 6 characters")
+
         try:
-            self.supabase.auth.update_user({"password": new_password})
+            payload = jwt.decode(
+                access_token,
+                settings.jwt_secret,
+                algorithms=[settings.jwt_algorithm],
+                options={"verify_aud": False},
+            )
+            user_id = payload.get("sub")
+            if not user_id:
+                raise ValueError("Invalid reset token")
+
+            self.supabase.auth.admin.update_user_by_id(
+                user_id,
+                {"password": new_password},
+            )
             return True
+        except JWTError:
+            raise ValueError("Invalid or expired reset token")
         except Exception as e:
             raise ValueError(f"Failed to reset password: {str(e)}")
 

@@ -287,7 +287,9 @@ export default function ShopDetailScreen() {
 
   useEffect(() => {
     if (!hasValidShopId) {
-      console.warn('[ShopDetail] Missing/invalid shop id, skipping fetch:', id);
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn('[ShopDetail] Missing/invalid shop id, skipping fetch:', id);
+      }
 
       setShop(null);
       setCategories([]);
@@ -311,11 +313,7 @@ export default function ShopDetailScreen() {
     try {
       setLoading(true);
 
-      console.log('[ShopDetail] Loading shop data for ID:', shopId);
-
       const data = await shopService.getShopWithMenu(shopId);
-
-      console.log('[ShopDetail] Shop loaded:', data.shop?.name);
 
       setShop(data.shop || null);
       setCategories(data.categories || []);

@@ -22,8 +22,8 @@ class OrderService:
     VALID_TRANSITIONS = {
         "payment_pending": ["confirmed", "payment_failed"],
         "payment_failed": [],
-        "confirmed": ["completed", "cancelled"],
-        "pending": ["completed", "cancelled"],
+        "confirmed": ["completed"],
+        "pending": ["completed"],
         "completed": [],
         "cancelled": [],
     }
@@ -63,7 +63,7 @@ class OrderService:
         return new_status in self.VALID_TRANSITIONS[current_status]
 
     def can_cancel_order(self, status: str) -> bool:
-        return status in ("confirmed", "pending")
+        return False
 
     async def create_order(
         self,
@@ -275,8 +275,8 @@ class OrderService:
 
         if not self.can_cancel_order(order.get("status")):
             raise ValueError(
-                f"Cannot cancel order with status '{order.get('status')}'. "
-                "Only newly placed orders can be cancelled."
+                "Mobile order cancellation is not available after checkout. "
+                "Please contact the shop directly for changes or refunds."
             )
 
         update_response = (

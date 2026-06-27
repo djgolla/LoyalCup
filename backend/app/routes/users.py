@@ -94,7 +94,7 @@ async def get_my_favorites(token_payload: dict = Depends(require_auth())):
     resp = (
         db.get_service_client()
         .table("customer_favorites")
-        .select("shop_id, shops(id, name, description, address, city, state, logo_url, hours, avg_rating)")
+        .select("shop_id, shops(id, name, description, address, city, state, logo_url, hours, avg_rating, status)")
         .eq("customer_id", user_id)
         .execute()
     )
@@ -107,6 +107,7 @@ async def get_my_favorites(token_payload: dict = Depends(require_auth())):
                 "shop": row.get("shops"),
             }
             for row in rows
+            if row.get("shops") and row["shops"].get("status") == "active"
         ]
     }
 
@@ -122,6 +123,18 @@ async def add_my_favorite(
 
     user_id = token_payload.get("sub")
     db = get_supabase()
+    shop_resp = (
+        db.get_service_client()
+        .table("shops")
+        .select("id")
+        .eq("id", shop_id)
+        .eq("status", "active")
+        .limit(1)
+        .execute()
+    )
+    if not shop_resp.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shop not found")
+
     try:
         db.get_service_client().table("customer_favorites").insert({
             "customer_id": user_id,

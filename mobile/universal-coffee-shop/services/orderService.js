@@ -31,6 +31,7 @@ export const orderService = {
       shop_id: shopId,
       items: orderItems,
       payment_nonce: paymentNonce,
+      checkout_attempt_id: options.checkoutAttemptId || null,
       loyalty_points_to_redeem: options.loyaltyPointsToRedeem || 0,
       customer_note: options.customerNote || null,
     }, token);

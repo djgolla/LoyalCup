@@ -2,7 +2,7 @@
 Authentication routes using Supabase Auth.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from app.services.auth_service import AuthService
 from app.utils.security import require_auth, verify_token
@@ -18,7 +18,7 @@ auth_service = AuthService()
 # Request/Response Models
 class RegisterRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(..., min_length=6)
     full_name: Optional[str] = None
 
 
@@ -37,7 +37,7 @@ class ForgotPasswordRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     access_token: str
-    new_password: str
+    new_password: str = Field(..., min_length=6)
 
 
 # Routes

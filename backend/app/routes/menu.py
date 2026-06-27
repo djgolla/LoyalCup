@@ -164,6 +164,7 @@ async def create_category(shop_id: str, category_data: CategoryCreate, user: dic
         category = await shop_service.update_category(
             category.get("id"),
             {"description": category_data.description},
+            shop_id=shop_id,
         )
     return {"category": category}
 
@@ -186,7 +187,9 @@ async def update_category(
     
     # Filter out None values
     update_data = {k: v for k, v in category_data.dict().items() if v is not None}
-    category = await shop_service.update_category(category_id, update_data)
+    category = await shop_service.update_category(category_id, update_data, shop_id=shop_id)
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
     return {"category": category}
 
 
@@ -201,7 +204,7 @@ async def delete_category(shop_id: str, category_id: str, user: dict = Depends(r
     if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     
-    success = await shop_service.delete_category(category_id)
+    success = await shop_service.delete_category(category_id, shop_id=shop_id)
     return {"success": success}
 
 
@@ -262,7 +265,9 @@ async def update_menu_item(
     
     # Filter out None values
     update_data = {k: v for k, v in item_data.dict().items() if v is not None}
-    item = await shop_service.update_menu_item(item_id, update_data)
+    item = await shop_service.update_menu_item(item_id, update_data, shop_id=shop_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Menu item not found")
     return {"item": item}
 
 
@@ -277,7 +282,7 @@ async def delete_menu_item(shop_id: str, item_id: str, user: dict = Depends(requ
     if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     
-    success = await shop_service.delete_menu_item(item_id)
+    success = await shop_service.delete_menu_item(item_id, shop_id=shop_id)
     return {"success": success}
 
 
@@ -297,7 +302,9 @@ async def toggle_item_availability(
     if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     
-    item = await shop_service.toggle_item_availability(item_id, availability.is_available)
+    item = await shop_service.toggle_item_availability(item_id, availability.is_available, shop_id=shop_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Menu item not found")
     return {"item": item}
 
 
@@ -363,11 +370,13 @@ async def update_modifier_group(
     raw = group_data.dict(exclude_unset=True)
     options = raw.pop("options", None)
     update_data = {k: v for k, v in raw.items() if v is not None}
-    group = await shop_service.update_modifier_group(group_id, update_data) if update_data else {}
+    group = await shop_service.update_modifier_group(group_id, update_data, shop_id=shop_id) if update_data else {}
     if options is not None:
         await shop_service.sync_modifier_options(shop_id, group_id, options)
     groups = await shop_service.list_modifier_groups(shop_id)
     current = next((g for g in groups if g.get("id") == group_id), None)
+    if not current and not group:
+        raise HTTPException(status_code=404, detail="Modifier group not found")
     return {"group": current or group}
 
 
@@ -382,7 +391,7 @@ async def delete_modifier_group(
         raise HTTPException(status_code=401, detail="User ID not found in token")
     if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
-    success = await shop_service.delete_modifier_group(group_id)
+    success = await shop_service.delete_modifier_group(group_id, shop_id=shop_id)
     return {"success": success}
 
 
@@ -437,7 +446,9 @@ async def update_customization_template(
     
     # Filter out None values
     update_data = {k: v for k, v in template_data.dict().items() if v is not None}
-    template = await shop_service.update_customization_template(template_id, update_data)
+    template = await shop_service.update_customization_template(template_id, update_data, shop_id=shop_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Customization template not found")
     return {"template": template}
 
 
@@ -456,5 +467,5 @@ async def delete_customization_template(
     if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     
-    success = await shop_service.delete_customization_template(template_id)
+    success = await shop_service.delete_customization_template(template_id, shop_id=shop_id)
     return {"success": success}

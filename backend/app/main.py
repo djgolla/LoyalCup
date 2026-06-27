@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -80,6 +81,7 @@ app.add_middleware(
 if settings.rate_limit_enabled:
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
+    app.add_middleware(SlowAPIMiddleware)
 
 
 @app.middleware("http")

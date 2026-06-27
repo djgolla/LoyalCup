@@ -21,6 +21,19 @@ router = APIRouter(
     tags=["shops"]
 )
 
+MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024
+
+
+async def _read_image_upload(file: UploadFile) -> bytes:
+    if file.content_type and not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image uploads are allowed")
+
+    file_data = await file.read()
+    if len(file_data) > MAX_IMAGE_UPLOAD_BYTES:
+        raise HTTPException(status_code=400, detail="Image must be less than 5MB")
+
+    return file_data
+
 
 # ============================================================================
 # PYDANTIC MODELS
@@ -176,6 +189,10 @@ async def get_shop(shop_id: str):
 @router.get("/{shop_id}/menu")
 async def get_shop_menu(shop_id: str):
     """Get shop menu organized by category"""
+    shop = await shop_service.get_shop_by_id(shop_id)
+    if not shop:
+        raise HTTPException(status_code=404, detail="Shop not found")
+
     categories = await shop_service.list_categories(shop_id)
     items      = await shop_service.list_menu_items(shop_id)
     menu_by_category = {}
@@ -277,15 +294,37 @@ async def delete_shop(shop_id: str, user: dict = Depends(require_auth())):
         raise HTTPException(status_code=401, detail="User ID not found in token")
     if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    previous_status = None
+    try:
+        db = get_supabase()
+        current_resp = (
+            db.get_service_client()
+            .table("shops")
+            .select("status")
+            .eq("id", shop_id)
+            .limit(1)
+            .execute()
+        )
+        if current_resp.data:
+            previous_status = current_resp.data[0].get("status")
+    except Exception:
+        previous_status = None
+
     success = await shop_service.delete_shop(shop_id)
     try:
         db = get_supabase()
         sync_owner_subscription_location_quantity(db.get_service_client(), user_id)
     except Exception as e:
+        try:
+            if previous_status:
+                await shop_service.update_shop(shop_id, {"status": previous_status})
+        except Exception:
+            pass
         raise HTTPException(
             status_code=502,
             detail=(
-                "Shop was deactivated, but billing could not be updated automatically. "
+                "Billing could not be updated automatically, so the shop was left active. "
                 f"{str(e)}"
             ),
         )
@@ -300,7 +339,7 @@ async def upload_shop_logo(shop_id: str, file: UploadFile = File(...), user: dic
         raise HTTPException(status_code=401, detail="User ID not found in token")
     if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
-    file_data = await file.read()
+    file_data = await _read_image_upload(file)
     logo_url  = await shop_service.upload_shop_image(shop_id, file_data, "logo")
     return {"logo_url": logo_url}
 
@@ -313,7 +352,7 @@ async def upload_shop_banner(shop_id: str, file: UploadFile = File(...), user: d
         raise HTTPException(status_code=401, detail="User ID not found in token")
     if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
-    file_data  = await file.read()
+    file_data  = await _read_image_upload(file)
     banner_url = await shop_service.upload_shop_image(shop_id, file_data, "banner")
     return {"banner_url": banner_url}
 
@@ -327,12 +366,7 @@ async def upload_shop_asset(shop_id: str, file: UploadFile = File(...), user: di
     if not await shop_service.verify_shop_ownership(shop_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    if file.content_type and not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Only image uploads are allowed")
-
-    file_data = await file.read()
-    if len(file_data) > 5 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Image must be less than 5MB")
+    file_data = await _read_image_upload(file)
 
     url = await shop_service.upload_shop_asset(
         shop_id,

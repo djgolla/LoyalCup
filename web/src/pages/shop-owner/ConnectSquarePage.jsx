@@ -66,7 +66,9 @@ export default function ConnectSquarePage() {
   useEffect(() => {
     if (!callbackStatus) return;
 
-    console.log("[ConnectSquare] Callback received:", { callbackStatus, callbackError, callbackItems });
+    if (import.meta.env.DEV) {
+      console.log("[ConnectSquare] Callback received:", { callbackStatus, callbackError, callbackItems });
+    }
 
     if (callbackStatus === "connected") {
       setSyncResult({ status: "connected", synced: callbackSynced, items: callbackItems });
@@ -135,7 +137,9 @@ export default function ConnectSquarePage() {
     setSyncResult(null);
     try {
       const result = await triggerPosSync(shopId, "square");
-      console.log("[ConnectSquare] sync result:", result);
+      if (import.meta.env.DEV) {
+        console.log("[ConnectSquare] sync result:", result);
+      }
 
       if (result?.success === false && result?.warning) {
         // Backend says: connected but Square returned nothing

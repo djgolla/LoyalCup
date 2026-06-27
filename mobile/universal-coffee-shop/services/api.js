@@ -1,7 +1,11 @@
 import axios from 'axios'
 import { supabase } from '../lib/supabase'
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
+const RAW_API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000'
+const CLEAN_API_URL = RAW_API_URL.replace(/\/$/, '')
+const API_URL = CLEAN_API_URL.endsWith('/api/v1')
+  ? CLEAN_API_URL
+  : `${CLEAN_API_URL}/api/v1`
 
 // create axios instance with default config
 const api = axios.create({
@@ -55,15 +59,14 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response) {
-      // server responded with error status
-      console.error('API Error:', error.response.data)
-    } else if (error.request) {
-      // request made but no response
-      console.error('Network Error:', error.message)
-    } else {
-      // something else happened
-      console.error('Error:', error.message)
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      if (error.response) {
+        console.error('API Error:', error.response.data)
+      } else if (error.request) {
+        console.error('Network Error:', error.message)
+      } else {
+        console.error('Error:', error.message)
+      }
     }
     return Promise.reject(error)
   }

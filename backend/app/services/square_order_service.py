@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from app.integrations.square.adapter import SquareAdapter
+from app.integrations.square.token_manager import with_square_retry
 
 logger = logging.getLogger(__name__)
 _square = SquareAdapter()
@@ -42,7 +43,6 @@ async def quote_order(
     conn = await _get_square_connection(db, shop_id)
     prep_minutes = await _get_prep_minutes(db, shop_id)
 
-    access_token = conn["access_token"]
     location_id = conn["location_id"]
 
     line_items = await _build_square_line_items(db, items)
@@ -51,19 +51,25 @@ async def quote_order(
         loyalcup_order_id="quote",
         customer_note=customer_note,
         prep_minutes=prep_minutes,
+        loyalty_discount_cents=loyalty_discount_cents,
         include_fulfillment=False,
     )
 
-    result = await _square.calculate_order(
-        access_token=access_token,
-        location_id=location_id,
-        order_payload=order_payload,
+    result = await with_square_retry(
+        db,
+        shop_id,
+        lambda access_token: _square.calculate_order(
+            access_token=access_token,
+            location_id=location_id,
+            order_payload=order_payload,
+        ),
     )
 
     square_order = result.get("order", {}) or {}
     return _totals_from_square_order(
         square_order=square_order,
         loyalty_discount_cents=loyalty_discount_cents,
+        loyalty_discount_in_square=True,
     )
 
 
@@ -142,6 +148,7 @@ async def push_order_to_pos(
     return await _create_square_order(
         db=db,
         conn=conn,
+        shop_id=shop_id,
         loyalcup_order_id=loyalcup_order_id,
         items=items,
         customer_note=customer_note,
@@ -386,6 +393,7 @@ def _build_order_payload(
     loyalcup_order_id: str,
     customer_note: Optional[str],
     prep_minutes: int,
+    loyalty_discount_cents: int = 0,
     include_fulfillment: bool = True,
 ) -> Dict[str, Any]:
     """
@@ -427,6 +435,20 @@ def _build_order_payload(
     if customer_note:
         payload["customer_note"] = customer_note
 
+    if loyalty_discount_cents > 0:
+        payload["discounts"] = [
+            {
+                "uid": "loyalcup-rewards",
+                "name": "LoyalCup Rewards",
+                "type": "FIXED_AMOUNT",
+                "scope": "ORDER",
+                "amount_money": {
+                    "amount": int(loyalty_discount_cents),
+                    "currency": "USD",
+                },
+            }
+        ]
+
     return payload
 
 
@@ -442,6 +464,7 @@ def _totals_from_square_order(
     *,
     square_order: Dict[str, Any],
     loyalty_discount_cents: int = 0,
+    loyalty_discount_in_square: bool = False,
 ) -> Dict[str, Any]:
     total_cents = _money_amount(square_order, "total_money")
     tax_cents = _money_amount(square_order, "total_tax_money")
@@ -453,11 +476,15 @@ def _totals_from_square_order(
     if net_cents <= 0:
         net_cents = total_cents
 
-    final_charge_cents = max(0, net_cents - int(loyalty_discount_cents or 0))
+    final_charge_cents = (
+        max(0, net_cents)
+        if loyalty_discount_in_square
+        else max(0, net_cents - int(loyalty_discount_cents or 0))
+    )
 
     subtotal_cents = max(
         0,
-        total_cents - tax_cents - service_charge_cents,
+        total_cents + discount_cents_from_square - tax_cents - service_charge_cents,
     )
 
     return {
@@ -483,12 +510,12 @@ async def _create_square_order(
     *,
     db,
     conn: Dict[str, Any],
+    shop_id: str,
     loyalcup_order_id: str,
     items: List[Dict[str, Any]],
     customer_note: Optional[str],
     prep_minutes: int,
 ) -> str:
-    access_token = conn["access_token"]
     location_id = conn["location_id"]
 
     line_items = await _build_square_line_items(db, items)
@@ -500,11 +527,15 @@ async def _create_square_order(
         include_fulfillment=True,
     )
 
-    result = await _square.create_order(
-        access_token=access_token,
-        location_id=location_id,
-        order_payload=order_payload,
-        idempotency_key=f"{loyalcup_order_id}-create",
+    result = await with_square_retry(
+        db,
+        shop_id,
+        lambda access_token: _square.create_order(
+            access_token=access_token,
+            location_id=location_id,
+            order_payload=order_payload,
+            idempotency_key=f"{loyalcup_order_id}-create",
+        ),
     )
 
     square_order_id = result.get("order", {}).get("id")
@@ -528,7 +559,6 @@ async def _process_square_payment(
     customer_note: Optional[str],
     prep_minutes: int,
 ) -> Dict[str, Any]:
-    access_token = conn["access_token"]
     location_id = conn["location_id"]
 
     line_items = await _build_square_line_items(db, items)
@@ -537,16 +567,21 @@ async def _process_square_payment(
         loyalcup_order_id=loyalcup_order_id,
         customer_note=customer_note,
         prep_minutes=prep_minutes,
+        loyalty_discount_cents=loyalty_discount_cents,
         include_fulfillment=True,
     )
 
     logger.info(f"[Square] Creating order for loyalcup_order_id={loyalcup_order_id}")
 
-    order_result = await _square.create_order(
-        access_token=access_token,
-        location_id=location_id,
-        order_payload=order_payload,
-        idempotency_key=f"{loyalcup_order_id}-create",
+    order_result = await with_square_retry(
+        db,
+        shop_id,
+        lambda access_token: _square.create_order(
+            access_token=access_token,
+            location_id=location_id,
+            order_payload=order_payload,
+            idempotency_key=f"{loyalcup_order_id}-create",
+        ),
     )
 
     square_order = order_result.get("order", {})
@@ -558,6 +593,7 @@ async def _process_square_payment(
     totals = _totals_from_square_order(
         square_order=square_order,
         loyalty_discount_cents=loyalty_discount_cents,
+        loyalty_discount_in_square=True,
     )
 
     total_cents = totals["total_cents"]
@@ -582,16 +618,20 @@ async def _process_square_payment(
             "currency": currency,
         }
 
-    payment_result = await _square.charge_payment(
-        access_token=access_token,
-        location_id=location_id,
-        source_id=payment_nonce,
-        amount_cents=charge_cents,
-        currency=currency,
-        order_id=square_order_id,
-        reference_id=loyalcup_order_id,
-        customer_note=customer_note,
-        idempotency_key=f"{loyalcup_order_id}-charge",
+    payment_result = await with_square_retry(
+        db,
+        shop_id,
+        lambda access_token: _square.charge_payment(
+            access_token=access_token,
+            location_id=location_id,
+            source_id=payment_nonce,
+            amount_cents=charge_cents,
+            currency=currency,
+            order_id=square_order_id,
+            reference_id=loyalcup_order_id,
+            customer_note=customer_note,
+            idempotency_key=f"{loyalcup_order_id}-charge",
+        ),
     )
 
     payment = payment_result.get("payment", {})

@@ -23,7 +23,6 @@ export default function Contact() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
-    console.log('[Contact] Submitting:', { API_URL, formData });
 
     try {
       const response = await fetch(`${API_URL}/api/v1/contact/send`, {
@@ -34,9 +33,7 @@ export default function Contact() {
         body: JSON.stringify(formData),
       });
 
-      console.log('[Contact] Response status:', response.status);
       const responseBody = await response.text();
-      console.log('[Contact] Response body:', responseBody);
 
       if (!response.ok) {
         throw new Error(`Failed to send email: ${response.status} - ${responseBody}`);

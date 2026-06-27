@@ -13,15 +13,11 @@ export default function CoffeeShopCard({ shop }) {
 
   const handlePress = () => {
     if (!shopId || shopId === 'undefined' || shopId === 'null') {
-      console.warn('[CoffeeShopCard] Missing shop id, not navigating:', shop);
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn('[CoffeeShopCard] Missing shop id, not navigating:', shop);
+      }
       return;
     }
-
-    console.log('[CoffeeShopCard] opening shop:', {
-      id: shopId,
-      name: shop?.name,
-      status: shop?.status,
-    });
 
     router.push(`/shop/${shopId}`);
   };

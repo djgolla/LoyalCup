@@ -28,7 +28,7 @@ const FAQS = [
       },
       {
         q: 'Can I cancel an order after placing it?',
-        a: "You can cancel right after placing it, while it's still showing as \"Placed\". Go to Order History, tap the order, and hit Cancel. Once the shop has started making it, cancellation may no longer be available — contact the shop directly.",
+        a: "Orders are sent to the shop and charged immediately, so in-app cancellation is not available after checkout. Contact the shop directly for changes or refunds.",
       },
       {
         q: "My card was charged but I got an error — what happened?",

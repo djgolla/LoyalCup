@@ -56,8 +56,10 @@ async def pos_sync(request: Request, db=Depends(get_supabase)):
         raise HTTPException(status_code=401, detail=f"Auth failed: {str(e)}")
 
     # ── Ownership ────────────────────────────────────────────────────────
+    svc = db.get_service_client()
+
     shop_row = (
-        db.service_client.table("shops")
+        svc.table("shops")
         .select("id, owner_id")
         .eq("id", shop_id)
         .eq("owner_id", user.id)
@@ -127,7 +129,7 @@ async def pos_sync(request: Request, db=Depends(get_supabase)):
 
     # ── Bump last_synced_at + clear any stale reauth flag ───────────────
     try:
-        db.service_client.table("pos_connections").update({
+        svc.table("pos_connections").update({
             "last_synced_at": datetime.now(timezone.utc).isoformat(),
             "status":         "connected",
         }).eq("shop_id", shop_id).eq("provider", provider).execute()
